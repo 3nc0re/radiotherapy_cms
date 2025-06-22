@@ -15,6 +15,9 @@ urlpatterns = [
     path('patients/<int:pk>/edit/', views.patient_update, name='patient_update'),
     path('patients/<int:pk>/delete/', views.patient_delete, name='patient_delete'),
     
+    path('patients/inpatient/', views.inpatient_list, name='inpatient_list'),
+    path('patients/<int:pk>/fractions/', views.fraction_list, name='fraction_list'),
+    
     path('patient/<int:patient_pk>/medical_incapacity/create/', views.medical_incapacity_create, name='medical_incapacity_create'),
     path('medical_incapacity/<int:pk>/delete/', views.medical_incapacity_delete, name='medical_incapacity_delete'),
     
@@ -31,8 +34,4 @@ urlpatterns = [
     path('register/', views.register_view, name='register'),
 
     path('confirm_blood_test/<int:patient_id>/', views.confirm_blood_test, name='confirm_blood_test'),
-
-    path('patients/inpatient/', views.inpatient_list, name='inpatient_list'),
-
-    path('patients/<int:pk>/fractions/', views.fraction_list, name='fraction_list'),
 ] 
