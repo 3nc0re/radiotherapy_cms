@@ -1,0 +1,106 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="unauthorized-container">
+    <div class="card unauthorized-card">
+        <div class="unauthorized-icon">
+            <i class="fas fa-lock"></i>
+        </div>
+        <h2>Потрібна авторизація</h2>
+        <p class="unauthorized-message">
+            Для доступу до цієї сторінки вам потрібно увійти в систему.
+        </p>
+        <div class="unauthorized-actions">
+            <a href="{% url 'login' %}" class="btn btn-primary">
+                <i class="fas fa-sign-in-alt"></i> Увійти в систему
+            </a>
+            <a href="{% url 'register' %}" class="btn btn-secondary">
+                <i class="fas fa-user-plus"></i> Зареєструватися
+            </a>
+        </div>
+        <div class="unauthorized-back">
+            <a href="{% url 'dashboard' %}">
+                <i class="fas fa-arrow-left"></i> Повернутися на головну
+            </a>
+        </div>
+    </div>
+</div>
+
+<style>
+.unauthorized-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 60vh;
+    padding: 20px;
+}
+
+.unauthorized-card {
+    max-width: 500px;
+    text-align: center;
+    padding: 40px;
+}
+
+.unauthorized-icon {
+    font-size: 4rem;
+    color: var(--primary-color);
+    margin-bottom: 20px;
+}
+
+.unauthorized-card h2 {
+    color: var(--text-color);
+    margin-bottom: 15px;
+}
+
+.unauthorized-message {
+    color: var(--text-light-color);
+    font-size: 1.1rem;
+    margin-bottom: 30px;
+    line-height: 1.5;
+}
+
+.unauthorized-actions {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    margin-bottom: 30px;
+    flex-wrap: wrap;
+}
+
+.unauthorized-actions .btn {
+    min-width: 150px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.unauthorized-back {
+    margin-top: 20px;
+}
+
+.unauthorized-back a {
+    color: var(--text-light-color);
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: color 0.2s;
+}
+
+.unauthorized-back a:hover {
+    color: var(--primary-color);
+}
+
+@media (max-width: 600px) {
+    .unauthorized-actions {
+        flex-direction: column;
+        align-items: center;
+    }
+    
+    .unauthorized-actions .btn {
+        width: 100%;
+        max-width: 250px;
+    }
+}
+</style>
+{% endblock %} 

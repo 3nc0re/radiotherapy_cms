@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="forbidden-container">
+    <div class="card forbidden-card">
+        <div class="forbidden-icon">
+            <i class="fas fa-ban"></i>
+        </div>
+        <h2>Доступ заборонено</h2>
+        <p class="forbidden-message">
+            У вас немає прав для доступу до цієї сторінки.
+        </p>
+        <div class="forbidden-actions">
+            <a href="{% url 'dashboard' %}" class="btn btn-primary">
+                <i class="fas fa-home"></i> Повернутися на головну
+            </a>
+        </div>
+    </div>
+</div>
+
+<style>
+.forbidden-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 60vh;
+    padding: 20px;
+}
+
+.forbidden-card {
+    max-width: 500px;
+    text-align: center;
+    padding: 40px;
+}
+
+.forbidden-icon {
+    font-size: 4rem;
+    color: #dc3545;
+    margin-bottom: 20px;
+}
+
+.forbidden-card h2 {
+    color: var(--text-color);
+    margin-bottom: 15px;
+}
+
+.forbidden-message {
+    color: var(--text-light-color);
+    font-size: 1.1rem;
+    margin-bottom: 30px;
+    line-height: 1.5;
+}
+
+.forbidden-actions {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 30px;
+}
+
+.forbidden-actions .btn {
+    min-width: 150px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+</style>
+{% endblock %} 

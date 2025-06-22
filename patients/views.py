@@ -1,5 +1,4 @@
 from django.shortcuts import render, get_object_or_404, redirect
-from django.contrib.auth.decorators import login_required
 from .models import Patient, FractionHistory, MedicalIncapacity, User
 from .forms import PatientForm, FractionHistoryForm, MedicalIncapacityForm, UserRegistrationForm, UserLoginForm
 from django.http import JsonResponse
@@ -12,6 +11,7 @@ from .services import generate_fractions_for_patient, auto_confirm_today_fractio
 from django.views.decorators.csrf import csrf_exempt
 import json
 from django.views.decorators.http import require_POST
+from .decorators import login_required, staff_required, admin_required
 
 # Create your views here.
 
@@ -231,12 +231,8 @@ def admin_users(request):
     users = User.objects.all()
     return render(request, 'patients/admin_users.html', {'users': users})
 
-@login_required
+@admin_required
 def admin_approve_user(request, user_id):
-    if request.user.role != 'admin':
-        messages.error(request, 'Доступ заборонено')
-        return redirect('dashboard')
-    
     if request.method == 'POST':
         user = get_object_or_404(User, pk=user_id)
         approve = request.POST.get('approve') == 'true'
