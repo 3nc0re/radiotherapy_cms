@@ -69,9 +69,9 @@ class PatientForm(forms.ModelForm):
             'current_stage': forms.Select(attrs={'class': 'form-control'}, choices=[
                 ('', 'Виберіть етап'),
                 ('КТ-симуляція', 'КТ-симуляція'),
-                ('Початок лікування', 'Початок лікування'),
-                ('Лікування', 'Лікування'),
-                ('Виписка', 'Виписка')
+                ('початок лікування', 'Початок лікування'),
+                ('лікування', 'Лікування'),
+                ('виписка', 'Виписка')
             ]),
             'treatment_phase': forms.Select(attrs={'class': 'form-control'}, choices=[
                 ('', 'Виберіть фазу'),
@@ -93,6 +93,18 @@ class PatientForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
+        
+        # Перевірка обов'язкових полів
+        if not cleaned_data.get('last_name'):
+            raise ValidationError('Прізвище є обов\'язковим полем')
+        
+        if not cleaned_data.get('first_name'):
+            raise ValidationError('Ім\'я є обов\'язковим полем')
+        
+        if not cleaned_data.get('diagnosis'):
+            raise ValidationError('Діагноз є обов\'язковим полем')
+        
+        # Перевірка дат
         treatment_start = cleaned_data.get('treatment_start_date')
         discharge_date = cleaned_data.get('discharge_date')
         

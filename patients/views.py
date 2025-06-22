@@ -15,6 +15,15 @@ from django.views.decorators.http import require_POST
 
 # Create your views here.
 
+def health_check(request):
+    """Health check endpoint для моніторингу сервісу"""
+    try:
+        # Перевіряємо підключення до бази даних
+        Patient.objects.count()
+        return JsonResponse({'status': 'healthy', 'timestamp': timezone.now().isoformat()})
+    except Exception as e:
+        return JsonResponse({'status': 'unhealthy', 'error': str(e)}, status=500)
+
 def splash(request):
     """Головна сторінка - перенаправляє на дашборд або логін"""
     if request.user.is_authenticated:
@@ -24,90 +33,75 @@ def splash(request):
 
 @login_required
 def dashboard(request):
-    today = timezone.now().date()
+    today = date.today()
     
-    active_patients = Patient.objects.filter(Q(discharge_date__isnull=True) | Q(discharge_date__gt=today))
+    # Статистика на сьогодні
+    ct_today_count = Patient.objects.filter(
+        current_stage="КТ-симуляція",
+        ct_simulation_date=today
+    ).count()
     
-    # Події на сьогодні
-    ct_today_count = active_patients.filter(ct_simulation_date=today).count()
-    start_today_count = active_patients.filter(treatment_start_date=today).count()
-    discharge_today_count = Patient.objects.filter(discharge_date=today).count()
+    start_today_count = Patient.objects.filter(
+        current_stage="початок лікування",
+        treatment_start_date=today
+    ).count()
     
-    # Загальна статистика (активні пацієнти)
-    ct_count = active_patients.filter(ct_simulation_date__isnull=False, treatment_start_date__isnull=True).count()
-    start_count = active_patients.filter(treatment_start_date__gt=today).count()
-    in_treatment_count = active_patients.filter(treatment_start_date__lte=today).count()
-
-    # Сповіщення
+    discharge_today_count = Patient.objects.filter(
+        discharge_date=today
+    ).count()
+    
+    # Загальна статистика
+    ct_count = Patient.objects.filter(current_stage="КТ-симуляція").count()
+    start_count = Patient.objects.filter(current_stage="початок лікування").count()
+    in_treatment_count = Patient.objects.filter(current_stage="лікування").count()
+    
+    # Сповіщення про аналізи крові
     notifications = []
+    in_treatment = Patient.objects.filter(current_stage="лікування")
+    for patient in in_treatment:
+        last = patient.last_blood_test_date or patient.treatment_start_date
+        if not last or (today - last).days >= 10:
+            notifications.append({'patient': patient})
     
-    # 1. Сповіщення про аналізи крові
-    in_treatment_patients = active_patients.filter(treatment_start_date__lte=today)
-    for patient in in_treatment_patients:
-        reference_date = patient.last_blood_test_date or patient.treatment_start_date
-        if reference_date:
-            due_date = reference_date + timedelta(days=10)
-            if due_date.weekday() == 5: due_date -= timedelta(days=1)
-            elif due_date.weekday() == 6: due_date -= timedelta(days=2)
-            if today >= due_date:
-                notifications.append({'type': 'blood_test', 'patient': patient, 'due_date': due_date})
-
-    # 2. Сповіщення про закінчення МВТН
-    expiry_limit_date = today + timedelta(days=3)
-    patients_with_incapacity = active_patients.filter(medical_incapacities__isnull=False).distinct()
-    for patient in patients_with_incapacity:
-        latest_incapacity = patient.get_latest_medical_incapacity()
-        if latest_incapacity and today <= latest_incapacity.end_date <= expiry_limit_date:
-            if patient.discharge_date is None or patient.discharge_date > latest_incapacity.end_date:
-                notifications.append({'type': 'incapacity', 'patient': patient, 'incapacity_end_date': latest_incapacity.end_date})
-
-    # Виписані за останні 7 днів
-    seven_days_ago = today - timedelta(days=7)
-    discharged_this_week = Patient.objects.filter(discharge_date__gte=seven_days_ago, discharge_date__lte=today).count()
+    # Виписані цього тижня
+    from_date = today - timedelta(days=7)
+    discharged_this_week = Patient.objects.filter(
+        discharge_date__isnull=False,
+        discharge_date__gte=from_date
+    ).count()
     
     context = {
-        'ct_today_count': ct_today_count, 'start_today_count': start_today_count, 'discharge_today_count': discharge_today_count,
-        'ct_count': ct_count, 'start_count': start_count, 'in_treatment_count': in_treatment_count,
-        'discharged_this_week': discharged_this_week, 'notifications': notifications,
+        'ct_today_count': ct_today_count,
+        'start_today_count': start_today_count,
+        'discharge_today_count': discharge_today_count,
+        'ct_count': ct_count,
+        'start_count': start_count,
+        'in_treatment_count': in_treatment_count,
+        'discharged_this_week': discharged_this_week,
+        'notifications': notifications,
     }
     return render(request, 'patients/dashboard.html', context)
 
 @login_required
 def patient_list(request, filter_type=None):
-    today = timezone.now().date()
+    base_query = Patient.objects.filter(discharge_date__isnull=True) # Exclude discharged patients
     
-    active_patients = Patient.objects.filter(Q(discharge_date__isnull=True) | Q(discharge_date__gt=today))
+    stage_map = {
+        'ct-simulation': 'КТ-симуляція',
+        'treatment-start': 'початок лікування',
+        'in-treatment': 'лікування',
+        'discharge-prep': 'підготовка до виписки'
+    }
 
-    if filter_type == 'ct-simulation':
-        patients = active_patients.filter(ct_simulation_date__isnull=False, treatment_start_date__isnull=True).order_by('ct_simulation_date')
-    elif filter_type == 'treatment-start':
-        patients = active_patients.filter(treatment_start_date__gt=today).order_by('treatment_start_date')
-    elif filter_type == 'in-treatment':
-        # Пацієнти, що на лікуванні, але ще не готуються до виписки
-        three_days_later = today + timedelta(days=3)
-        patients = active_patients.filter(
-            treatment_start_date__lte=today
-        ).exclude(
-            discharge_date__gt=today,
-            discharge_date__lte=three_days_later
-        ).order_by('last_name')
-    elif filter_type == 'discharge-prep':
-        three_days_later = today + timedelta(days=3)
-        patients = active_patients.filter(discharge_date__gt=today, discharge_date__lte=three_days_later).order_by('discharge_date')
-    elif filter_type == 'archive':
-        patients = Patient.objects.filter(discharge_date__lte=today).order_by('-discharge_date')
+    if filter_type and filter_type in stage_map:
+        patients = base_query.filter(current_stage=stage_map[filter_type])
     else:
-        patients = active_patients.order_by('last_name', 'first_name')
+        patients = base_query.all()
         
     return render(request, 'patients/patient_list.html', {
         'patients': patients,
         'filter_type': filter_type
     })
-
-@login_required
-def inpatient_list(request):
-    patients = Patient.objects.filter(inpatient_status='стаціонарно').order_by('ward_number', 'last_name')
-    return render(request, 'patients/inpatient_list.html', {'patients': patients})
 
 @login_required
 def patient_create(request):
@@ -180,9 +174,8 @@ def medical_incapacity_create(request, patient_pk):
     return render(request, 'patients/medical_incapacity_form.html', {'form': form, 'patient': patient})
 
 @login_required
-def medical_incapacity_delete(request, pk):
-    incapacity = get_object_or_404(MedicalIncapacity, pk=pk)
-    patient_pk = incapacity.patient_id
+def medical_incapacity_delete(request, patient_pk, incapacity_pk):
+    incapacity = get_object_or_404(MedicalIncapacity, pk=incapacity_pk, patient_id=patient_pk)
     if request.method == 'POST':
         incapacity.delete()
         return redirect('patient_detail', pk=patient_pk)
@@ -194,35 +187,12 @@ def patient_detail(request, pk):
     fractions = patient.fractions.all().order_by('-date')
     incapacities = patient.medical_incapacities.all().order_by('-created_at')
     treatment_info = get_patient_treatment_info(patient)
-
-    # Логіка сповіщень для конкретного пацієнта
-    today = timezone.now().date()
-    notifications = []
-
-    # 1. Сповіщення про аналіз крові
-    if patient.display_stage == "Лікування":
-        reference_date = patient.last_blood_test_date or patient.treatment_start_date
-        if reference_date:
-            due_date = reference_date + timedelta(days=10)
-            if due_date.weekday() == 5: due_date -= timedelta(days=1)
-            elif due_date.weekday() == 6: due_date -= timedelta(days=2)
-            if today >= due_date:
-                notifications.append({'type': 'blood_test', 'due_date': due_date})
-
-    # 2. Сповіщення про закінчення МВТН
-    latest_incapacity = patient.get_latest_medical_incapacity()
-    if latest_incapacity:
-        expiry_limit_date = today + timedelta(days=3)
-        if today <= latest_incapacity.end_date <= expiry_limit_date:
-            if patient.discharge_date is None or patient.discharge_date > latest_incapacity.end_date:
-                notifications.append({'type': 'incapacity', 'incapacity_end_date': latest_incapacity.end_date})
     
     return render(request, 'patients/patient_detail.html', {
         'patient': patient,
         'fractions': fractions,
         'incapacities': incapacities,
-        'treatment_info': treatment_info,
-        'notifications': notifications
+        'treatment_info': treatment_info
     })
 
 def login_view(request):
@@ -334,9 +304,10 @@ def search_patients(request):
 @login_required
 @require_POST
 def approve_user(request, pk):
-    if not request.user.is_superuser and request.user.role != 'admin':
+    if not request.user.is_superuser:
         return redirect('dashboard')
-    user_to_approve = get_object_or_404(User, pk=pk)
+    
+    user_to_approve = User.objects.get(pk=pk)
     user_to_approve.approved = True
     user_to_approve.save()
     messages.success(request, f"Користувача {user_to_approve.username} було затверджено.")
