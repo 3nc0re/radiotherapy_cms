@@ -10,10 +10,10 @@ class PatientForm(forms.ModelForm):
         fields = [
             'last_name', 'first_name', 'middle_name', 'birth_date', 'gender',
             'diagnosis', 'tnm_staging', 'disease_stage', 'clinical_group', 
-            'treatment_type', 'treatment_goal', 'histology_number', 'histology_date',
+            'treatment_type', 'histology_number', 'histology_date',
             'histology_description', 'ct_simulation_date', 'treatment_start_date',
-            'total_fractions', 'dose_per_fraction', 'current_fraction', 'received_dose',
-            'missed_days', 'discharge_date', 'current_stage', 'treatment_phase',
+            'total_fractions', 'dose_per_fraction', 'received_dose',
+            'discharge_date', 'treatment_phase',
             'irradiation_zone', 'inpatient_status', 'ward_number', 'prior_radiation', 
             'last_blood_test_date', 'notes'
         ]
@@ -29,31 +29,13 @@ class PatientForm(forms.ModelForm):
             ]),
             'diagnosis': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Введіть діагноз'}),
             'tnm_staging': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Наприклад: T2N0M0'}),
-            'disease_stage': forms.Select(attrs={'class': 'form-control'}, choices=[
-                ('', 'Виберіть стадію'),
-                ('I', 'I стадія'),
-                ('II', 'II стадія'),
-                ('III', 'III стадія'),
-                ('IV', 'IV стадія')
-            ]),
-            'clinical_group': forms.Select(attrs={'class': 'form-control'}, choices=[
-                ('', 'Виберіть групу'),
-                ('1', '1 група'),
-                ('2', '2 група'),
-                ('3', '3 група'),
-                ('4', '4 група')
-            ]),
+            'disease_stage': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Введіть стадію (напр. IIIB)'}),
+            'clinical_group': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Введіть клінічну групу'}),
             'treatment_type': forms.Select(attrs={'class': 'form-control'}, choices=[
                 ('', 'Виберіть тип лікування'),
                 ('радикальне', 'Радикальне'),
                 ('паліативне', 'Паліативне'),
                 ('симптоматичне', 'Симптоматичне')
-            ]),
-            'treatment_goal': forms.Select(attrs={'class': 'form-control'}, choices=[
-                ('', 'Виберіть мету'),
-                ('лікування', 'Лікування'),
-                ('профілактика', 'Профілактика'),
-                ('знеболення', 'Знеболення')
             ]),
             'histology_number': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Номер гістології'}),
             'histology_date': forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input'}),
@@ -62,17 +44,8 @@ class PatientForm(forms.ModelForm):
             'treatment_start_date': forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input'}),
             'total_fractions': forms.NumberInput(attrs={'class': 'form-control', 'min': 0, 'placeholder': 'Кількість фракцій'}),
             'dose_per_fraction': forms.NumberInput(attrs={'class': 'form-control', 'min': 0, 'step': 0.1, 'placeholder': 'Доза на фракцію (Гр)'}),
-            'current_fraction': forms.NumberInput(attrs={'class': 'form-control', 'min': 0, 'placeholder': 'Поточна фракція'}),
             'received_dose': forms.NumberInput(attrs={'class': 'form-control', 'min': 0, 'step': 0.1, 'placeholder': 'Отримана доза (Гр)'}),
-            'missed_days': forms.NumberInput(attrs={'class': 'form-control', 'min': 0, 'placeholder': 'Пропущені дні'}),
             'discharge_date': forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input'}),
-            'current_stage': forms.Select(attrs={'class': 'form-control'}, choices=[
-                ('', 'Виберіть етап'),
-                ('КТ-симуляція', 'КТ-симуляція'),
-                ('початок лікування', 'Початок лікування'),
-                ('лікування', 'Лікування'),
-                ('виписка', 'Виписка')
-            ]),
             'treatment_phase': forms.Select(attrs={'class': 'form-control'}, choices=[
                 ('', 'Виберіть фазу'),
                 ('перша', 'Перша фаза'),
@@ -93,16 +66,6 @@ class PatientForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
-        
-        # Перевірка обов'язкових полів
-        if not cleaned_data.get('last_name'):
-            raise ValidationError('Прізвище є обов\'язковим полем')
-        
-        if not cleaned_data.get('first_name'):
-            raise ValidationError('Ім\'я є обов\'язковим полем')
-        
-        if not cleaned_data.get('diagnosis'):
-            raise ValidationError('Діагноз є обов\'язковим полем')
         
         # Перевірка дат
         treatment_start = cleaned_data.get('treatment_start_date')

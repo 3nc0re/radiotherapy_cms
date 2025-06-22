@@ -1,7 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.utils import timezone
-from datetime import timedelta
+from datetime import date, timedelta
 
 class UserManager(BaseUserManager):
     def create_user(self, username, password=None, **extra_fields):
@@ -63,38 +63,46 @@ class User(AbstractBaseUser, PermissionsMixin):
         db_table = 'users'
 
 class Patient(models.Model):
-    last_name = models.CharField(max_length=255, blank=True, null=True)
-    first_name = models.CharField(max_length=255, blank=True, null=True)
-    middle_name = models.CharField(max_length=255, blank=True, null=True)
-    birth_date = models.DateField(blank=True, null=True)
-    gender = models.CharField(max_length=255, blank=True, null=True)
-    diagnosis = models.CharField(max_length=255, blank=True, null=True)
-    tnm_staging = models.CharField(max_length=255, blank=True, null=True)
-    disease_stage = models.CharField(max_length=255, blank=True, null=True)
-    clinical_group = models.CharField(max_length=255, blank=True, null=True)
-    treatment_type = models.CharField(max_length=255, blank=True, null=True)
-    treatment_phase = models.CharField(max_length=255, blank=True, null=True)
-    histology_number = models.CharField(max_length=255, blank=True, null=True)
-    histology_date = models.DateField(blank=True, null=True)
-    histology_description = models.TextField(blank=True, null=True)
-    ct_simulation_date = models.DateField(blank=True, null=True)
-    treatment_start_date = models.DateField(blank=True, null=True)
-    total_fractions = models.IntegerField(blank=True, null=True)
-    stage_description = models.CharField(max_length=255, blank=True, null=True)
-    current_fraction = models.IntegerField(blank=True, null=True)
-    missed_days = models.IntegerField(blank=True, null=True)
-    received_dose = models.FloatField(blank=True, null=True)
-    inpatient_status = models.CharField(max_length=50, blank=True, null=True)
-    ward_number = models.IntegerField(blank=True, null=True)
-    prior_radiation = models.CharField(max_length=255, blank=True, null=True)
-    discharge_date = models.DateField(blank=True, null=True)
-    current_stage = models.CharField(max_length=255, blank=True, null=True)
-    treatment_goal = models.CharField(max_length=255, blank=True, null=True)
-    irradiation_zone = models.CharField(max_length=255, blank=True, null=True)
-    created_at = models.DateTimeField(blank=True, null=True)
-    dose_per_fraction = models.FloatField(blank=True, null=True)
-    notes = models.TextField(blank=True, null=True)
-    last_blood_test_date = models.DateField(blank=True, null=True)
+    # Особиста інформація
+    last_name = models.CharField(max_length=255, blank=True, null=True, help_text="Прізвище")
+    first_name = models.CharField(max_length=255, blank=True, null=True, help_text="Ім'я")
+    middle_name = models.CharField(max_length=255, blank=True, null=True, help_text="По батькові")
+    birth_date = models.DateField(blank=True, null=True, help_text="Дата народження")
+    gender = models.CharField(max_length=10, blank=True, null=True, choices=[('Ч', 'Чоловіча'), ('Ж', 'Жіноча')], help_text="Стать")
+    
+    # Діагноз та стадіювання
+    diagnosis = models.CharField(max_length=255, blank=True, null=True, help_text="Діагноз")
+    tnm_staging = models.CharField(max_length=255, blank=True, null=True, help_text="Стадіювання за TNM")
+    disease_stage = models.CharField(max_length=255, blank=True, null=True, help_text="Стадія захворювання (текст)")
+    clinical_group = models.CharField(max_length=255, blank=True, null=True, help_text="Клінічна група (текст)")
+
+    # Інформація про лікування
+    treatment_type = models.CharField(max_length=255, blank=True, null=True, help_text="Тип лікування")
+    treatment_phase = models.CharField(max_length=255, blank=True, null=True, help_text="Фаза лікування")
+    irradiation_zone = models.CharField(max_length=255, blank=True, null=True, help_text="Зона опромінення")
+    total_fractions = models.IntegerField(blank=True, null=True, help_text="Загальна кількість фракцій")
+    dose_per_fraction = models.FloatField(blank=True, null=True, help_text="РОД (Гр)")
+    received_dose = models.FloatField(blank=True, null=True, help_text="СОД (Гр)")
+
+    # Дати
+    ct_simulation_date = models.DateField(blank=True, null=True, help_text="Дата КТ-симуляції")
+    treatment_start_date = models.DateField(blank=True, null=True, help_text="Дата початку лікування")
+    discharge_date = models.DateField(blank=True, null=True, help_text="Дата виписки")
+    last_blood_test_date = models.DateField(blank=True, null=True, help_text="Дата останнього аналізу крові")
+
+    # Гістологія
+    histology_number = models.CharField(max_length=255, blank=True, null=True, help_text="Номер гістології")
+    histology_date = models.DateField(blank=True, null=True, help_text="Дата гістології")
+    histology_description = models.TextField(blank=True, null=True, help_text="Опис гістології")
+    
+    # Стаціонар та інше
+    inpatient_status = models.CharField(max_length=50, blank=True, null=True, help_text="Статус госпіталізації")
+    ward_number = models.IntegerField(blank=True, null=True, help_text="Номер палати")
+    prior_radiation = models.CharField(max_length=255, blank=True, null=True, help_text="Попереднє опромінення")
+    notes = models.TextField(blank=True, null=True, help_text="Примітки")
+    
+    # Системні
+    created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
 
     @property
     def full_name(self):
@@ -124,6 +132,56 @@ class Patient(models.Model):
             return "Початок лікування"
 
         return "Новий"
+
+    @property
+    def current_fraction(self):
+        """Динамічно розраховує кількість проведених фракцій."""
+        return self.fractions.filter(delivered=True).count()
+
+    @property
+    def missed_days(self):
+        """Динамічно розраховує кількість пропущених робочих днів лікування."""
+        if not self.treatment_start_date or not self.is_in_treatment:
+            return 0
+        
+        today = date.today()
+        end_date = self.discharge_date if self.discharge_date and self.discharge_date < today else today
+        
+        # Розраховуємо загальну кількість робочих днів з початку лікування
+        total_weekdays = 0
+        current_date = self.treatment_start_date
+        while current_date <= end_date:
+            if current_date.weekday() < 5: # 0-4 corresponds to Mon-Fri
+                total_weekdays += 1
+            current_date += timedelta(days=1)
+            
+        # Кількість пропущених днів = очікувані фракції - фактичні фракції
+        delivered_fractions = self.fractions.filter(delivered=True).count()
+        missed = total_weekdays - delivered_fractions
+        return max(0, missed)
+
+    @property
+    def next_blood_test_due_date(self):
+        """Розраховує наступну рекомендовану дату аналізу крові (через 10 днів, тільки будні)."""
+        if not self.last_blood_test_date or not self.is_in_treatment:
+            return None
+            
+        target_date = self.last_blood_test_date + timedelta(days=10)
+        
+        # Якщо дата випадає на вихідний, переносимо на найближчий понеділок
+        if target_date.weekday() >= 5: # Saturday or Sunday
+            target_date += timedelta(days=7 - target_date.weekday())
+            
+        return target_date
+
+    @property
+    def is_in_treatment(self):
+        """Перевіряє, чи пацієнт наразі проходить лікування."""
+        today = date.today()
+        if self.treatment_start_date and self.treatment_start_date <= today:
+            if not self.discharge_date or self.discharge_date >= today:
+                return True
+        return False
 
     def get_latest_medical_incapacity(self):
         return self.medical_incapacities.order_by('-end_date').first()
