@@ -15,15 +15,6 @@ from django.views.decorators.http import require_POST
 
 # Create your views here.
 
-def health_check(request):
-    """Health check endpoint для моніторингу сервісу"""
-    try:
-        # Перевіряємо підключення до бази даних
-        Patient.objects.count()
-        return JsonResponse({'status': 'healthy', 'timestamp': timezone.now().isoformat()})
-    except Exception as e:
-        return JsonResponse({'status': 'unhealthy', 'error': str(e)}, status=500)
-
 def splash(request):
     """Головна сторінка - перенаправляє на дашборд або логін"""
     if request.user.is_authenticated:
