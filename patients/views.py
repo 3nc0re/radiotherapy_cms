@@ -301,6 +301,15 @@ def inpatient_list(request):
     })
 
 @login_required
+def patient_archive(request):
+    """Список пацієнтів в архіві"""
+    archived_patients = Patient.objects.filter(discharge_date__isnull=False).order_by('-discharge_date')
+    return render(request, 'patients/patient_list.html', {
+        'patients': archived_patients,
+        'is_archive': True
+    })
+
+@login_required
 @require_POST
 def approve_user(request, pk):
     if not request.user.is_superuser:
