@@ -1,0 +1,126 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="dashboard-header">
+    <h1><i class="fas fa-hand-sparkles"></i> Вітаємо в системі!</h1>
+    <p>💡 Лікар не скаржиться. Лікар мовчки пише</p>
+</div>
+
+<div class="dashboard-grid">
+    <div class="card">
+        <h3><i class="fas fa-calendar-day"></i> Події сьогодні</h3>
+        <ul>
+            <li><span>{{ ct_today_count }}</span> пацієнтів на КТ-симуляцію</li>
+            <li><span>{{ start_today_count }}</span> пацієнтів на початок лікування</li>
+            <li><span>{{ discharge_today_count }}</span> запланованих виписок</li>
+        </ul>
+    </div>
+    
+    <div class="card">
+        <h3><i class="fas fa-bell"></i> Сповіщення</h3>
+        <ul>
+            {% for notification in notifications %}
+                <li>
+                    {% if notification.type == 'blood_test' %}
+                        <i class="fas fa-tint" style="color: #dc3545;"></i>
+                        <a href="{% url 'patient_detail' notification.patient.id %}">{{ notification.patient.full_name }}</a> 
+                        має здати аналіз крові (термін до {{ notification.due_date|date:"d.m.Y" }}).
+                        <form method="post" action="{% url 'confirm_blood_test' notification.patient.id %}" class="inline-form">
+                            {% csrf_token %}
+                            <button type="submit" class="link-button">Підтвердити</button>
+                        </form>
+                    {% elif notification.type == 'incapacity' %}
+                        <i class="fas fa-file-medical-alt" style="color: #ffc107;"></i>
+                        У пацієнта <a href="{% url 'patient_detail' notification.patient.id %}">{{ notification.patient.full_name }}</a> 
+                        закінчується МВТН {{ notification.incapacity_end_date|date:"d.m.Y" }}.
+                    {% endif %}
+                </li>
+            {% empty %}
+                <li>Сповіщень немає</li>
+            {% endfor %}
+        </ul>
+    </div>
+    
+    <div class="card">
+        <h3><i class="fas fa-chart-bar"></i> Статистика</h3>
+        <ul>
+            <li><i class="fas fa-procedures"></i> Зараз на лікуванні: <span>{{ in_treatment_count }}</span></li>
+            <li><i class="fas fa-play-circle"></i> На етапі початку лікування: <span>{{ start_count }}</span></li>
+            <li><i class="fas fa-x-ray"></i> На етапі КТ: <span>{{ ct_count }}</span></li>
+            <li><i class="fas fa-check-circle"></i> Виписані цього тижня: <span>{{ discharged_this_week }}</span></li>
+        </ul>
+    </div>
+</div>
+
+<style>
+.dashboard-header {
+    text-align: center;
+    margin-bottom: 40px;
+}
+.dashboard-header h1 {
+    font-size: 2.2rem;
+}
+.dashboard-header p {
+    color: var(--text-light-color);
+    font-size: 1.1rem;
+}
+
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 30px;
+}
+
+.card h3 {
+    margin-top: 0;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--primary-color);
+}
+
+.card ul {
+    list-style: none;
+    padding: 0;
+}
+.card li {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.card li:last-child {
+    border-bottom: none;
+}
+.card li span {
+    font-weight: bold;
+    font-size: 1.2rem;
+    color: var(--primary-color);
+}
+
+.card li a {
+    color: var(--primary-color);
+    text-decoration: none;
+    font-weight: bold;
+}
+.card li a:hover {
+    text-decoration: underline;
+}
+
+.inline-form {
+    display: inline;
+    margin-left: auto;
+}
+
+.link-button {
+    background: none;
+    border: none;
+    color: var(--primary-color);
+    text-decoration: underline;
+    cursor: pointer;
+    padding: 0;
+    font-size: inherit;
+}
+</style>
+{% endblock %} 

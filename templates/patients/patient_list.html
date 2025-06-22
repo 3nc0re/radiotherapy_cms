@@ -1,0 +1,126 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-header">
+    <h1>Пацієнти</h1>
+    <a href="{% url 'dashboard' %}" class="back-link">← Назад до дашборду</a>
+</div>
+
+<div class="tabs-container">
+    <a href="{% url 'patient_list' %}" class="tab-link {% if not filter_type %}active{% endif %}">Всі активні</a>
+    <a href="{% url 'patient_list_filtered' 'ct-simulation' %}" class="tab-link {% if filter_type == 'ct-simulation' %}active{% endif %}">КТ-симуляція</a>
+    <a href="{% url 'patient_list_filtered' 'treatment-start' %}" class="tab-link {% if filter_type == 'treatment-start' %}active{% endif %}">Підготовка до лікування</a>
+    <a href="{% url 'patient_list_filtered' 'in-treatment' %}" class="tab-link {% if filter_type == 'in-treatment' %}active{% endif %}">Лікування</a>
+    <a href="{% url 'patient_list_filtered' 'discharge-prep' %}" class="tab-link {% if filter_type == 'discharge-prep' %}active{% endif %}">Підготовка до виписки</a>
+    <a href="{% url 'patient_list_filtered' 'archive' %}" class="tab-link {% if filter_type == 'archive' %}active{% endif %}">Архів</a>
+</div>
+
+<div class="card">
+    <table class="patients-table">
+        <thead>
+            <tr>
+                <th>ПІБ</th>
+                <th>Дата КТ-симуляції</th>
+                <th>Дата початку лікування</th>
+                <th>Дата виписки</th>
+                <th>Поточний етап</th>
+                <th>МВТН до</th>
+                <th>Деталі</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for patient in patients %}
+            <tr>
+                <td>{{ patient.full_name }}</td>
+                <td>{{ patient.ct_simulation_date|date:"d.m.Y"|default:"—" }}</td>
+                <td>{{ patient.treatment_start_date|date:"d.m.Y"|default:"—" }}</td>
+                <td>{{ patient.discharge_date|date:"d.m.Y"|default:"—" }}</td>
+                <td>{{ patient.display_stage|default:"—" }}</td>
+                <td>
+                    {% with latest_incapacity=patient.get_latest_medical_incapacity %}
+                        {% if latest_incapacity %}
+                            {{ latest_incapacity.end_date|date:"d.m.Y" }}
+                        {% else %}
+                            —
+                        {% endif %}
+                    {% endwith %}
+                </td>
+                <td><a href="{% url 'patient_detail' patient.pk %}" class="details-link">Картка</a></td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="7">Пацієнтів немає</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<style>
+.page-header {
+    text-align: center;
+    position: relative;
+    margin-bottom: 20px;
+}
+.back-link {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    text-decoration: none;
+    color: var(--primary-color);
+}
+
+.tabs-container {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 20px;
+    border-bottom: 2px solid var(--border-color);
+}
+.tab-link {
+    padding: 10px 20px;
+    text-decoration: none;
+    color: var(--text-light-color);
+    font-weight: 500;
+    border-bottom: 3px solid transparent;
+    transition: all 0.3s ease;
+}
+.tab-link:hover {
+    color: var(--primary-color);
+}
+.tab-link.active {
+    color: var(--primary-color);
+    border-bottom-color: var(--primary-color);
+}
+
+.patients-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.patients-table th, .patients-table td {
+    padding: 15px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.patients-table th {
+    font-weight: 600;
+    color: var(--text-light-color);
+}
+
+.patients-table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+.time {
+    color: var(--text-light-color);
+    font-size: 0.9em;
+}
+
+.details-link {
+    text-decoration: none;
+    color: var(--primary-color);
+    font-weight: bold;
+}
+</style>
+{% endblock %} 

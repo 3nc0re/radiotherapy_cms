@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-header">
+    <h1>Фракції для підтвердження</h1>
+</div>
+
+<div class="card">
+    <form method="post" id="fractions-form">
+        {% csrf_token %}
+        <div class="table-actions">
+            <button type="button" id="confirm-selected-doctor" class="btn btn-primary">Підтвердити як лікар</button>
+            <button type="button" id="confirm-selected-nurse" class="btn btn-primary">Підтвердити як медсестра</button>
+        </div>
+        <table class="styled-table">
+            <thead>
+                <tr>
+                    <th><input type="checkbox" id="select-all"></th>
+                    <th>Пацієнт</th>
+                    <th>Дата</th>
+                    <th>Підтверджено лікарем</th>
+                    <th>Підтверджено медсестрою</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for fraction in fractions %}
+                <tr>
+                    <td><input type="checkbox" name="fraction_ids" value="{{ fraction.id }}" class="fraction-checkbox"></td>
+                    <td>{{ fraction.patient.full_name }}</td>
+                    <td>{{ fraction.date|date:"d.m.Y" }}</td>
+                    <td>{{ fraction.doctor_confirmation|yesno:"Так,Ні" }}</td>
+                    <td>{{ fraction.nurse_confirmation|yesno:"Так,Ні" }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" style="text-align: center;">Немає фракцій для підтвердження.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </form>
+</div>
+
+<style>
+.page-header { text-align: center; margin-bottom: 20px; }
+.table-actions { margin-bottom: 20px; display: flex; gap: 10px; }
+.btn {
+    text-decoration: none; padding: 10px 15px; border-radius: 5px;
+    color: white; border: none; cursor: pointer;
+}
+.btn-primary { background-color: var(--primary-color); }
+.styled-table { width: 100%; border-collapse: collapse; }
+.styled-table th, .styled-table td {
+    padding: 12px; border: 1px solid var(--border-color); text-align: left;
+}
+.styled-table th { background-color: #f8f9fa; }
+.styled-table tbody tr:hover { background-color: #f8f9fa; }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('select-all').addEventListener('change', function(e) {
+        document.querySelectorAll('.fraction-checkbox').forEach(function(checkbox) {
+            checkbox.checked = e.target.checked;
+        });
+    });
+
+    document.getElementById('confirm-selected-doctor').addEventListener('click', function() {
+        document.getElementById('fractions-form').action = "{% url 'confirm_fractions_doctor' %}";
+        document.getElementById('fractions-form').submit();
+    });
+
+    document.getElementById('confirm-selected-nurse').addEventListener('click', function() {
+        document.getElementById('fractions-form').action = "{% url 'confirm_fractions_nurse' %}";
+        document.getElementById('fractions-form').submit();
+    });
+});
+</script>
+{% endblock %} 

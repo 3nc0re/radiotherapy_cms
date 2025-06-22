@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-header">
+    <h1>Керування користувачами</h1>
+</div>
+
+<div class="card">
+    <table class="styled-table">
+        <thead>
+            <tr>
+                <th>Ім'я</th>
+                <th>Роль</th>
+                <th>Статус</th>
+                <th>Дії</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in users %}
+            <tr>
+                <td>{{ user.full_name }}</td>
+                <td>{{ user.get_role_display }}</td>
+                <td>
+                    {% if user.is_approved %}
+                        <span class="status-approved">Затверджено</span>
+                    {% else %}
+                        <span class="status-pending">Очікує</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if not user.is_approved %}
+                    <form method="post" action="{% url 'approve_user' user.pk %}" style="display: inline;">
+                        {% csrf_token %}
+                        <button type="submit" class="btn-approve">Затвердити</button>
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<style>
+.page-header { text-align: center; margin-bottom: 20px; }
+.styled-table { width: 100%; border-collapse: collapse; }
+.styled-table th, .styled-table td {
+    padding: 12px; border: 1px solid var(--border-color); text-align: left;
+}
+.styled-table th { background-color: #f8f9fa; }
+.status-approved { color: #28a745; font-weight: bold; }
+.status-pending { color: #ffc107; font-weight: bold; }
+.btn-approve {
+    background: none;
+    border: 1px solid var(--primary-color);
+    color: var(--primary-color);
+    padding: 5px 10px;
+    border-radius: 5px;
+    cursor: pointer;
+}
+.btn-approve:hover {
+    background-color: var(--primary-color);
+    color: white;
+}
+</style>
+{% endblock %} 

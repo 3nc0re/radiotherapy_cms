@@ -1,0 +1,64 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="form-container card">
+    <h2>Додати лікарняний лист для {{ patient.full_name }}</h2>
+    <form method="post">
+        {% csrf_token %}
+        <div class="form-grid">
+            {{ form.as_p }}
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Зберегти</button>
+            <a href="{% url 'patient_detail' patient.pk %}" class="btn btn-secondary">Скасувати</a>
+        </div>
+    </form>
+</div>
+
+<style>
+.form-container {
+    max-width: 600px;
+    margin: 40px auto;
+    padding: 30px;
+}
+.form-container h2 {
+    text-align: center;
+    color: var(--primary-color);
+    margin-bottom: 30px;
+}
+.form-grid p {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 15px;
+}
+.form-grid label {
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: var(--text-light-color);
+}
+.form-grid input, .form-grid select, .form-grid textarea {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    font-size: 1rem;
+}
+.form-actions {
+    margin-top: 30px;
+    text-align: right;
+    display: flex;
+    justify-content: flex-end;
+    gap: 15px;
+}
+.btn {
+    text-decoration: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    color: white;
+    border: none;
+    cursor: pointer;
+}
+.btn-primary { background-color: var(--primary-color); }
+.btn-secondary { background-color: #6c757d; }
+</style>
+{% endblock %} 

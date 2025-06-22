@@ -1,0 +1,76 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="auth-container">
+    <div class="card">
+        <h2>Вхід в систему</h2>
+        {% if error %}
+            <p class="error-message">{{ error }}</p>
+        {% endif %}
+        <form method="post">
+            {% csrf_token %}
+            {{ form.as_p }}
+            <button type="submit" class="btn btn-primary">Увійти</button>
+        </form>
+        <div class="auth-switch">
+            <p>Немає акаунту? <a href="{% url 'register' %}">Зареєструватися</a></p>
+        </div>
+    </div>
+</div>
+
+<style>
+.auth-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding-top: 50px;
+}
+.auth-container .card {
+    width: 100%;
+    max-width: 400px;
+    padding: 30px;
+}
+.auth-container h2 {
+    text-align: center;
+    color: var(--primary-color);
+    margin-bottom: 20px;
+}
+.auth-container form p {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 15px;
+}
+.auth-container form label {
+    margin-bottom: 5px;
+    color: var(--text-light-color);
+}
+.auth-container form input {
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+}
+.auth-container button {
+    width: 100%;
+    padding: 12px;
+    border: none;
+    border-radius: 5px;
+    background-color: var(--primary-color);
+    color: white;
+    font-size: 1rem;
+    cursor: pointer;
+    margin-top: 10px;
+}
+.error-message {
+    color: #dc3545;
+    background-color: #f8d7da;
+    border: 1px solid #f5c6cb;
+    padding: 10px;
+    border-radius: 5px;
+    text-align: center;
+    margin-bottom: 15px;
+}
+.auth-switch {
+    text-align: center;
+    margin-top: 20px;
+}
+</style>
+{% endblock %} 

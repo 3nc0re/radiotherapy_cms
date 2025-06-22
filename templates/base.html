@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CMS Django</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <style>
+        :root {
+            --primary-color: #4A90E2;
+            --secondary-color: #50E3C2;
+            --background-color: #f4f7f6;
+            --card-bg-color: #ffffff;
+            --text-color: #333;
+            --text-light-color: #777;
+            --border-color: #e0e0e0;
+            --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            background-color: var(--background-color);
+            color: var(--text-color);
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        header {
+            background-color: var(--card-bg-color);
+            padding: 15px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: var(--shadow);
+        }
+        
+        .main-nav a, .user-nav a {
+            text-decoration: none;
+            color: var(--text-light-color);
+            margin-right: 25px;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .main-nav a:hover, .user-nav a:hover {
+            color: var(--primary-color);
+        }
+        
+        .user-nav a.btn {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 8px 15px;
+            border-radius: 5px;
+        }
+        
+        .btn-danger {
+             background: #dc3545; 
+        }
+        
+        .btn-danger:hover {
+             background: #c82333; 
+        }
+        
+        h1, h2 {
+            color: var(--text-color);
+            margin-bottom: 20px;
+        }
+        
+        .card {
+            background-color: var(--card-bg-color);
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">CMS</div>
+        <nav class="main-nav">
+            <a href="{% url 'dashboard' %}"><i class="fas fa-home"></i> Головна</a>
+            <a href="{% url 'patient_create' %}"><i class="fas fa-plus"></i> Додати</a>
+            <a href="{% url 'patient_list' %}" class="nav-link">Пацієнти</a>
+            <a href="{% url 'inpatient_list' %}" class="nav-link">Стаціонар</a>
+            <a href="/fractions/"><i class="fas fa-radiation"></i> Фракції</a>
+        </nav>
+        <nav class="user-nav">
+            <a href="/admin/"><i class="fas fa-user-shield"></i> Адмін-панель</a>
+            {% if user.is_staff %}
+                <a href="{% url 'admin_users' %}" class="nav-link">Адмін</a>
+            {% endif %}
+            <a href="/logout/" class="btn btn-danger"><i class="fas fa-sign-out-alt"></i> Вийти</a>
+        </nav>
+    </header>
+
+    <main class="container">
+        {% if messages %}
+        <div class="messages">
+            {% for message in messages %}
+                <div class="message {{ message.tags }}">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://npmcdn.com/flatpickr/dist/l10n/uk.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            flatpickr('.datepicker-input', {
+                dateFormat: "d.m.Y",
+                locale: "uk"
+            });
+        });
+    </script>
+</body>
+</html> 

@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="confirm-container card">
+    <h2>Підтвердження видалення</h2>
+    <p>Ви впевнені, що хочете видалити пацієнта <strong>{{ patient.full_name }}</strong>?</p>
+    <p class="warning"><i class="fas fa-exclamation-triangle"></i> Цю дію неможливо буде скасувати!</p>
+    
+    <form method="post">
+        {% csrf_token %}
+        <div class="form-actions">
+            <button type="submit" class="btn btn-danger">Так, видалити</button>
+            <a href="{% url 'patient_detail' patient.pk %}" class="btn btn-secondary">Скасувати</a>
+        </div>
+    </form>
+</div>
+
+<style>
+.confirm-container {
+    max-width: 600px;
+    margin: 50px auto;
+    text-align: center;
+}
+.warning {
+    color: #dc3545;
+    font-weight: bold;
+    margin: 20px 0;
+}
+.form-actions {
+    margin-top: 30px;
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+}
+.btn {
+    text-decoration: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    color: white;
+    border: none;
+    cursor: pointer;
+}
+.btn-danger { background-color: #dc3545; }
+.btn-secondary { background-color: #6c757d; }
+</style>
+{% endblock %} 
