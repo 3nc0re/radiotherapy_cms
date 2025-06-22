@@ -293,6 +293,18 @@ def search_patients(request):
     })
 
 @login_required
+def inpatient_list(request):
+    """Список стаціонарних пацієнтів"""
+    inpatients = Patient.objects.filter(
+        inpatient_status='стаціонарно',
+        discharge_date__isnull=True
+    ).order_by('last_name', 'first_name')
+    
+    return render(request, 'patients/inpatient_list.html', {
+        'patients': inpatients
+    })
+
+@login_required
 @require_POST
 def approve_user(request, pk):
     if not request.user.is_superuser:
