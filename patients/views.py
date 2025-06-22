@@ -28,12 +28,10 @@ def dashboard(request):
     
     # Статистика на сьогодні
     ct_today_count = Patient.objects.filter(
-        current_stage="КТ-симуляція",
         ct_simulation_date=today
     ).count()
     
     start_today_count = Patient.objects.filter(
-        current_stage="початок лікування",
         treatment_start_date=today
     ).count()
     
@@ -41,14 +39,30 @@ def dashboard(request):
         discharge_date=today
     ).count()
     
-    # Загальна статистика
-    ct_count = Patient.objects.filter(current_stage="КТ-симуляція").count()
-    start_count = Patient.objects.filter(current_stage="початок лікування").count()
-    in_treatment_count = Patient.objects.filter(current_stage="лікування").count()
+    # Загальна статистика - використовуємо фільтрацію за датами замість current_stage
+    ct_count = Patient.objects.filter(
+        ct_simulation_date__isnull=False,
+        treatment_start_date__isnull=True
+    ).count()
+    
+    start_count = Patient.objects.filter(
+        treatment_start_date__isnull=False,
+        treatment_start_date__gt=today
+    ).count()
+    
+    in_treatment_count = Patient.objects.filter(
+        treatment_start_date__isnull=False,
+        treatment_start_date__lte=today,
+        discharge_date__isnull=True
+    ).count()
     
     # Сповіщення про аналізи крові
     notifications = []
-    in_treatment = Patient.objects.filter(current_stage="лікування")
+    in_treatment = Patient.objects.filter(
+        treatment_start_date__isnull=False,
+        treatment_start_date__lte=today,
+        discharge_date__isnull=True
+    )
     for patient in in_treatment:
         last = patient.last_blood_test_date or patient.treatment_start_date
         if not last or (today - last).days >= 10:
@@ -76,16 +90,34 @@ def dashboard(request):
 @login_required
 def patient_list(request, filter_type=None):
     base_query = Patient.objects.filter(discharge_date__isnull=True) # Exclude discharged patients
+    today = date.today()
     
-    stage_map = {
-        'ct-simulation': 'КТ-симуляція',
-        'treatment-start': 'початок лікування',
-        'in-treatment': 'лікування',
-        'discharge-prep': 'підготовка до виписки'
-    }
-
-    if filter_type and filter_type in stage_map:
-        patients = base_query.filter(current_stage=stage_map[filter_type])
+    if filter_type:
+        if filter_type == 'ct-simulation':
+            patients = base_query.filter(
+                ct_simulation_date__isnull=False,
+                treatment_start_date__isnull=True
+            )
+        elif filter_type == 'treatment-start':
+            patients = base_query.filter(
+                treatment_start_date__isnull=False,
+                treatment_start_date__gt=today
+            )
+        elif filter_type == 'in-treatment':
+            patients = base_query.filter(
+                treatment_start_date__isnull=False,
+                treatment_start_date__lte=today,
+                discharge_date__isnull=True
+            )
+        elif filter_type == 'discharge-prep':
+            three_days_later = today + timedelta(days=3)
+            patients = base_query.filter(
+                discharge_date__isnull=False,
+                discharge_date__gt=today,
+                discharge_date__lte=three_days_later
+            )
+        else:
+            patients = base_query.all()
     else:
         patients = base_query.all()
         
