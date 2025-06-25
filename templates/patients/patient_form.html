@@ -10,14 +10,14 @@
             <h3>Особисті дані</h3>
             <div class="form-grid">
                 <div class="form-group">
-                    <label for="{{ form.last_name.id_for_label }}">Прізвище *</label>
+                    <label for="{{ form.last_name.id_for_label }}">Прізвище</label>
                     {{ form.last_name }}
                     {% if form.last_name.errors %}
                         <div class="error">{{ form.last_name.errors.0 }}</div>
                     {% endif %}
                 </div>
                 <div class="form-group">
-                    <label for="{{ form.first_name.id_for_label }}">Ім'я *</label>
+                    <label for="{{ form.first_name.id_for_label }}">Ім'я</label>
                     {{ form.first_name }}
                     {% if form.first_name.errors %}
                         <div class="error">{{ form.first_name.errors.0 }}</div>
@@ -43,7 +43,7 @@
             <h3>Медична інформація</h3>
             <div class="form-grid">
                 <div class="form-group full-width">
-                    <label for="{{ form.diagnosis.id_for_label }}">Діагноз *</label>
+                    <label for="{{ form.diagnosis.id_for_label }}">Діагноз</label>
                     {{ form.diagnosis }}
                     {% if form.diagnosis.errors %}
                         <div class="error">{{ form.diagnosis.errors.0 }}</div>
@@ -64,10 +64,6 @@
                 <div class="form-group">
                     <label for="{{ form.treatment_type.id_for_label }}">Тип лікування</label>
                     {{ form.treatment_type }}
-                </div>
-                <div class="form-group">
-                    <label for="{{ form.treatment_goal.id_for_label }}">Мета лікування</label>
-                    {{ form.treatment_goal }}
                 </div>
             </div>
         </div>
@@ -112,16 +108,8 @@
                     {{ form.dose_per_fraction }}
                 </div>
                 <div class="form-group">
-                    <label for="{{ form.current_fraction.id_for_label }}">Поточна фракція</label>
-                    {{ form.current_fraction }}
-                </div>
-                <div class="form-group">
                     <label for="{{ form.received_dose.id_for_label }}">Отримана доза (Гр)</label>
                     {{ form.received_dose }}
-                </div>
-                <div class="form-group">
-                    <label for="{{ form.missed_days.id_for_label }}">Пропущені дні</label>
-                    {{ form.missed_days }}
                 </div>
                 <div class="form-group">
                     <label for="{{ form.discharge_date.id_for_label }}">Дата виписки</label>
@@ -134,10 +122,6 @@
         <div class="form-section">
             <h3>Додаткова інформація</h3>
             <div class="form-grid">
-                <div class="form-group">
-                    <label for="{{ form.current_stage.id_for_label }}">Поточний етап</label>
-                    {{ form.current_stage }}
-                </div>
                 <div class="form-group">
                     <label for="{{ form.treatment_phase.id_for_label }}">Фаза лікування</label>
                     {{ form.treatment_phase }}
