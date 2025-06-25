@@ -98,6 +98,9 @@ def patient_list(request, filter_type=None):
 def patient_create(request):
     if request.method == 'POST':
         form = PatientForm(request.POST)
+        print("POST data:", request.POST)
+        print("Form errors:", form.errors)
+        print("Non-field errors:", form.non_field_errors())
         if form.is_valid():
             form.save()
             return redirect('patient_list')

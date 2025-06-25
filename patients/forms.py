@@ -5,6 +5,36 @@ from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth import authenticate
 
 class PatientForm(forms.ModelForm):
+    birth_date = forms.DateField(
+        input_formats=['%d.%m.%Y', '%Y-%m-%d'],
+        required=False,
+        widget=forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input'})
+    )
+    histology_date = forms.DateField(
+        input_formats=['%d.%m.%Y', '%Y-%m-%d'],
+        required=False,
+        widget=forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input'})
+    )
+    ct_simulation_date = forms.DateField(
+        input_formats=['%d.%m.%Y', '%Y-%m-%d'],
+        required=False,
+        widget=forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input'})
+    )
+    treatment_start_date = forms.DateField(
+        input_formats=['%d.%m.%Y', '%Y-%m-%d'],
+        required=False,
+        widget=forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input'})
+    )
+    discharge_date = forms.DateField(
+        input_formats=['%d.%m.%Y', '%Y-%m-%d'],
+        required=False,
+        widget=forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input'})
+    )
+    last_blood_test_date = forms.DateField(
+        input_formats=['%d.%m.%Y', '%Y-%m-%d'],
+        required=False,
+        widget=forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input'})
+    )
     class Meta:
         model = Patient
         fields = [
@@ -21,7 +51,6 @@ class PatientForm(forms.ModelForm):
             'last_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Введіть прізвище'}),
             'first_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Введіть ім\'я'}),
             'middle_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Введіть по батькові'}),
-            'birth_date': forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input'}),
             'gender': forms.Select(attrs={'class': 'form-control'}, choices=[
                 ('', 'Виберіть стать'),
                 ('Ч', 'Чоловіча'),
@@ -56,16 +85,13 @@ class PatientForm(forms.ModelForm):
                 ('знеболення', 'Знеболення')
             ]),
             'histology_number': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Номер гістології'}),
-            'histology_date': forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input'}),
             'histology_description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': 'Опис гістологічного дослідження'}),
-            'ct_simulation_date': forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input'}),
             'treatment_start_date': forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input'}),
             'total_fractions': forms.NumberInput(attrs={'class': 'form-control', 'min': 0, 'placeholder': 'Кількість фракцій'}),
             'dose_per_fraction': forms.NumberInput(attrs={'class': 'form-control', 'min': 0, 'step': 0.1, 'placeholder': 'Доза на фракцію (Гр)'}),
             'current_fraction': forms.NumberInput(attrs={'class': 'form-control', 'min': 0, 'placeholder': 'Поточна фракція'}),
             'received_dose': forms.NumberInput(attrs={'class': 'form-control', 'min': 0, 'step': 0.1, 'placeholder': 'Отримана доза (Гр)'}),
             'missed_days': forms.NumberInput(attrs={'class': 'form-control', 'min': 0, 'placeholder': 'Пропущені дні'}),
-            'discharge_date': forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input'}),
             'current_stage': forms.Select(attrs={'class': 'form-control'}, choices=[
                 ('', 'Виберіть етап'),
                 ('КТ-симуляція', 'КТ-симуляція'),
@@ -87,7 +113,6 @@ class PatientForm(forms.ModelForm):
             ]),
             'ward_number': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': 'Номер палати'}),
             'prior_radiation': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Попереднє опромінення'}),
-            'last_blood_test_date': forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input'}),
             'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 4, 'placeholder': 'Додаткові примітки'}),
         }
 
@@ -114,21 +139,36 @@ class PatientForm(forms.ModelForm):
         return cleaned_data
 
 class FractionHistoryForm(forms.ModelForm):
+    date = forms.DateField(
+        input_formats=['%d.%m.%Y', '%Y-%m-%d'],
+        required=True,
+        widget=forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input'})
+    )
     class Meta:
         model = FractionHistory
         fields = '__all__'
-        widgets = {
-            'date': forms.DateInput(attrs={'type': 'date'}),
-        }
+        # widgets = {
+        #     'date': forms.DateInput(attrs={'type': 'date'}),
+        # }
 
 class MedicalIncapacityForm(forms.ModelForm):
+    start_date = forms.DateField(
+        input_formats=['%d.%m.%Y', '%Y-%m-%d'],
+        required=False,
+        widget=forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input'})
+    )
+    end_date = forms.DateField(
+        input_formats=['%d.%m.%Y', '%Y-%m-%d'],
+        required=False,
+        widget=forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input'})
+    )
     class Meta:
         model = MedicalIncapacity
         exclude = ['patient']
-        widgets = {
-            'start_date': forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input'}),
-            'end_date': forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input'}),
-        }
+        # widgets = {
+        #     'start_date': forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input'}),
+        #     'end_date': forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input'}),
+        # }
 
     def clean(self):
         cleaned_data = super().clean()
