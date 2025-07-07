@@ -58,20 +58,8 @@ class PatientForm(forms.ModelForm):
             ]),
             'diagnosis': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Введіть діагноз'}),
             'tnm_staging': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Наприклад: T2N0M0'}),
-            'disease_stage': forms.Select(attrs={'class': 'form-control'}, choices=[
-                ('', 'Виберіть стадію'),
-                ('I', 'I стадія'),
-                ('II', 'II стадія'),
-                ('III', 'III стадія'),
-                ('IV', 'IV стадія')
-            ]),
-            'clinical_group': forms.Select(attrs={'class': 'form-control'}, choices=[
-                ('', 'Виберіть групу'),
-                ('1', '1 група'),
-                ('2', '2 група'),
-                ('3', '3 група'),
-                ('4', '4 група')
-            ]),
+            'disease_stage': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Введіть стадію (напр. IIIB)'}),
+            'clinical_group': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Введіть клінічну групу'}),
             'treatment_type': forms.Select(attrs={'class': 'form-control'}, choices=[
                 ('', 'Виберіть тип лікування'),
                 ('радикальне', 'Радикальне'),
