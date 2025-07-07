@@ -8,32 +8,32 @@ class PatientForm(forms.ModelForm):
     birth_date = forms.DateField(
         input_formats=['%d.%m.%Y', '%Y-%m-%d'],
         required=False,
-        widget=forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input'})
+        widget=forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input', 'placeholder': 'дд.мм.рррр'})
     )
     histology_date = forms.DateField(
         input_formats=['%d.%m.%Y', '%Y-%m-%d'],
         required=False,
-        widget=forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input'})
+        widget=forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input', 'placeholder': 'дд.мм.рррр'})
     )
     ct_simulation_date = forms.DateField(
         input_formats=['%d.%m.%Y', '%Y-%m-%d'],
         required=False,
-        widget=forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input'})
+        widget=forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input', 'placeholder': 'дд.мм.рррр'})
     )
     treatment_start_date = forms.DateField(
         input_formats=['%d.%m.%Y', '%Y-%m-%d'],
         required=False,
-        widget=forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input'})
+        widget=forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input', 'placeholder': 'дд.мм.рррр'})
     )
     discharge_date = forms.DateField(
         input_formats=['%d.%m.%Y', '%Y-%m-%d'],
         required=False,
-        widget=forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input'})
+        widget=forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input', 'placeholder': 'дд.мм.рррр'})
     )
     last_blood_test_date = forms.DateField(
         input_formats=['%d.%m.%Y', '%Y-%m-%d'],
         required=False,
-        widget=forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input'})
+        widget=forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input', 'placeholder': 'дд.мм.рррр'})
     )
     class Meta:
         model = Patient
@@ -86,7 +86,7 @@ class PatientForm(forms.ModelForm):
             ]),
             'histology_number': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Номер гістології'}),
             'histology_description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': 'Опис гістологічного дослідження'}),
-            'treatment_start_date': forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input'}),
+            'treatment_start_date': forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input', 'placeholder': 'дд.мм.рррр'}),
             'total_fractions': forms.NumberInput(attrs={'class': 'form-control', 'min': 0, 'placeholder': 'Кількість фракцій'}),
             'dose_per_fraction': forms.NumberInput(attrs={'class': 'form-control', 'min': 0, 'step': 0.1, 'placeholder': 'Доза на фракцію (Гр)'}),
             'current_fraction': forms.NumberInput(attrs={'class': 'form-control', 'min': 0, 'placeholder': 'Поточна фракція'}),
@@ -142,7 +142,7 @@ class FractionHistoryForm(forms.ModelForm):
     date = forms.DateField(
         input_formats=['%d.%m.%Y', '%Y-%m-%d'],
         required=True,
-        widget=forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input'})
+        widget=forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input', 'placeholder': 'дд.мм.рррр'})
     )
     class Meta:
         model = FractionHistory
@@ -155,12 +155,12 @@ class MedicalIncapacityForm(forms.ModelForm):
     start_date = forms.DateField(
         input_formats=['%d.%m.%Y', '%Y-%m-%d'],
         required=False,
-        widget=forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input'})
+        widget=forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input', 'placeholder': 'дд.мм.рррр'})
     )
     end_date = forms.DateField(
         input_formats=['%d.%m.%Y', '%Y-%m-%d'],
         required=False,
-        widget=forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input'})
+        widget=forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input', 'placeholder': 'дд.мм.рррр'})
     )
     class Meta:
         model = MedicalIncapacity
