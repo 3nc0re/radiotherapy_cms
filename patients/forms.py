@@ -58,8 +58,20 @@ class PatientForm(forms.ModelForm):
             ]),
             'diagnosis': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Введіть діагноз'}),
             'tnm_staging': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Наприклад: T2N0M0'}),
-            'disease_stage': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Введіть стадію (напр. IIIB)'}),
-            'clinical_group': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Введіть клінічну групу'}),
+            'disease_stage': forms.Select(attrs={'class': 'form-control'}, choices=[
+                ('', 'Виберіть стадію'),
+                ('I', 'I стадія'),
+                ('II', 'II стадія'),
+                ('III', 'III стадія'),
+                ('IV', 'IV стадія')
+            ]),
+            'clinical_group': forms.Select(attrs={'class': 'form-control'}, choices=[
+                ('', 'Виберіть групу'),
+                ('1', '1 група'),
+                ('2', '2 група'),
+                ('3', '3 група'),
+                ('4', '4 група')
+            ]),
             'treatment_type': forms.Select(attrs={'class': 'form-control'}, choices=[
                 ('', 'Виберіть тип лікування'),
                 ('радикальне', 'Радикальне'),
@@ -73,7 +85,7 @@ class PatientForm(forms.ModelForm):
             'dose_per_fraction': forms.NumberInput(attrs={'class': 'form-control', 'min': 0, 'step': 0.1, 'placeholder': 'Доза на фракцію (Гр)'}),
             'received_dose': forms.NumberInput(attrs={'class': 'form-control', 'min': 0, 'step': 0.1, 'placeholder': 'Отримана доза (Гр)'}),
             'missed_days': forms.NumberInput(attrs={'class': 'form-control', 'min': 0, 'placeholder': 'Пропущені дні'}),
-            'discharge_date': forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input'}),
+            'discharge_date': forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input', 'placeholder': 'дд.мм.рррр'}),
             'current_stage': forms.Select(attrs={'class': 'form-control'}, choices=[
                 ('', 'Виберіть етап'),
                 ('КТ-симуляція', 'КТ-симуляція'),
