@@ -140,6 +140,42 @@
             color: #0c5460;
             border: 1px solid #bee5eb;
         }
+        
+        /* Стилі для полів введення дат */
+        .datepicker-input {
+            position: relative;
+        }
+        
+        .datepicker-input:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 0.2rem rgba(74, 144, 226, 0.25);
+        }
+        
+        /* Покращення стилів для Flatpickr */
+        .flatpickr-input {
+            background-color: white !important;
+        }
+        
+        .flatpickr-calendar {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            border-radius: 8px;
+        }
+        
+        /* Стилі для полів введення дат */
+        .datepicker-input {
+            cursor: text;
+        }
+        
+        .datepicker-input:hover {
+            border-color: var(--primary-color);
+        }
+        
+        /* Покращення для placeholder */
+        .datepicker-input::placeholder {
+            color: #999;
+            font-style: italic;
+        }
     </style>
 </head>
 <body>
@@ -181,7 +217,22 @@
         document.addEventListener('DOMContentLoaded', function() {
             flatpickr('.datepicker-input', {
                 dateFormat: "d.m.Y",
-                locale: "uk"
+                locale: "uk",
+                allowInput: true,
+                clickOpens: true,
+                enableTime: false,
+                time_24hr: true,
+                placeholder: "дд.мм.рррр",
+                onOpen: function(selectedDates, dateStr, instance) {
+                    // Додаємо підказку при відкритті календаря
+                    if (!instance.input.value) {
+                        instance.input.setAttribute('title', 'Введіть дату вручну або виберіть з календаря');
+                    }
+                },
+                onChange: function(selectedDates, dateStr, instance) {
+                    // Прибираємо підказку після вибору дати
+                    instance.input.removeAttribute('title');
+                }
             });
         });
     </script>
