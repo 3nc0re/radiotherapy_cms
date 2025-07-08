@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.10]
+        python-version: [3.12]
 
     steps:
       - uses: actions/checkout@v4
@@ -87,13 +87,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: 🧠 Зчитати зміни PR
+      - name: 🧐 Зчитати зміни PR
         id: diff
         run: |
           git fetch origin ${{ github.base_ref }}
           git diff origin/${{ github.base_ref }}...HEAD > patch.diff
 
-      - name: 🧠 Відправити на AI рев’ю (ChatGPT)
+      - name: 🧐 Відправити на AI рев’ю (ChatGPT)
         run: |
           curl https://api.openai.com/v1/chat/completions \
             -H "Authorization: Bearer ${{ secrets.OPENAI_API_KEY }}" \
