@@ -18,7 +18,10 @@ jobs:
       matrix:
         python-version: [3.12]
     env:
-      DATABASE_URL: postgres://${{ secrets.DB_USER }}:${{ secrets.DB_PASSWORD }}@${{ secrets.DB_HOST }}:5432/${{ secrets.DB_NAME }}
+      DB_NAME: ${{ secrets.DB_NAME }}
+      DB_USER: ${{ secrets.DB_USER }}
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      DB_HOST: ${{ secrets.DB_HOST }}
 
     steps:
       - uses: actions/checkout@v4
@@ -67,7 +70,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: 🕤 Згенерувати ім’я файлу
+      - name: 🥐 Згенерувати ім’я файлу
         id: vars
         run: echo "file=backup-$(date +'%Y-%m-%d').sql" >> $GITHUB_OUTPUT
 
