@@ -13,35 +13,12 @@
 <div class="details-grid">
     <div class="card patient-info">
         <h3><i class="fas fa-user-circle"></i> Загальна інформація</h3>
-        <p><strong>Дата народження:</strong> {{ patient.birth_date|date:"d.m.Y"|default:"—" }}</p>
-        <p><strong>Стать:</strong> {{ patient.gender|default:"—" }}</p>
         <p><strong>Діагноз:</strong> {{ patient.diagnosis|default:"—" }}</p>
-        <p><strong>TNM:</strong> {{ patient.tnm_staging|default:"—" }}</p>
-        <p><strong>Стадія:</strong> {{ patient.disease_stage|default:"—" }}</p>
-        <p><strong>Клінічна група:</strong> {{ patient.clinical_group|default:"—" }}</p>
-        <p><strong>Тип лікування:</strong> {{ patient.treatment_type|default:"—" }}</p>
-        <p><strong>Фаза лікування:</strong> {{ patient.treatment_phase|default:"—" }}</p>
-        <p><strong>Зона опромінення:</strong> {{ patient.irradiation_zone|default:"—" }}</p>
+        <p><strong>Поточний етап:</strong> <span class="badge">{{ patient.display_stage|default:"—" }}</span></p>
         <p><strong>Дата КТ:</strong> {{ patient.ct_simulation_date|date:"d.m.Y"|default:"—" }}</p>
         <p><strong>Дата початку лікування:</strong> {{ patient.treatment_start_date|date:"d.m.Y"|default:"—" }}</p>
-        <p><strong>Загальна кількість фракцій:</strong> {{ patient.total_fractions|default:"—" }}</p>
-        <p><strong>РОД (Гр):</strong> {{ patient.dose_per_fraction|default:"—" }}</p>
-        <p><strong>СОД (Гр):</strong> {{ patient.received_dose|default:"—" }}</p>
         <p><strong>Дата виписки:</strong> {{ patient.discharge_date|date:"d.m.Y"|default:"—" }}</p>
-        <p><strong>Статус госпіталізації:</strong> {{ patient.inpatient_status|default:"—" }}</p>
-        <p><strong>Номер палати:</strong> {{ patient.ward_number|default:"—" }}</p>
-        <p><strong>Попереднє опромінення:</strong> {{ patient.prior_radiation|default:"—" }}</p>
         <p><strong>Дата останнього аналізу крові:</strong> {{ patient.last_blood_test_date|date:"d.m.Y"|default:"—" }}</p>
-        <p><strong>Гістологія:</strong>
-            {% if patient.histology_number or patient.histology_date or patient.histology_description %}
-                ПГЗ
-                {% if patient.histology_number %} № {{ patient.histology_number }}{% endif %}
-                {% if patient.histology_date %} від {{ patient.histology_date|date:"d.m.Y" }}р.{% endif %}
-                {% if patient.histology_description %} - {{ patient.histology_description }}{% endif %}
-            {% else %}
-                —
-            {% endif %}
-        </p>
         <p><strong>Примітки:</strong> {{ patient.notes|default:"—" }}</p>
     </div>
 
