@@ -22,6 +22,12 @@
         <p><strong>Примітки:</strong> {{ patient.notes|default:"—" }}</p>
     </div>
 
+    <div class="card copy-card full-width">
+        <h3><i class="fas fa-clipboard"></i> Коротка довідка</h3>
+        <textarea id="summary-text" readonly class="copy-text">{{ patient.summary_text }}</textarea>
+        <button id="copy-summary" class="btn btn-secondary">Копіювати</button>
+    </div>
+
     <div class="card notifications-card">
         <h3><i class="fas fa-bell"></i> Сповіщення</h3>
         {% if notifications %}
@@ -45,8 +51,8 @@
     
     <div class="card treatment-info">
         <h3><i class="fas fa-radiation"></i> Інформація про лікування</h3>
-        <p><strong>СОД (Гр):</strong> {{ patient.sod|default:"—" }}</p>
-        <p><strong>РОД (Гр):</strong> {{ patient.rod|default:"—" }}</p>
+        <p><strong>СОД (Гр):</strong> {{ patient.received_dose|default:"—" }}</p>
+        <p><strong>РОД (Гр):</strong> {{ patient.dose_per_fraction|default:"—" }}</p>
         <p><strong>Загальна кількість фракцій:</strong> {{ patient.total_fractions|default:"—" }}</p>
         <p><strong>Поточна фракція:</strong> {{ patient.current_fraction|default:"0" }}</p>
     </div>
@@ -186,5 +192,22 @@
     gap: 10px;
     padding: 8px 0;
 }
+.copy-text {
+    width: 100%;
+    min-height: 80px;
+    margin-bottom: 10px;
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    resize: vertical;
+}
 </style>
-{% endblock %} 
+<script>
+document.getElementById('copy-summary')?.addEventListener('click', function() {
+    const text = document.getElementById('summary-text');
+    if (text) {
+        navigator.clipboard.writeText(text.value);
+    }
+});
+</script>
+{% endblock %}
