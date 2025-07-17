@@ -1,0 +1,29 @@
+# Використовуємо офіційний Python образ
+FROM python:3.11-slim
+
+# Встановлюємо робочу директорію
+WORKDIR /app
+
+# Копіюємо файли залежностей
+COPY requirements.txt .
+
+# Встановлюємо Python залежності (без PostgreSQL залежностей)
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Копіюємо код проєкту
+COPY . /app
+
+# Відкриваємо порт
+EXPOSE 8000
+
+# Створюємо скрипт для запуску з ізольованою базою
+RUN echo '#!/bin/bash\n\
+echo "Creating test database..."\n\
+python manage.py migrate\n\
+echo "Starting Django server..."\n\
+python manage.py runserver 0.0.0.0:8000' > start_test.sh
+
+RUN chmod +x start_test.sh
+
+# Запускаємо додаток
+CMD ["./start_test.sh"] 

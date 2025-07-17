@@ -35,6 +35,18 @@ class PatientForm(forms.ModelForm):
         required=False,
         widget=forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input', 'placeholder': 'дд.мм.рррр'})
     )
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Форматуємо дати для відображення в полях
+        date_fields = ['birth_date', 'histology_date', 'ct_simulation_date', 
+                      'treatment_start_date', 'discharge_date', 'last_blood_test_date']
+        for field_name in date_fields:
+            if self.instance.pk and getattr(self.instance, field_name):
+                date_value = getattr(self.instance, field_name)
+                if date_value:
+                    self.initial[field_name] = date_value.strftime('%d.%m.%Y')
+    
     class Meta:
         model = Patient
         fields = [
@@ -134,6 +146,17 @@ class MedicalIncapacityForm(forms.ModelForm):
         required=False,
         widget=forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input', 'placeholder': 'дд.мм.рррр'})
     )
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Форматуємо дати для відображення в полях
+        date_fields = ['start_date', 'end_date']
+        for field_name in date_fields:
+            if self.instance.pk and getattr(self.instance, field_name):
+                date_value = getattr(self.instance, field_name)
+                if date_value:
+                    self.initial[field_name] = date_value.strftime('%d.%m.%Y')
+    
     class Meta:
         model = MedicalIncapacity
         exclude = ['patient']
@@ -149,6 +172,44 @@ class MedicalIncapacityForm(forms.ModelForm):
         
         if start_date and end_date and end_date < start_date:
             raise ValidationError('Дата закінчення не може бути раніше дати початку')
+        
+        return cleaned_data
+
+class FractionEditForm(forms.ModelForm):
+    """Форма для редагування фракції"""
+    date = forms.DateField(
+        input_formats=['%d.%m.%Y', '%Y-%m-%d'],
+        required=True,
+        widget=forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input', 'placeholder': 'дд.мм.рррр'})
+    )
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk and self.instance.date:
+            self.initial['date'] = self.instance.date.strftime('%d.%m.%Y')
+    
+    class Meta:
+        model = FractionHistory
+        fields = ['date', 'dose', 'delivered', 'confirmed_by_doctor', 'note', 'is_postponed', 'is_missed', 'reason']
+        widgets = {
+            'dose': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.1'}),
+            'note': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+            'reason': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Причина зміни'}),
+            'delivered': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'confirmed_by_doctor': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'is_postponed': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'is_missed': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        date = cleaned_data.get('date')
+        is_postponed = cleaned_data.get('is_postponed')
+        is_missed = cleaned_data.get('is_missed')
+        
+        # Перевірка, що дата не в минулому (якщо не пропущена)
+        if date and date < date.today() and not is_missed:
+            raise ValidationError('Дата фракції не може бути в минулому, якщо фракція не пропущена')
         
         return cleaned_data
 

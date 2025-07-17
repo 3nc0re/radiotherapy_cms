@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=True
+      - SECRET_KEY=dev-secret-key-change-in-production
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/cms_db_dev
+    depends_on:
+      - db
+    volumes:
+      - .:/app
+    restart: unless-stopped
+    command: python manage.py runserver 0.0.0.0:8000
+
+  db:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=cms_db_dev
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+volumes:
+  postgres_dev_data: 

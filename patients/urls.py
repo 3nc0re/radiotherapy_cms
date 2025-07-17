@@ -21,6 +21,8 @@ urlpatterns = [
     path('fractions/', views.fraction_list, name='fraction_list'),
     path('patients/<int:pk>/fractions/', views.fraction_list, name='patient_fraction_list'),
     path('patients/<int:patient_id>/generate_fractions/', views.generate_fractions, name='generate_fractions'),
+    path('patients/<int:patient_id>/recalculate_discharge/', views.recalculate_discharge, name='recalculate_discharge'),
+    path('fractions/<int:pk>/edit/', views.fraction_edit, name='fraction_edit'),
     path('fractions/confirm/doctor/', views.confirm_fractions_doctor, name='confirm_fractions_doctor'),
     path('fractions/confirm/nurse/', views.confirm_fractions_nurse, name='confirm_fractions_nurse'),
 
@@ -37,4 +39,5 @@ urlpatterns = [
 
     # Misc
     path('confirm_blood_test/<int:patient_id>/', views.confirm_blood_test, name='confirm_blood_test'),
+    path('update_all_discharge_dates/', views.update_all_discharge_dates, name='update_all_discharge_dates'),
 ] 
