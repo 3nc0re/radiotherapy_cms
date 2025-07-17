@@ -35,6 +35,18 @@ class PatientForm(forms.ModelForm):
         required=False,
         widget=forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input', 'placeholder': 'дд.мм.рррр'})
     )
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Форматуємо дати для відображення в полях
+        date_fields = ['birth_date', 'histology_date', 'ct_simulation_date', 
+                      'treatment_start_date', 'discharge_date', 'last_blood_test_date']
+        for field_name in date_fields:
+            if self.instance.pk and getattr(self.instance, field_name):
+                date_value = getattr(self.instance, field_name)
+                if date_value:
+                    self.initial[field_name] = date_value.strftime('%d.%m.%Y')
+    
     class Meta:
         model = Patient
         fields = [
@@ -134,6 +146,17 @@ class MedicalIncapacityForm(forms.ModelForm):
         required=False,
         widget=forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input', 'placeholder': 'дд.мм.рррр'})
     )
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Форматуємо дати для відображення в полях
+        date_fields = ['start_date', 'end_date']
+        for field_name in date_fields:
+            if self.instance.pk and getattr(self.instance, field_name):
+                date_value = getattr(self.instance, field_name)
+                if date_value:
+                    self.initial[field_name] = date_value.strftime('%d.%m.%Y')
+    
     class Meta:
         model = MedicalIncapacity
         exclude = ['patient']

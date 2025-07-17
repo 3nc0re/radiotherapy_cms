@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=True
+      - SECRET_KEY=test-secret-key
+      - DATABASE_URL=sqlite:///test_db.sqlite3
+    restart: unless-stopped
+
+volumes:
+  test_db_volume: 

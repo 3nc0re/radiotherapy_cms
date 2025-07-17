@@ -11,17 +11,64 @@
 </div>
 
 <div class="details-grid">
+    <!-- Особиста інформація -->
     <div class="card patient-info">
-        <h3><i class="fas fa-user-circle"></i> Загальна інформація</h3>
-        <p><strong>Діагноз:</strong> {{ patient.diagnosis|default:"—" }}</p>
+        <h3><i class="fas fa-user-circle"></i> Особиста інформація</h3>
+        <p><strong>Дата народження:</strong> {{ patient.birth_date|date:"d.m.Y"|default:"—" }}</p>
+        <p><strong>Стать:</strong> {{ patient.gender|default:"—" }}</p>
         <p><strong>Поточний етап:</strong> <span class="badge">{{ patient.display_stage|default:"—" }}</span></p>
-        <p><strong>Дата КТ:</strong> {{ patient.ct_simulation_date|date:"d.m.Y"|default:"—" }}</p>
+        <p><strong>Статус госпіталізації:</strong> {{ patient.inpatient_status|default:"—" }}</p>
+        {% if patient.ward_number %}
+        <p><strong>Номер палати:</strong> {{ patient.ward_number }}</p>
+        {% endif %}
+    </div>
+
+    <!-- Діагноз та стадіювання -->
+    <div class="card diagnosis-info">
+        <h3><i class="fas fa-stethoscope"></i> Діагноз та стадіювання</h3>
+        <p><strong>Діагноз:</strong> {{ patient.diagnosis|default:"—" }}</p>
+        <p><strong>TNM стадіювання:</strong> {{ patient.tnm_staging|default:"—" }}</p>
+        <p><strong>Стадія захворювання:</strong> {{ patient.disease_stage|default:"—" }}</p>
+        <p><strong>Клінічна група:</strong> {{ patient.clinical_group|default:"—" }}</p>
+        <p><strong>Попереднє опромінення:</strong> {{ patient.prior_radiation|default:"—" }}</p>
+    </div>
+
+    <!-- Інформація про лікування -->
+    <div class="card treatment-info">
+        <h3><i class="fas fa-radiation"></i> Інформація про лікування</h3>
+        <p><strong>Тип лікування:</strong> {{ patient.treatment_type|default:"—" }}</p>
+        <p><strong>Фаза лікування:</strong> {{ patient.treatment_phase|default:"—" }}</p>
+        <p><strong>Зона опромінення:</strong> {{ patient.irradiation_zone|default:"—" }}</p>
+        <p><strong>Загальна кількість фракцій:</strong> {{ patient.total_fractions|default:"—" }}</p>
+        <p><strong>РОД (Гр):</strong> {{ patient.dose_per_fraction|default:"—" }}</p>
+        <p><strong>СОД (Гр):</strong> {{ patient.received_dose|default:"—" }}</p>
+        <p><strong>Поточна фракція:</strong> {{ patient.current_fraction|default:"0" }}</p>
+    </div>
+
+    <!-- Дати -->
+    <div class="card dates-info">
+        <h3><i class="fas fa-calendar-alt"></i> Важливі дати</h3>
+        <p><strong>Дата КТ-симуляції:</strong> {{ patient.ct_simulation_date|date:"d.m.Y"|default:"—" }}</p>
         <p><strong>Дата початку лікування:</strong> {{ patient.treatment_start_date|date:"d.m.Y"|default:"—" }}</p>
         <p><strong>Дата виписки:</strong> {{ patient.discharge_date|date:"d.m.Y"|default:"—" }}</p>
         <p><strong>Дата останнього аналізу крові:</strong> {{ patient.last_blood_test_date|date:"d.m.Y"|default:"—" }}</p>
-        <p><strong>Примітки:</strong> {{ patient.notes|default:"—" }}</p>
+        {% if patient.next_blood_test_due_date %}
+        <p><strong>Наступний аналіз крові:</strong> {{ patient.next_blood_test_due_date|date:"d.m.Y" }}</p>
+        {% endif %}
     </div>
 
+    <!-- Гістологія -->
+    <div class="card histology-info">
+        <h3><i class="fas fa-microscope"></i> Гістологія</h3>
+        <p><strong>Номер гістології:</strong> {{ patient.histology_number|default:"—" }}</p>
+        <p><strong>Дата гістології:</strong> {{ patient.histology_date|date:"d.m.Y"|default:"—" }}</p>
+        {% if patient.histology_description %}
+        <p><strong>Опис гістології:</strong></p>
+        <div class="histology-description">{{ patient.histology_description }}</div>
+        {% endif %}
+    </div>
+
+    <!-- Сповіщення -->
     <div class="card notifications-card">
         <h3><i class="fas fa-bell"></i> Сповіщення</h3>
         {% if notifications %}
@@ -42,15 +89,27 @@
             <p>Сповіщень немає</p>
         {% endif %}
     </div>
-    
-    <div class="card treatment-info">
-        <h3><i class="fas fa-radiation"></i> Інформація про лікування</h3>
-        <p><strong>СОД (Гр):</strong> {{ patient.sod|default:"—" }}</p>
-        <p><strong>РОД (Гр):</strong> {{ patient.rod|default:"—" }}</p>
-        <p><strong>Загальна кількість фракцій:</strong> {{ patient.total_fractions|default:"—" }}</p>
-        <p><strong>Поточна фракція:</strong> {{ patient.current_fraction|default:"0" }}</p>
+
+    <!-- Діагноз для копіювання -->
+    <div class="card diagnosis-copy">
+        <h3><i class="fas fa-clipboard"></i> Діагноз для копіювання</h3>
+        <div class="diagnosis-text-container">
+            <textarea id="diagnosisText" class="diagnosis-text" readonly>{{ patient.get_diagnosis_text_for_copy }}</textarea>
+            <button onclick="copyDiagnosis()" class="btn btn-success copy-btn">
+                <i class="fas fa-copy"></i> Копіювати діагноз
+            </button>
+        </div>
     </div>
 
+    <!-- Примітки -->
+    {% if patient.notes %}
+    <div class="card notes-info">
+        <h3><i class="fas fa-sticky-note"></i> Примітки</h3>
+        <div class="notes-content">{{ patient.notes }}</div>
+    </div>
+    {% endif %}
+
+    <!-- Історія фракцій -->
     <div class="card full-width">
         <h3><i class="fas fa-history"></i> Історія фракцій</h3>
         <a href="{% url 'generate_fractions' patient.pk %}" class="btn btn-secondary">Згенерувати фракції</a>
@@ -59,16 +118,20 @@
                 <thead>
                     <tr>
                         <th>Дата</th>
+                        <th>Доза (Гр)</th>
                         <th>Підтверджено лікарем</th>
                         <th>Підтверджено медсестрою</th>
+                        <th>Примітка</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for fraction in fractions %}
                     <tr>
                         <td>{{ fraction.date|date:"d.m.Y" }}</td>
-                        <td>{{ fraction.doctor_confirmation|yesno:"Так,Ні" }}</td>
-                        <td>{{ fraction.nurse_confirmation|yesno:"Так,Ні" }}</td>
+                        <td>{{ fraction.dose|default:"—" }}</td>
+                        <td>{{ fraction.confirmed_by_doctor|yesno:"Так,Ні" }}</td>
+                        <td>{{ fraction.delivered|yesno:"Так,Ні" }}</td>
+                        <td>{{ fraction.note|default:"—" }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -78,6 +141,7 @@
         {% endif %}
     </div>
     
+    <!-- Лікарняні листи -->
     <div class="card full-width">
         <h3><i class="fas fa-file-medical"></i> Лікарняні листи</h3>
         <a href="{% url 'medical_incapacity_create' patient.pk %}" class="btn btn-secondary">Додати лікарняний</a>
@@ -85,16 +149,20 @@
             <table class="styled-table">
                 <thead>
                     <tr>
+                        <th>Номер МВТН</th>
                         <th>Дата початку</th>
                         <th>Дата закінчення</th>
+                        <th>Без трудових відносин</th>
                         <th>Дії</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for incapacity in incapacities %}
                     <tr>
-                        <td>{{ incapacity.start_date|date:"d.m.Y" }}</td>
-                        <td>{{ incapacity.end_date|date:"d.m.Y" }}</td>
+                        <td>{{ incapacity.mvt_number|default:"—" }}</td>
+                        <td>{{ incapacity.start_date|date:"d.m.Y"|default:"—" }}</td>
+                        <td>{{ incapacity.end_date|date:"d.m.Y"|default:"—" }}</td>
+                        <td>{{ incapacity.no_employment_relation|yesno:"Так,Ні" }}</td>
                         <td>
                             <a href="{% url 'medical_incapacity_delete' incapacity.pk %}" class="btn-danger-small">Видалити</a>
                         </td>
@@ -107,6 +175,30 @@
         {% endif %}
     </div>
 </div>
+
+<script>
+function copyDiagnosis() {
+    const textArea = document.getElementById('diagnosisText');
+    textArea.select();
+    textArea.setSelectionRange(0, 99999); // Для мобільних пристроїв
+    
+    try {
+        document.execCommand('copy');
+        // Показуємо повідомлення про успішне копіювання
+        const button = document.querySelector('.copy-btn');
+        const originalText = button.innerHTML;
+        button.innerHTML = '<i class="fas fa-check"></i> Скопійовано!';
+        button.style.backgroundColor = '#28a745';
+        
+        setTimeout(() => {
+            button.innerHTML = originalText;
+            button.style.backgroundColor = '#28a745';
+        }, 2000);
+    } catch (err) {
+        console.error('Помилка копіювання: ', err);
+    }
+}
+</script>
 
 <style>
 .back-link {
@@ -133,13 +225,16 @@
     display: inline-flex;
     align-items: center;
     gap: 8px;
+    border: none;
+    cursor: pointer;
 }
 .btn-primary { background-color: var(--primary-color); }
+.btn-success { background-color: #28a745; }
 .btn-danger { background-color: #dc3545; }
 .btn-secondary { background-color: #6c757d; }
 .details-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
     gap: 20px;
 }
 .card h3 {
@@ -159,6 +254,32 @@
 }
 .full-width {
     grid-column: 1 / -1;
+}
+.diagnosis-text-container {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.diagnosis-text {
+    width: 100%;
+    min-height: 80px;
+    max-height: 120px;
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 1.4;
+    resize: vertical;
+    background-color: #f8f9fa;
+    box-sizing: border-box;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    white-space: pre-wrap;
+}
+.copy-btn {
+    align-self: flex-start;
+    width: 100%;
 }
 .styled-table {
     width: 100%;
@@ -185,6 +306,13 @@
     align-items: center;
     gap: 10px;
     padding: 8px 0;
+}
+.histology-description, .notes-content {
+    background-color: #f8f9fa;
+    padding: 10px;
+    border-radius: 5px;
+    margin-top: 10px;
+    white-space: pre-wrap;
 }
 </style>
 {% endblock %} 

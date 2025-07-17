@@ -186,6 +186,46 @@ class Patient(models.Model):
     def get_latest_medical_incapacity(self):
         return self.medical_incapacities.order_by('-end_date').first()
 
+    def get_diagnosis_text_for_copy(self):
+        """Формує текст діагнозу для копіювання в інші системи"""
+        parts = []
+        
+        # Основний діагноз
+        if self.diagnosis:
+            parts.append(self.diagnosis)
+        
+        # TNM стадіювання
+        if self.tnm_staging:
+            parts.append(self.tnm_staging)
+        
+        # Стадія захворювання
+        if self.disease_stage:
+            parts.append(f"gr. {self.disease_stage}")
+        
+        # Клінічна група
+        if self.clinical_group:
+            parts.append(f"кл. гр. {self.clinical_group}")
+        
+        # Стан після лікування
+        if self.treatment_type:
+            if self.treatment_type == 'радикальне':
+                parts.append("Стан після радикального лікування")
+            elif self.treatment_type == 'паліативне':
+                parts.append("Стан після паліативного лікування")
+            elif self.treatment_type == 'симптоматичне':
+                parts.append("Стан після симптоматичного лікування")
+        
+        # Гістологія
+        if self.histology_number and self.histology_date:
+            hist_date = self.histology_date.strftime('%d.%m.%Y')
+            parts.append(f"ПГЗ № {self.histology_number} від {hist_date}")
+        
+        # Опис гістології
+        if self.histology_description:
+            parts.append(f"- {self.histology_description}")
+        
+        return ". ".join(parts) if parts else "Діагноз не вказано"
+
     def __str__(self):
         return self.full_name
 
