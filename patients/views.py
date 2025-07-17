@@ -90,8 +90,11 @@ def dashboard(request):
 
 @login_required
 def patient_list(request, filter_type=None):
-    base_query = Patient.objects.filter(discharge_date__isnull=True) # Exclude discharged patients
     today = date.today()
+    # Активні: discharge_date немає або у майбутньому
+    base_query = Patient.objects.filter(
+        models.Q(discharge_date__isnull=True) | models.Q(discharge_date__gte=today)
+    )
     
     if filter_type:
         if filter_type == 'ct-simulation':
