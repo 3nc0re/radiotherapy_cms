@@ -49,6 +49,18 @@
             <li><i class="fas fa-check-circle"></i> Виписані цього тижня: <span>{{ discharged_this_week }}</span></li>
         </ul>
     </div>
+    
+    <div class="card">
+        <h3><i class="fas fa-tools"></i> Системні дії</h3>
+        <div class="system-actions">
+            <form method="post" action="{% url 'update_all_discharge_dates' %}" style="display: inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-sync-alt"></i> Оновити всі дати виписки
+                </button>
+            </form>
+        </div>
+    </div>
 </div>
 
 <style>
@@ -121,6 +133,34 @@
     cursor: pointer;
     padding: 0;
     font-size: inherit;
+}
+
+.system-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.btn {
+    padding: 10px 15px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9rem;
+    transition: background-color 0.3s ease;
+}
+
+.btn-primary {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+.btn-primary:hover {
+    background-color: #0056b3;
 }
 </style>
 {% endblock %} 

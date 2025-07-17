@@ -2,6 +2,8 @@ from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.utils import timezone
 from datetime import date, timedelta
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 
 class UserManager(BaseUserManager):
     def create_user(self, username, password=None, **extra_fields):
@@ -239,6 +241,12 @@ class FractionHistory(models.Model):
     delivered = models.BooleanField(blank=True, null=True)
     confirmed_by_doctor = models.BooleanField(blank=True, null=True)
     note = models.TextField(blank=True, null=True)
+    
+    # Нові поля для редагування фракцій
+    is_postponed = models.BooleanField(default=False, help_text="Чи відкладена фракція")
+    original_date = models.DateField(blank=True, null=True, help_text="Оригінальна дата фракції")
+    reason = models.CharField(max_length=255, blank=True, null=True, help_text="Причина зміни дати")
+    is_missed = models.BooleanField(default=False, help_text="Чи пропущена фракція")
 
     class Meta:
         db_table = 'fraction_history'
@@ -255,3 +263,15 @@ class MedicalIncapacity(models.Model):
 
     class Meta:
         db_table = 'medical_incapacity'
+
+@receiver(post_save, sender=Patient)
+def auto_generate_fractions(sender, instance, created, **kwargs):
+    """Автоматично генерує фракції при збереженні пацієнта з датою початку лікування"""
+    # Перевіряємо, чи всі необхідні поля заповнені
+    if (instance.treatment_start_date and 
+        instance.total_fractions and 
+        instance.dose_per_fraction and
+        not instance.fractions.exists()):
+        
+        from .services import generate_fractions_for_patient
+        generate_fractions_for_patient(instance)

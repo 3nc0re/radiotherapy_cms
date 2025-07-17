@@ -1,11 +1,12 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from .models import Patient, FractionHistory, MedicalIncapacity, User
-from .forms import PatientForm, FractionHistoryForm, MedicalIncapacityForm, UserRegistrationForm, UserLoginForm
+from .forms import PatientForm, FractionHistoryForm, MedicalIncapacityForm, UserRegistrationForm, UserLoginForm, FractionEditForm
 from django.http import JsonResponse
 from datetime import date, timedelta
 from django.contrib.auth import login, logout, authenticate
 from django.contrib import messages
 from django.db.models import Q, Count
+from django.db import models
 from django.utils import timezone
 from .services import generate_fractions_for_patient, auto_confirm_today_fractions, get_patient_treatment_info
 from django.views.decorators.csrf import csrf_exempt
@@ -120,10 +121,59 @@ def patient_list(request, filter_type=None):
             patients = base_query.all()
     else:
         patients = base_query.all()
+    
+    # Сортування
+    sort_by = request.GET.get('sort', 'last_name')
+    sort_order = request.GET.get('order', 'asc')
+    
+    # Визначаємо поле для сортування
+    if sort_by == 'full_name':
+        order_field = 'last_name'
+    elif sort_by == 'ct_simulation_date':
+        order_field = 'ct_simulation_date'
+    elif sort_by == 'treatment_start_date':
+        order_field = 'treatment_start_date'
+    elif sort_by == 'discharge_date':
+        order_field = 'discharge_date'
+    elif sort_by == 'medical_incapacity_end':
+        # Сортування за датою закінчення останнього МВТН
+        if sort_order == 'desc':
+            patients = patients.annotate(
+                latest_incapacity_end=models.Subquery(
+                    MedicalIncapacity.objects.filter(
+                        patient=models.OuterRef('pk')
+                    ).order_by('-end_date').values('end_date')[:1]
+                )
+            ).order_by('-latest_incapacity_end')
+        else:
+            patients = patients.annotate(
+                latest_incapacity_end=models.Subquery(
+                    MedicalIncapacity.objects.filter(
+                        patient=models.OuterRef('pk')
+                    ).order_by('-end_date').values('end_date')[:1]
+                )
+            ).order_by('latest_incapacity_end')
+        return render(request, 'patients/patient_list.html', {
+            'patients': patients,
+            'filter_type': filter_type,
+            'current_sort': sort_by,
+            'current_order': sort_order
+        })
+    else:
+        order_field = 'last_name'
+    
+    # Додаємо префікс для зворотного сортування
+    if sort_order == 'desc':
+        order_field = f'-{order_field}'
+    
+    # Застосовуємо сортування
+    patients = patients.order_by(order_field)
         
     return render(request, 'patients/patient_list.html', {
         'patients': patients,
-        'filter_type': filter_type
+        'filter_type': filter_type,
+        'current_sort': sort_by,
+        'current_order': sort_order
     })
 
 @login_required
@@ -162,10 +212,28 @@ def patient_delete(request, pk):
 
 @login_required
 def fraction_list(request):
-    fractions = FractionHistory.objects.filter(
-        Q(confirmed_by_doctor=False) | Q(delivered=False)
-    ).select_related('patient').order_by('date')
-    return render(request, 'patients/fraction_list.html', {'fractions': fractions})
+    # Отримуємо пацієнтів, які мають фракції
+    patients_with_fractions = Patient.objects.filter(
+        fractions__isnull=False
+    ).distinct().prefetch_related(
+        'fractions'
+    ).order_by('last_name', 'first_name')
+    
+    # Групуємо фракції по пацієнтах
+    patients_data = []
+    for patient in patients_with_fractions:
+        fractions = patient.fractions.all().order_by('date')
+        patients_data.append({
+            'patient': patient,
+            'fractions': fractions,
+            'total_fractions': fractions.count(),
+            'completed_fractions': fractions.filter(delivered=True).count(),
+            'pending_fractions': fractions.filter(delivered=False).count()
+        })
+    
+    return render(request, 'patients/fraction_list.html', {
+        'patients_data': patients_data
+    })
 
 @login_required
 def fraction_confirm(request, pk):
@@ -184,6 +252,36 @@ def fraction_nurse_confirm(request, pk):
         fraction.save()
         return redirect('fraction_list')
     return render(request, 'patients/fraction_nurse_confirm.html', {'fraction': fraction})
+
+@login_required
+def fraction_edit(request, pk):
+    """Редагування фракції"""
+    fraction = get_object_or_404(FractionHistory, pk=pk)
+    
+    if request.method == 'POST':
+        form = FractionEditForm(request.POST, instance=fraction)
+        if form.is_valid():
+            # Зберігаємо оригінальну дату, якщо це перша зміна
+            if not fraction.original_date and form.cleaned_data['date'] != fraction.date:
+                fraction.original_date = fraction.date
+            
+            fraction = form.save()
+            
+            # Перераховуємо дату виписки, якщо змінилася дата фракції
+            if 'date' in form.changed_data:
+                from .services import recalculate_discharge_date
+                recalculate_discharge_date(fraction.patient)
+            
+            messages.success(request, f'Фракцію від {fraction.date.strftime("%d.%m.%Y")} успішно оновлено')
+            return redirect('patient_detail', pk=fraction.patient.pk)
+    else:
+        form = FractionEditForm(instance=fraction)
+    
+    return render(request, 'patients/fraction_edit.html', {
+        'form': form, 
+        'fraction': fraction,
+        'patient': fraction.patient
+    })
 
 @login_required
 def medical_incapacity_create(request, patient_pk):
@@ -214,11 +312,17 @@ def patient_detail(request, pk):
     incapacities = patient.medical_incapacities.all().order_by('-created_at')
     treatment_info = get_patient_treatment_info(patient)
     
+    # Підрахунки для статистики фракцій
+    missed_fractions_count = patient.fractions.filter(is_missed=True).count()
+    postponed_fractions_count = patient.fractions.filter(is_postponed=True).count()
+    
     return render(request, 'patients/patient_detail.html', {
         'patient': patient,
         'fractions': fractions,
         'incapacities': incapacities,
-        'treatment_info': treatment_info
+        'treatment_info': treatment_info,
+        'missed_fractions_count': missed_fractions_count,
+        'postponed_fractions_count': postponed_fractions_count
     })
 
 def login_view(request):
@@ -299,6 +403,20 @@ def generate_fractions(request, patient_id):
     return redirect('patient_detail', pk=patient_id)
 
 @login_required
+def recalculate_discharge(request, patient_id):
+    """Перераховує дату виписки на основі фракцій"""
+    if request.method == 'POST':
+        patient = get_object_or_404(Patient, pk=patient_id)
+        from .services import recalculate_discharge_date
+        new_date = recalculate_discharge_date(patient)
+        if new_date:
+            messages.success(request, f'Дату виписки оновлено на {new_date.strftime("%d.%m.%Y")}')
+        else:
+            messages.error(request, 'Не вдалося перерахувати дату виписки')
+        return redirect('patient_detail', pk=patient_id)
+    return redirect('patient_detail', pk=patient_id)
+
+@login_required
 def auto_confirm_fractions(request):
     if request.method == 'POST':
         count = auto_confirm_today_fractions()
@@ -338,7 +456,11 @@ def inpatient_list(request):
 @login_required
 def patient_archive(request):
     """Список пацієнтів в архіві"""
-    archived_patients = Patient.objects.filter(discharge_date__isnull=False).order_by('-discharge_date')
+    today = date.today()
+    archived_patients = Patient.objects.filter(
+        discharge_date__isnull=False,
+        discharge_date__lt=today  # Тільки виписані пацієнти (дата виписки в минулому)
+    ).order_by('-discharge_date')
     return render(request, 'patients/patient_list.html', {
         'patients': archived_patients,
         'is_archive': True
@@ -373,3 +495,27 @@ def confirm_fractions_nurse(request):
         FractionHistory.objects.filter(id__in=fraction_ids).update(delivered=True)
         messages.success(request, f"Підтверджено {len(fraction_ids)} фракцій медсестрою.")
     return redirect('fraction_list')
+
+@login_required
+@require_POST
+def update_all_discharge_dates(request):
+    """Масове оновлення дат виписки для всіх пацієнтів"""
+    from .services import recalculate_discharge_date
+    
+    patients_with_fractions = Patient.objects.filter(
+        fractions__isnull=False
+    ).distinct()
+    
+    updated_count = 0
+    for patient in patients_with_fractions:
+        old_date = patient.discharge_date
+        new_date = recalculate_discharge_date(patient)
+        if new_date and new_date != old_date:
+            updated_count += 1
+    
+    if updated_count > 0:
+        messages.success(request, f'Успішно оновлено дати виписки для {updated_count} пацієнтів')
+    else:
+        messages.info(request, 'Всі дати виписки вже актуальні')
+    
+    return redirect('dashboard')

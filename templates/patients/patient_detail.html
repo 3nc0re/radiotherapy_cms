@@ -43,6 +43,21 @@
         <p><strong>РОД (Гр):</strong> {{ patient.dose_per_fraction|default:"—" }}</p>
         <p><strong>СОД (Гр):</strong> {{ patient.received_dose|default:"—" }}</p>
         <p><strong>Поточна фракція:</strong> {{ patient.current_fraction|default:"0" }}</p>
+        {% if patient.fractions.exists %}
+        <p><strong>Пропущені фракції:</strong> {{ missed_fractions_count }}</p>
+        <p><strong>Відкладені фракції:</strong> {{ postponed_fractions_count }}</p>
+        {% endif %}
+        
+        {% if not patient.fractions.exists and patient.treatment_start_date and patient.total_fractions and patient.dose_per_fraction %}
+        <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee;">
+            <form method="post" action="{% url 'generate_fractions' patient.pk %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-success" style="width: 100%;">
+                    <i class="fas fa-plus"></i> Згенерувати фракції
+                </button>
+            </form>
+        </div>
+        {% endif %}
     </div>
 
     <!-- Дати -->
@@ -112,7 +127,22 @@
     <!-- Історія фракцій -->
     <div class="card full-width">
         <h3><i class="fas fa-history"></i> Історія фракцій</h3>
-        <a href="{% url 'generate_fractions' patient.pk %}" class="btn btn-secondary">Згенерувати фракції</a>
+        <div class="fraction-actions">
+            <form method="post" action="{% url 'generate_fractions' patient.pk %}" style="display: inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-secondary">
+                    <i class="fas fa-plus"></i> Згенерувати фракції
+                </button>
+            </form>
+            {% if patient.fractions.exists %}
+            <form method="post" action="{% url 'recalculate_discharge' patient.pk %}" style="display: inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-info">
+                    <i class="fas fa-calculator"></i> Перерахувати дату виписки
+                </button>
+            </form>
+            {% endif %}
+        </div>
         {% if fractions %}
             <table class="styled-table">
                 <thead>
@@ -121,7 +151,9 @@
                         <th>Доза (Гр)</th>
                         <th>Підтверджено лікарем</th>
                         <th>Підтверджено медсестрою</th>
+                        <th>Статус</th>
                         <th>Примітка</th>
+                        <th>Дії</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -131,7 +163,21 @@
                         <td>{{ fraction.dose|default:"—" }}</td>
                         <td>{{ fraction.confirmed_by_doctor|yesno:"Так,Ні" }}</td>
                         <td>{{ fraction.delivered|yesno:"Так,Ні" }}</td>
+                        <td>
+                            {% if fraction.is_postponed %}
+                                <span class="badge badge-warning">Відкладена</span>
+                            {% elif fraction.is_missed %}
+                                <span class="badge badge-danger">Пропущена</span>
+                            {% else %}
+                                <span class="badge badge-success">Запланована</span>
+                            {% endif %}
+                        </td>
                         <td>{{ fraction.note|default:"—" }}</td>
+                        <td>
+                            <a href="{% url 'fraction_edit' fraction.pk %}" class="btn-edit-small">
+                                <i class="fas fa-edit"></i> Редагувати
+                            </a>
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -232,6 +278,13 @@ function copyDiagnosis() {
 .btn-success { background-color: #28a745; }
 .btn-danger { background-color: #dc3545; }
 .btn-secondary { background-color: #6c757d; }
+.btn-info { background-color: #17a2b8; }
+.fraction-actions {
+    margin-bottom: 15px;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
 .details-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -251,6 +304,16 @@ function copyDiagnosis() {
     padding: 3px 8px;
     border-radius: 12px;
     font-size: 0.9em;
+}
+.badge-success {
+    background-color: #28a745;
+}
+.badge-warning {
+    background-color: #ffc107;
+    color: #212529;
+}
+.badge-danger {
+    background-color: #dc3545;
 }
 .full-width {
     grid-column: 1 / -1;
@@ -293,6 +356,11 @@ function copyDiagnosis() {
 .styled-table th { background-color: #f8f9fa; }
 .btn-danger-small {
     color: #dc3545;
+    text-decoration: none;
+    font-size: 0.9em;
+}
+.btn-edit-small {
+    color: var(--primary-color);
     text-decoration: none;
     font-size: 0.9em;
 }

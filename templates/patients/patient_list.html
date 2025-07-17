@@ -18,12 +18,57 @@
         <table class="patients-table">
             <thead>
                 <tr>
-                    <th>ПІБ</th>
-                    <th>Дата КТ-симуляції</th>
-                    <th>Дата початку лікування</th>
-                    <th>Дата виписки</th>
+                    <th>
+                        <a href="{% if filter_type %}{% url 'patient_list_filtered' filter_type %}{% else %}{% url 'patient_list' %}{% endif %}?sort=full_name&order={% if current_sort == 'full_name' and current_order == 'asc' %}desc{% else %}asc{% endif %}" class="sort-link">
+                            ПІБ
+                            {% if current_sort == 'full_name' %}
+                                <i class="fas fa-sort-{% if current_order == 'asc' %}up{% else %}down{% endif %}"></i>
+                            {% else %}
+                                <i class="fas fa-sort"></i>
+                            {% endif %}
+                        </a>
+                    </th>
+                    <th>
+                        <a href="{% if filter_type %}{% url 'patient_list_filtered' filter_type %}{% else %}{% url 'patient_list' %}{% endif %}?sort=ct_simulation_date&order={% if current_sort == 'ct_simulation_date' and current_order == 'asc' %}desc{% else %}asc{% endif %}" class="sort-link">
+                            Дата КТ-симуляції
+                            {% if current_sort == 'ct_simulation_date' %}
+                                <i class="fas fa-sort-{% if current_order == 'asc' %}up{% else %}down{% endif %}"></i>
+                            {% else %}
+                                <i class="fas fa-sort"></i>
+                            {% endif %}
+                        </a>
+                    </th>
+                    <th>
+                        <a href="{% if filter_type %}{% url 'patient_list_filtered' filter_type %}{% else %}{% url 'patient_list' %}{% endif %}?sort=treatment_start_date&order={% if current_sort == 'treatment_start_date' and current_order == 'asc' %}desc{% else %}asc{% endif %}" class="sort-link">
+                            Дата початку лікування
+                            {% if current_sort == 'treatment_start_date' %}
+                                <i class="fas fa-sort-{% if current_order == 'asc' %}up{% else %}down{% endif %}"></i>
+                            {% else %}
+                                <i class="fas fa-sort"></i>
+                            {% endif %}
+                        </a>
+                    </th>
+                    <th>
+                        <a href="{% if filter_type %}{% url 'patient_list_filtered' filter_type %}{% else %}{% url 'patient_list' %}{% endif %}?sort=discharge_date&order={% if current_sort == 'discharge_date' and current_order == 'asc' %}desc{% else %}asc{% endif %}" class="sort-link">
+                            Дата виписки
+                            {% if current_sort == 'discharge_date' %}
+                                <i class="fas fa-sort-{% if current_order == 'asc' %}up{% else %}down{% endif %}"></i>
+                            {% else %}
+                                <i class="fas fa-sort"></i>
+                            {% endif %}
+                        </a>
+                    </th>
                     <th>Поточний етап</th>
-                    <th>МВТН до</th>
+                    <th>
+                        <a href="{% if filter_type %}{% url 'patient_list_filtered' filter_type %}{% else %}{% url 'patient_list' %}{% endif %}?sort=medical_incapacity_end&order={% if current_sort == 'medical_incapacity_end' and current_order == 'asc' %}desc{% else %}asc{% endif %}" class="sort-link">
+                            МВТН до
+                            {% if current_sort == 'medical_incapacity_end' %}
+                                <i class="fas fa-sort-{% if current_order == 'asc' %}up{% else %}down{% endif %}"></i>
+                            {% else %}
+                                <i class="fas fa-sort"></i>
+                            {% endif %}
+                        </a>
+                    </th>
                     <th>Деталі</th>
                 </tr>
             </thead>
@@ -108,6 +153,21 @@
 .patients-table th {
     font-weight: 600;
     color: var(--text-light-color);
+}
+.sort-link {
+    text-decoration: none;
+    color: inherit;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    transition: color 0.3s ease;
+}
+.sort-link:hover {
+    color: var(--primary-color);
+}
+.sort-link i {
+    font-size: 0.8em;
+    opacity: 0.7;
 }
 .patients-table tbody tr:hover {
     background-color: #f8f9fa;

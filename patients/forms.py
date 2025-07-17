@@ -175,6 +175,44 @@ class MedicalIncapacityForm(forms.ModelForm):
         
         return cleaned_data
 
+class FractionEditForm(forms.ModelForm):
+    """Форма для редагування фракції"""
+    date = forms.DateField(
+        input_formats=['%d.%m.%Y', '%Y-%m-%d'],
+        required=True,
+        widget=forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input', 'placeholder': 'дд.мм.рррр'})
+    )
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk and self.instance.date:
+            self.initial['date'] = self.instance.date.strftime('%d.%m.%Y')
+    
+    class Meta:
+        model = FractionHistory
+        fields = ['date', 'dose', 'delivered', 'confirmed_by_doctor', 'note', 'is_postponed', 'is_missed', 'reason']
+        widgets = {
+            'dose': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.1'}),
+            'note': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+            'reason': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Причина зміни'}),
+            'delivered': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'confirmed_by_doctor': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'is_postponed': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'is_missed': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        date = cleaned_data.get('date')
+        is_postponed = cleaned_data.get('is_postponed')
+        is_missed = cleaned_data.get('is_missed')
+        
+        # Перевірка, що дата не в минулому (якщо не пропущена)
+        if date and date < date.today() and not is_missed:
+            raise ValidationError('Дата фракції не може бути в минулому, якщо фракція не пропущена')
+        
+        return cleaned_data
+
 class UserRegistrationForm(UserCreationForm):
     role = forms.ChoiceField(
         choices=[
