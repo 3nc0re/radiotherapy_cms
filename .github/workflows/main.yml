@@ -1,0 +1,131 @@
+# .github/workflows/main.yml
+
+name: 🔁 Full Django CI with AI, Backup & Playwright
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  schedule:
+    - cron: '0 17 * * 1-5'  # Щоденний бекап о 17:00 по буднях
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.12]
+    env:
+      DB_NAME: ${{ secrets.DB_NAME }}
+      DB_USER: ${{ secrets.DB_USER }}
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      DB_HOST: ${{ secrets.DB_HOST }}
+      DATABASE_URL: postgres://${{ secrets.DB_USER }}:${{ secrets.DB_PASSWORD }}@${{ secrets.DB_HOST }}:5432/${{ secrets.DB_NAME }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 🔧 Встановлення Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: 📆 Python залежності
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: ⚙️ Django перевірки
+        run: |
+          python manage.py check
+          python manage.py migrate --noinput
+
+      - name: 🥪 Python тести
+        run: |
+          python manage.py test
+
+  ui_tests:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 🥤 Встановити Node + Playwright
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+
+      - name: 📆 Встановити Playwright
+        run: |
+          npm ci
+          npx playwright install --with-deps
+
+      - name: 🥪 UI тести Playwright
+        run: npx playwright test
+
+  db_backup:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 🥐 Згенерувати ім’я файлу
+        id: vars
+        run: echo "file=backup-$(date +'%Y-%m-%d').sql" >> $GITHUB_OUTPUT
+
+      - name: 🗓️ PostgreSQL Backup (Supabase)
+        run: |
+          pg_dump -h ${{ secrets.DB_HOST }} -U ${{ secrets.DB_USER }} -d ${{ secrets.DB_NAME }} > ${{ steps.vars.outputs.file }}
+        env:
+          PGPASSWORD: ${{ secrets.DB_PASSWORD }}
+
+      - name: 🗓️ Відновити cms-sa.json
+        run: echo '${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}' > cms-sa.json
+
+      - name: ☁️ Завантаження у Google Drive
+        run: |
+          pip install --upgrade google-api-python-client google-auth google-auth-httplib2 google-auth-oauthlib
+          python upload_to_drive.py ${{ steps.vars.outputs.file }}
+        env:
+          GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
+
+  ai_review:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 🤮 Зчитати зміни PR
+        id: diff
+        run: |
+          git fetch origin ${{ github.base_ref }}
+          git diff origin/${{ github.base_ref }}...HEAD > patch.diff
+
+      - name: 🤮 Відправити на AI рев’ю (ChatGPT)
+        run: |
+          curl https://api.openai.com/v1/chat/completions \
+            -H "Authorization: Bearer ${{ secrets.OPENAI_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "model": "gpt-4",
+              "messages": [
+                {"role": "system", "content": "You are a code reviewer."},
+                {"role": "user", "content": "Review the following diff:\n$(cat patch.diff)"}
+              ]
+            }' > ai_review.txt
+
+      - name: 💬 Коментар у PR (GitHub CLI)
+        if: success()
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} -F ai_review.txt
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+# Секрети які потрібні:
+# - DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
+# - GDRIVE_FOLDER_ID: ід кореневої теки в Google Drive
+# - GDRIVE_SERVICE_ACCOUNT_JSON: однорядковий JSON (z cms-sa.json)
+# - OPENAI_API_KEY: для ChatGPT рев’ю
+# - GITHUB_TOKEN (GitHub Actions знає автоматично)

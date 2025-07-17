@@ -57,6 +57,23 @@ class CriticalModelTests(TestCase):
         
         self.assertEqual(patient.current_fraction, 1)
 
+    def test_summary_text_property(self):
+        patient = Patient.objects.create(
+            last_name='Тестовий',
+            first_name='Пацієнт',
+            diagnosis='Са прямої кишки',
+            tnm_staging='T2N0M0',
+            disease_stage='II',
+            clinical_group='2',
+            histology_number='123',
+            histology_date=date(2025, 1, 28),
+            histology_description='Аденокарцинома (G2)'
+        )
+
+        summary = patient.summary_text
+        self.assertIn('T2N0M0', summary)
+        self.assertIn('Аденокарцинома', summary)
+
 
 class CriticalViewsTests(TestCase):
     """Критичні тести представлень - можуть викликати падіння сервісу"""
@@ -101,6 +118,16 @@ class CriticalViewsTests(TestCase):
         response = self.client.get(reverse('patient_detail', kwargs={'pk': self.patient.pk}))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['patient'], self.patient)
+
+    def test_summary_text_displayed(self):
+        self.client.login(username='testuser', password='testpass123')
+        self.patient.tnm_staging = 'T2N0M0'
+        self.patient.histology_description = 'Carcinoma'
+        self.patient.save()
+
+        response = self.client.get(reverse('patient_detail', kwargs={'pk': self.patient.pk}))
+        self.assertContains(response, 'T2N0M0')
+        self.assertContains(response, 'Carcinoma')
     
     def test_nonexistent_patient_detail(self):
         """Тест обробки неіснуючого пацієнта - критична для стабільності"""
@@ -164,7 +191,6 @@ class CriticalErrorHandlingTests(TestCase):
         """Тест обробки невалідних URL"""
         response = self.client.get('/patients/nonexistent/')
         self.assertEqual(response.status_code, 404)
-
 
 class PatientFormDateTest(TestCase):
     """Тести для перевірки правильного форматування дат у формі пацієнта"""
@@ -251,3 +277,4 @@ class PatientFormDateTest(TestCase):
         # Перевіряємо згенерований текст
         expected_text = "Са правої молочної залози. T4N0M0. gr. IIIA. кл. гр. 2. Стан після радикального лікування. ПГЗ № 46779-90 від 22.11.2024. - Внутрішньопротоковий інвазивний Са (G2), mts в л/в"
         self.assertEqual(self.patient.get_diagnosis_text_for_copy(), expected_text)
+

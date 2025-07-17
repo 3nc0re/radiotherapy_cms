@@ -109,6 +109,31 @@ class Patient(models.Model):
         return f"{self.last_name} {self.first_name} {self.middle_name}".strip()
 
     @property
+    def summary_text(self):
+        """Сформована текстова довідка за даними пацієнта"""
+        parts = []
+        if self.diagnosis:
+            parts.append(self.diagnosis)
+        if self.tnm_staging:
+            parts.append(self.tnm_staging)
+        if self.disease_stage:
+            parts.append(f"gr. {self.disease_stage}")
+        if self.clinical_group:
+            parts.append(f"кл. гр. {self.clinical_group}")
+        if self.treatment_type:
+            parts.append(f"стан після {self.treatment_type}")
+        if self.histology_number or self.histology_date or self.histology_description:
+            histology = "ПГЗ"
+            if self.histology_number:
+                histology += f" № {self.histology_number}"
+            if self.histology_date:
+                histology += f" від {self.histology_date.strftime('%d.%m.%Y')}р."
+            if self.histology_description:
+                histology += f" - {self.histology_description}"
+            parts.append(histology)
+        return ", ".join(parts)
+
+    @property
     def display_stage(self):
         """
         Динамічно визначає поточний етап пацієнта на основі дат.
