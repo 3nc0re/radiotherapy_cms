@@ -65,7 +65,13 @@
         <h3><i class="fas fa-calendar-alt"></i> Важливі дати</h3>
         <p><strong>Дата КТ-симуляції:</strong> {{ patient.ct_simulation_date|date:"d.m.Y"|default:"—" }}</p>
         <p><strong>Дата початку лікування:</strong> {{ patient.treatment_start_date|date:"d.m.Y"|default:"—" }}</p>
+        <p><strong>Загальна кількість фракцій:</strong> {{ patient.total_fractions|default:"—" }}</p>
+        <p><strong>РОД (Гр):</strong> {{ patient.dose_per_fraction|default:"—" }}</p>
+        <p><strong>СОД (Гр):</strong> {{ patient.received_dose|default:"—" }}</p>
         <p><strong>Дата виписки:</strong> {{ patient.discharge_date|date:"d.m.Y"|default:"—" }}</p>
+        <p><strong>Статус госпіталізації:</strong> {{ patient.inpatient_status|default:"—" }}</p>
+        <p><strong>Номер палати:</strong> {{ patient.ward_number|default:"—" }}</p>
+        <p><strong>Попереднє опромінення:</strong> {{ patient.prior_radiation|default:"—" }}</p>
         <p><strong>Дата останнього аналізу крові:</strong> {{ patient.last_blood_test_date|date:"d.m.Y"|default:"—" }}</p>
         {% if patient.next_blood_test_due_date %}
         <p><strong>Наступний аналіз крові:</strong> {{ patient.next_blood_test_due_date|date:"d.m.Y" }}</p>
@@ -383,4 +389,12 @@ function copyDiagnosis() {
     white-space: pre-wrap;
 }
 </style>
-{% endblock %} 
+<script>
+document.getElementById('copy-summary')?.addEventListener('click', function() {
+    const text = document.getElementById('summary-text');
+    if (text) {
+        navigator.clipboard.writeText(text.value);
+    }
+});
+</script>
+{% endblock %}
