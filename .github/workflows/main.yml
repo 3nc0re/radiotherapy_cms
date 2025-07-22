@@ -25,8 +25,15 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: 🔐 Встановити секрети
+      - name: 🔐 Встановити секрети та ::add-mask::
         run: |
+          echo "::add-mask::${{ secrets.DB_NAME }}"
+          echo "::add-mask::${{ secrets.DB_USER }}"
+          echo "::add-mask::${{ secrets.DB_PASSWORD }}"
+          echo "::add-mask::${{ secrets.DB_HOST }}"
+          echo "::add-mask::postgres://${{ secrets.DB_USER }}:${{ secrets.DB_PASSWORD }}@${{ secrets.DB_HOST }}:5432/${{ secrets.DB_NAME }}"
+          echo "::add-mask::${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}"
+          echo "::add-mask::${{ secrets.OPENAI_API_KEY }}"
           echo "DB_NAME=${{ secrets.DB_NAME }}" >> $GITHUB_ENV
           echo "DB_USER=${{ secrets.DB_USER }}" >> $GITHUB_ENV
           echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> $GITHUB_ENV
@@ -49,6 +56,7 @@ jobs:
       - name: ⚙️ Django перевірки
         run: |
           export DATABASE_URL=postgres://$DB_USER:$DB_PASSWORD@$DB_HOST:5432/$DB_NAME
+          echo "::add-mask::$DATABASE_URL"
           python manage.py check
           python manage.py migrate --noinput
 
@@ -85,8 +93,13 @@ jobs:
         id: vars
         run: echo "file=backup-$(date +'%Y-%m-%d').sql" >> $GITHUB_OUTPUT
 
-      - name: 🔐 Встановити секрети
+      - name: 🔐 Секрети + ::add-mask::
         run: |
+          echo "::add-mask::${{ secrets.DB_NAME }}"
+          echo "::add-mask::${{ secrets.DB_USER }}"
+          echo "::add-mask::${{ secrets.DB_PASSWORD }}"
+          echo "::add-mask::${{ secrets.DB_HOST }}"
+          echo "::add-mask::${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}"
           echo "DB_NAME=${{ secrets.DB_NAME }}" >> $GITHUB_ENV
           echo "DB_USER=${{ secrets.DB_USER }}" >> $GITHUB_ENV
           echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> $GITHUB_ENV
@@ -130,6 +143,7 @@ jobs:
 
       - name: 🤮 Відправити на AI рев'ю (ChatGPT)
         run: |
+          echo "::add-mask::${{ secrets.OPENAI_API_KEY }}"
           curl https://api.openai.com/v1/chat/completions \
             -H "Authorization: Bearer ${{ secrets.OPENAI_API_KEY }}" \
             -H "Content-Type: application/json" \
