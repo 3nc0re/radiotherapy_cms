@@ -25,7 +25,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: 🔐 Встановити секрети та ::add-mask::
+      - name: 🔐 Встановити секрети та ::add-mask
         shell: bash
         run: |
           echo "::add-mask::${{ secrets.DB_NAME }}"
