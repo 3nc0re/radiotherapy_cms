@@ -25,7 +25,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: 🔐 Встановити секрети та ::add-mask
+      - name: 🔐 Встановити секрети та ::add-mask::
         shell: bash
         run: |
           echo "::add-mask::${{ secrets.DB_NAME }}"
@@ -50,6 +50,9 @@ jobs:
               exit 1
             fi
           done
+
+      - name: 📌 PYTHONPATH
+        run: echo "PYTHONPATH=." >> $GITHUB_ENV
 
       - name: 📆 Python залежності
         run: |
@@ -97,7 +100,7 @@ jobs:
         id: vars
         run: echo "file=backup-$(date +'%Y-%m-%d').sql" >> $GITHUB_OUTPUT
 
-      - name: 🔐 Секрети + ::add-mask
+      - name: 🔐 Секрети + ::add-mask::
         shell: bash
         run: |
           echo "::add-mask::${{ secrets.DB_NAME }}"
