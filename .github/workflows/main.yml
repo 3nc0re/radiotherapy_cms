@@ -97,7 +97,7 @@ jobs:
         id: vars
         run: echo "file=backup-$(date +'%Y-%m-%d').sql" >> $GITHUB_OUTPUT
 
-      - name: 🔐 Секрети + ::add-mask::
+      - name: 🔐 Секрети + ::add-mask
         shell: bash
         run: |
           echo "::add-mask::${{ secrets.DB_NAME }}"
