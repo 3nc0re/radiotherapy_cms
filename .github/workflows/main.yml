@@ -1,5 +1,3 @@
-# .github/workflows/main.yml
-
 name: 🔁 Full Django CI with AI, Backup & Playwright
 
 on:
@@ -14,6 +12,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    environment: production
     strategy:
       matrix:
         python-version: [3.12]
@@ -31,6 +30,15 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
+
+      - name: ✅ Перевірка секретів
+        run: |
+          for var in DB_NAME DB_USER DB_PASSWORD DB_HOST; do
+            if [ -z "${!var}" ]; then
+              echo "⛔️ SECRET $var is missing!"
+              exit 1
+            fi
+          done
 
       - name: 📆 Python залежності
         run: |
@@ -67,11 +75,12 @@ jobs:
 
   db_backup:
     runs-on: ubuntu-latest
+    environment: production
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
 
-      - name: 🥐 Згенерувати ім’я файлу
+      - name: 🥐 Згенерувати ім'я файлу
         id: vars
         run: echo "file=backup-$(date +'%Y-%m-%d').sql" >> $GITHUB_OUTPUT
 
@@ -103,7 +112,7 @@ jobs:
           git fetch origin ${{ github.base_ref }}
           git diff origin/${{ github.base_ref }}...HEAD > patch.diff
 
-      - name: 🤮 Відправити на AI рев’ю (ChatGPT)
+      - name: 🤮 Відправити на AI рев'ю (ChatGPT)
         run: |
           curl https://api.openai.com/v1/chat/completions \
             -H "Authorization: Bearer ${{ secrets.OPENAI_API_KEY }}" \
@@ -122,10 +131,3 @@ jobs:
           gh pr comment ${{ github.event.pull_request.number }} -F ai_review.txt
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-# Секрети які потрібні:
-# - DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
-# - GDRIVE_FOLDER_ID: ід кореневої теки в Google Drive
-# - GDRIVE_SERVICE_ACCOUNT_JSON: однорядковий JSON (z cms-sa.json)
-# - OPENAI_API_KEY: для ChatGPT рев’ю
-# - GITHUB_TOKEN (GitHub Actions знає автоматично)
