@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: ["main"]
   schedule:
-    - cron: '0 17 * * 1-5'  # Щоденний бекап о 17:00 по буднях
+    - cron: '0 17 * * 1-5'
   workflow_dispatch:
 
 jobs:
@@ -25,12 +25,14 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: 🔐 Встановити секрети
+        run: |
+          echo "DB_NAME=${{ secrets.DB_NAME }}" >> $GITHUB_ENV
+          echo "DB_USER=${{ secrets.DB_USER }}" >> $GITHUB_ENV
+          echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> $GITHUB_ENV
+          echo "DB_HOST=${{ secrets.DB_HOST }}" >> $GITHUB_ENV
+
       - name: ✅ Перевірка секретів
-        env:
-          DB_NAME: ${{ secrets.DB_NAME }}
-          DB_USER: ${{ secrets.DB_USER }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          DB_HOST: ${{ secrets.DB_HOST }}
         run: |
           for var in DB_NAME DB_USER DB_PASSWORD DB_HOST; do
             if [ -z "${!var}" ]; then
@@ -45,19 +47,13 @@ jobs:
           pip install -r requirements.txt
 
       - name: ⚙️ Django перевірки
-        env:
-          DB_NAME: ${{ secrets.DB_NAME }}
-          DB_USER: ${{ secrets.DB_USER }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          DB_HOST: ${{ secrets.DB_HOST }}
-          DATABASE_URL: postgres://${{ secrets.DB_USER }}:${{ secrets.DB_PASSWORD }}@${{ secrets.DB_HOST }}:5432/${{ secrets.DB_NAME }}
         run: |
+          export DATABASE_URL=postgres://$DB_USER:$DB_PASSWORD@$DB_HOST:5432/$DB_NAME
           python manage.py check
           python manage.py migrate --noinput
 
       - name: 🥪 Python тести
-        run: |
-          python manage.py test
+        run: python manage.py test
 
   ui_tests:
     runs-on: ubuntu-latest
@@ -89,13 +85,14 @@ jobs:
         id: vars
         run: echo "file=backup-$(date +'%Y-%m-%d').sql" >> $GITHUB_OUTPUT
 
-      - name: 🗓️ PostgreSQL Backup (Supabase)
-        env:
-          DB_NAME: ${{ secrets.DB_NAME }}
-          DB_USER: ${{ secrets.DB_USER }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          DB_HOST: ${{ secrets.DB_HOST }}
-          PGPASSWORD: ${{ secrets.DB_PASSWORD }}
+      - name: 🔐 Встановити секрети
+        run: |
+          echo "DB_NAME=${{ secrets.DB_NAME }}" >> $GITHUB_ENV
+          echo "DB_USER=${{ secrets.DB_USER }}" >> $GITHUB_ENV
+          echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> $GITHUB_ENV
+          echo "DB_HOST=${{ secrets.DB_HOST }}" >> $GITHUB_ENV
+
+      - name: ✅ Перевірка секретів
         run: |
           for var in DB_NAME DB_USER DB_PASSWORD DB_HOST; do
             if [ -z "${!var}" ]; then
@@ -103,6 +100,10 @@ jobs:
               exit 1
             fi
           done
+
+      - name: 🗓️ PostgreSQL Backup (Supabase)
+        run: |
+          export PGPASSWORD=$DB_PASSWORD
           pg_dump -h $DB_HOST -U $DB_USER -d $DB_NAME > ${{ steps.vars.outputs.file }}
 
       - name: 🗓️ Відновити cms-sa.json
