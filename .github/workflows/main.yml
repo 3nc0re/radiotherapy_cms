@@ -16,12 +16,6 @@ jobs:
     strategy:
       matrix:
         python-version: [3.12]
-    env:
-      DB_NAME: ${{ secrets.DB_NAME }}
-      DB_USER: ${{ secrets.DB_USER }}
-      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-      DB_HOST: ${{ secrets.DB_HOST }}
-      DATABASE_URL: postgres://${{ secrets.DB_USER }}:${{ secrets.DB_PASSWORD }}@${{ secrets.DB_HOST }}:5432/${{ secrets.DB_NAME }}
 
     steps:
       - uses: actions/checkout@v4
@@ -32,6 +26,11 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: ✅ Перевірка секретів
+        env:
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_HOST: ${{ secrets.DB_HOST }}
         run: |
           for var in DB_NAME DB_USER DB_PASSWORD DB_HOST; do
             if [ -z "${!var}" ]; then
@@ -46,6 +45,12 @@ jobs:
           pip install -r requirements.txt
 
       - name: ⚙️ Django перевірки
+        env:
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DATABASE_URL: postgres://${{ secrets.DB_USER }}:${{ secrets.DB_PASSWORD }}@${{ secrets.DB_HOST }}:5432/${{ secrets.DB_NAME }}
         run: |
           python manage.py check
           python manage.py migrate --noinput
@@ -85,10 +90,20 @@ jobs:
         run: echo "file=backup-$(date +'%Y-%m-%d').sql" >> $GITHUB_OUTPUT
 
       - name: 🗓️ PostgreSQL Backup (Supabase)
-        run: |
-          pg_dump -h ${{ secrets.DB_HOST }} -U ${{ secrets.DB_USER }} -d ${{ secrets.DB_NAME }} > ${{ steps.vars.outputs.file }}
         env:
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_HOST: ${{ secrets.DB_HOST }}
           PGPASSWORD: ${{ secrets.DB_PASSWORD }}
+        run: |
+          for var in DB_NAME DB_USER DB_PASSWORD DB_HOST; do
+            if [ -z "${!var}" ]; then
+              echo "⛔️ SECRET $var is missing!"
+              exit 1
+            fi
+          done
+          pg_dump -h $DB_HOST -U $DB_USER -d $DB_NAME > ${{ steps.vars.outputs.file }}
 
       - name: 🗓️ Відновити cms-sa.json
         run: echo '${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}' > cms-sa.json
