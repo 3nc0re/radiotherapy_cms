@@ -26,6 +26,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: 🔐 Встановити секрети та ::add-mask::
+        shell: bash
         run: |
           echo "::add-mask::${{ secrets.DB_NAME }}"
           echo "::add-mask::${{ secrets.DB_USER }}"
@@ -40,8 +41,10 @@ jobs:
           echo "DB_HOST=${{ secrets.DB_HOST }}" >> $GITHUB_ENV
 
       - name: ✅ Перевірка секретів
+        shell: bash
         run: |
           for var in DB_NAME DB_USER DB_PASSWORD DB_HOST; do
+            echo "$var=***"
             if [ -z "${!var}" ]; then
               echo "⛔️ SECRET $var is missing!"
               exit 1
@@ -54,6 +57,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: ⚙️ Django перевірки
+        shell: bash
         run: |
           export DATABASE_URL=postgres://$DB_USER:$DB_PASSWORD@$DB_HOST:5432/$DB_NAME
           echo "::add-mask::$DATABASE_URL"
@@ -94,6 +98,7 @@ jobs:
         run: echo "file=backup-$(date +'%Y-%m-%d').sql" >> $GITHUB_OUTPUT
 
       - name: 🔐 Секрети + ::add-mask::
+        shell: bash
         run: |
           echo "::add-mask::${{ secrets.DB_NAME }}"
           echo "::add-mask::${{ secrets.DB_USER }}"
@@ -106,8 +111,10 @@ jobs:
           echo "DB_HOST=${{ secrets.DB_HOST }}" >> $GITHUB_ENV
 
       - name: ✅ Перевірка секретів
+        shell: bash
         run: |
           for var in DB_NAME DB_USER DB_PASSWORD DB_HOST; do
+            echo "$var=***"
             if [ -z "${!var}" ]; then
               echo "⛔️ SECRET $var is missing!"
               exit 1
@@ -142,6 +149,7 @@ jobs:
           git diff origin/${{ github.base_ref }}...HEAD > patch.diff
 
       - name: 🤮 Відправити на AI рев'ю (ChatGPT)
+        shell: bash
         run: |
           echo "::add-mask::${{ secrets.OPENAI_API_KEY }}"
           curl https://api.openai.com/v1/chat/completions \
