@@ -74,7 +74,7 @@ jobs:
           node-version: 20
       - name: 📆 Встановити Playwright
         run: |
-          npm ci
+          npm install
           npx playwright install --with-deps
       - name: 🥪 UI тести Playwright
         run: npx playwright test
