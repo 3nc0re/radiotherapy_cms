@@ -14,6 +14,7 @@ from pathlib import Path
 import os
 import dj_database_url
 from dotenv import load_dotenv
+import sys  # <--- ДОДАНО ІМПОРТ SYS ДЛЯ ПЕРЕВІРКИ СЕРЕДОВИЩА
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(dotenv_path=BASE_DIR / '.env')
@@ -97,15 +98,27 @@ WSGI_APPLICATION = 'cms_django.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-import os
-import dj_database_url
+# --- ПОЧАТОК ЗМІНЕНОГО БЛОКУ ---
 
+# Основна конфігурація бази даних. Використовується для всього,
+# крім запуску тестів (наприклад, для продакшну та db_backup).
 DATABASES = {
     'default': dj_database_url.config(
         default=os.environ.get('DATABASE_URL'),
         conn_max_age=600
     )
 }
+
+# Перевизначення бази даних для тестового середовища.
+# Якщо Django запущено з командою 'test', використовується швидка база даних в пам'яті.
+# Це робить тести швидкими та ізольованими від робочої бази даних.
+if 'test' in sys.argv:
+    DATABASES['default'] = {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': ':memory:',
+    }
+
+# --- КІНЕЦЬ ЗМІНЕНОГО БЛОКУ ---
 
 
 # Password validation
