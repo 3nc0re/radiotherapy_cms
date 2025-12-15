@@ -39,6 +39,16 @@ CSRF_TRUSTED_ORIGINS = [
     'https://*.netlify.app',
 ]
 
+# Session and CSRF configuration
+# Синхронізація сесії та CSRF токена для запобігання помилкам після тривалої бездіяльності
+SESSION_COOKIE_AGE = 1209600  # 2 тижні (за замовчуванням)
+SESSION_SAVE_EVERY_REQUEST = True  # Оновлювати сесію при кожному запиті (продовжує час життя сесії)
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False  # Сесія не закривається при закритті браузера
+
+# CSRF токен синхронізується з сесією
+CSRF_USE_SESSIONS = True  # Зберігати CSRF токен у сесії замість cookie (краще для синхронізації)
+CSRF_COOKIE_AGE = None  # CSRF токен житиме стільки ж, скільки сесія
+
 # Security settings for production
 if not DEBUG:
     SECURE_BROWSER_XSS_FILTER = True
