@@ -423,9 +423,65 @@ class PatientFormDateTest(TestCase):
         self.patient.histology_description = 'Внутрішньопротоковий інвазивний Са (G2), mts в л/в'
         self.patient.save()
         
-        # Перевіряємо згенерований текст
-        expected_text = "Са правої молочної залози. T4N0M0. gr. IIIA. кл. гр. 2. Стан після радикального лікування. ПГЗ № 46779-90 від 22.11.2024. - Внутрішньопротоковий інвазивний Са (G2), mts в л/в"
+        # Перевіряємо згенерований текст (новий формат з комами)
+        expected_text = "Са правої молочної залози, T4N0M0, gr. IIIA, кл. гр. 2. Стан після радикального лікування. ПГЗ № 46779-90 від 22.11.2024 - Внутрішньопротоковий інвазивний Са (G2), mts в л/в"
         self.assertEqual(self.patient.get_diagnosis_text_for_copy(), expected_text)
+    
+    def test_diagnosis_text_generation_with_dot_in_diagnosis(self):
+        """Тест перевіряє видалення крапки з кінця діагнозу"""
+        # Тест з прикладом з крапкою в кінці діагнозу
+        self.patient.diagnosis = 'Са правого піднебінного мигдалика ВПЛ+.'
+        self.patient.tnm_staging = 'T2N0M0'
+        self.patient.disease_stage = 'І'
+        self.patient.clinical_group = '2'
+        self.patient.treatment_type = 'радикальне'
+        self.patient.histology_number = '29777-79'
+        self.patient.histology_date = date(2023, 8, 8)
+        self.patient.histology_description = 'Плоскоклітинний Са'
+        self.patient.save()
+        
+        # Перевіряємо, що крапка видалена і формат правильний
+        expected_text = "Са правого піднебінного мигдалика ВПЛ+, T2N0M0, gr. І, кл. гр. 2. Стан після радикального лікування. ПГЗ № 29777-79 від 08.08.2023 - Плоскоклітинний Са"
+        self.assertEqual(self.patient.get_diagnosis_text_for_copy(), expected_text)
+    
+    def test_diagnosis_text_generation_without_tnm_and_stage(self):
+        """Тест форматування діагнозу без TNM та стадії"""
+        # Тест з прикладом без TNM та стадії
+        self.patient.diagnosis = 'Внутрішньомозкове утворення лівої скроневої ділянки.'
+        self.patient.tnm_staging = None  # Немає TNM
+        self.patient.disease_stage = None  # Немає стадії
+        self.patient.clinical_group = '2'
+        self.patient.treatment_type = 'радикальне'
+        self.patient.histology_number = '25CN014222'
+        self.patient.histology_date = date(2025, 7, 4)
+        self.patient.histology_description = 'Гліома (WHO grade 4)'
+        self.patient.save()
+        
+        # Перевіряємо правильне форматування без TNM та стадії
+        expected_text = "Внутрішньомозкове утворення лівої скроневої ділянки, кл. гр. 2. Стан після радикального лікування. ПГЗ № 25CN014222 від 04.07.2025 - Гліома (WHO grade 4)"
+        self.assertEqual(self.patient.get_diagnosis_text_for_copy(), expected_text)
+    
+    def test_diagnosis_text_generation_minimal(self):
+        """Тест форматування з мінімальними даними"""
+        # Тільки діагноз
+        self.patient.diagnosis = 'Тестовий діагноз'
+        self.patient.save()
+        
+        result = self.patient.get_diagnosis_text_for_copy()
+        self.assertEqual(result, "Тестовий діагноз")
+        
+        # Діагноз + клінічна група
+        self.patient.clinical_group = '1'
+        self.patient.save()
+        result = self.patient.get_diagnosis_text_for_copy()
+        self.assertEqual(result, "Тестовий діагноз, кл. гр. 1")
+        
+        # Діагноз + TNM (без стадії та клінічної групи)
+        self.patient.clinical_group = None
+        self.patient.tnm_staging = 'T1N0M0'
+        self.patient.save()
+        result = self.patient.get_diagnosis_text_for_copy()
+        self.assertEqual(result, "Тестовий діагноз, T1N0M0")
 
 
 class PatientModelPropertiesTests(TestCase):

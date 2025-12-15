@@ -226,23 +226,31 @@ class Patient(models.Model):
         """Формує текст діагнозу для копіювання в інші системи"""
         parts = []
         
-        # Основний діагноз
+        # Група 1: Діагноз, TNM, стадія, клінічна група (розділяються комами)
+        basic_parts = []
+        
+        # Основний діагноз (видаляємо крапку в кінці, якщо є)
         if self.diagnosis:
-            parts.append(self.diagnosis)
+            diagnosis = self.diagnosis.rstrip('. ')
+            basic_parts.append(diagnosis)
         
         # TNM стадіювання
         if self.tnm_staging:
-            parts.append(self.tnm_staging)
+            basic_parts.append(self.tnm_staging)
         
         # Стадія захворювання
         if self.disease_stage:
-            parts.append(f"gr. {self.disease_stage}")
+            basic_parts.append(f"gr. {self.disease_stage}")
         
         # Клінічна група
         if self.clinical_group:
-            parts.append(f"кл. гр. {self.clinical_group}")
+            basic_parts.append(f"кл. гр. {self.clinical_group}")
         
-        # Стан після лікування
+        # З'єднуємо базові частини комами
+        if basic_parts:
+            parts.append(", ".join(basic_parts))
+        
+        # Група 2: Стан після лікування (з крапкою перед)
         if self.treatment_type:
             if self.treatment_type == 'радикальне':
                 parts.append("Стан після радикального лікування")
@@ -251,15 +259,26 @@ class Patient(models.Model):
             elif self.treatment_type == 'симптоматичне':
                 parts.append("Стан після симптоматичного лікування")
         
-        # Гістологія
+        # Група 3: ПГЗ (без крапки перед дефісом)
+        histology_parts = []
         if self.histology_number and self.histology_date:
             hist_date = self.histology_date.strftime('%d.%m.%Y')
-            parts.append(f"ПГЗ № {self.histology_number} від {hist_date}")
+            histology_parts.append(f"ПГЗ № {self.histology_number} від {hist_date}")
         
-        # Опис гістології
+        # Група 4: Опис гістології (з дефісом)
         if self.histology_description:
-            parts.append(f"- {self.histology_description}")
+            histology_parts.append(self.histology_description)
         
+        # З'єднуємо частини ПГЗ дефісом (якщо є опис) або просто додаємо ПГЗ
+        if histology_parts:
+            if len(histology_parts) == 2:
+                # Є і номер, і опис - з'єднуємо дефісом
+                parts.append(f"{histology_parts[0]} - {histology_parts[1]}")
+            else:
+                # Тільки номер або тільки опис
+                parts.append(histology_parts[0])
+        
+        # З'єднуємо всі частини крапками (між групами)
         return ". ".join(parts) if parts else "Діагноз не вказано"
 
     def clean(self):
