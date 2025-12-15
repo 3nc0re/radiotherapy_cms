@@ -50,7 +50,7 @@ class PatientForm(forms.ModelForm):
     class Meta:
         model = Patient
         fields = [
-            'last_name', 'first_name', 'middle_name', 'birth_date', 'gender',
+            'ambulatory_card_id', 'last_name', 'first_name', 'middle_name', 'birth_date', 'gender',
             'diagnosis', 'tnm_staging', 'disease_stage', 'clinical_group', 
             'treatment_type', 'histology_number', 'histology_date',
             'histology_description', 'ct_simulation_date', 'treatment_start_date',
@@ -60,6 +60,12 @@ class PatientForm(forms.ModelForm):
             'last_blood_test_date', 'notes'
         ]
         widgets = {
+            'ambulatory_card_id': forms.TextInput(attrs={
+                'class': 'form-control', 
+                'placeholder': 'Наприклад: 228435/2025 або 2025-9246582',
+                'pattern': '[0-9/\\-]+',
+                'title': 'Дозволені тільки цифри, слеш (/) та дефіс (-)'
+            }),
             'last_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Введіть прізвище'}),
             'first_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Введіть ім\'я'}),
             'middle_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Введіть по батькові'}),
@@ -112,6 +118,39 @@ class PatientForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
+        import re
+        
+        # Валідація ambulatory_card_id
+        ambulatory_card_id = cleaned_data.get('ambulatory_card_id')
+        if ambulatory_card_id:
+            # Видаляємо пробіли на початку та в кінці
+            ambulatory_card_id = ambulatory_card_id.strip()
+            cleaned_data['ambulatory_card_id'] = ambulatory_card_id
+            
+            # Перевірка формату: дозволені тільки цифри, / та -
+            pattern = r'^[0-9/\\-]+$'
+            if not re.match(pattern, ambulatory_card_id):
+                raise ValidationError({
+                    'ambulatory_card_id': 'ID амбулаторної картки може містити тільки цифри, слеш (/) та дефіс (-)'
+                })
+            
+            # Перевірка, що є хоча б одна цифра
+            if not re.search(r'\d', ambulatory_card_id):
+                raise ValidationError({
+                    'ambulatory_card_id': 'ID амбулаторної картки повинен містити хоча б одну цифру'
+                })
+            
+            # Перевірка унікальності (якщо редагуємо існуючого пацієнта)
+            instance = self.instance
+            if instance and instance.pk:
+                existing = Patient.objects.filter(ambulatory_card_id=ambulatory_card_id).exclude(pk=instance.pk)
+            else:
+                existing = Patient.objects.filter(ambulatory_card_id=ambulatory_card_id)
+            
+            if existing.exists():
+                raise ValidationError({
+                    'ambulatory_card_id': 'Пацієнт з таким ID амбулаторної картки вже існує'
+                })
         
         # Перевірка дат
         treatment_start = cleaned_data.get('treatment_start_date')

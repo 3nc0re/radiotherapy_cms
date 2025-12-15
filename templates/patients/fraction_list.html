@@ -9,7 +9,9 @@
     <div class="patient-card">
         <div class="patient-header" onclick="toggleFractions('{{ patient_data.patient.id }}')">
             <div class="patient-info">
-                <h3>{{ patient_data.patient.full_name }}</h3>
+                <h3>
+                    <a href="{% url 'patient_detail' patient_data.patient.pk %}" class="patient-name-link" onclick="event.stopPropagation();">{{ patient_data.patient.full_name }}</a>
+                </h3>
                 <div class="fraction-stats">
                     <span class="stat completed">{{ patient_data.completed_fractions }}/{{ patient_data.total_fractions }}</span>
                     <span class="stat pending">{{ patient_data.pending_fractions }} очікують</span>
@@ -118,6 +120,18 @@
     margin: 0;
     color: var(--primary-color);
     font-size: 1.2rem;
+}
+
+.patient-info h3 .patient-name-link {
+    text-decoration: none;
+    color: var(--primary-color);
+    font-weight: 600;
+    transition: color 0.2s ease;
+}
+
+.patient-info h3 .patient-name-link:hover {
+    color: #0056b3;
+    text-decoration: underline;
 }
 
 .fraction-stats {

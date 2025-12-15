@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.utils import timezone
+from django.core.exceptions import ValidationError
 from datetime import date, timedelta
 from django.db.models.signals import post_save
 from django.dispatch import receiver
@@ -66,6 +67,14 @@ class User(AbstractBaseUser, PermissionsMixin):
 
 class Patient(models.Model):
     # Особиста інформація
+    ambulatory_card_id = models.CharField(
+        max_length=50, 
+        blank=True, 
+        null=True, 
+        unique=True,
+        help_text="ID амбулаторної картки (наприклад: 228435/2025 або 2025-9246582)",
+        verbose_name="ID амбулаторної картки"
+    )
     last_name = models.CharField(max_length=255, blank=True, null=True, help_text="Прізвище")
     first_name = models.CharField(max_length=255, blank=True, null=True, help_text="Ім'я")
     middle_name = models.CharField(max_length=255, blank=True, null=True, help_text="По батькові")
@@ -252,6 +261,45 @@ class Patient(models.Model):
             parts.append(f"- {self.histology_description}")
         
         return ". ".join(parts) if parts else "Діагноз не вказано"
+
+    def clean(self):
+        """Валідація даних пацієнта"""
+        import re
+        
+        # Валідація ambulatory_card_id
+        if self.ambulatory_card_id:
+            # Перевірка формату: дозволені тільки цифри, / та -
+            # Формат може бути: 228435/2025, 2025-9246582, або інші комбінації
+            pattern = r'^[0-9/\\-]+$'
+            if not re.match(pattern, self.ambulatory_card_id):
+                raise ValidationError({
+                    'ambulatory_card_id': 'ID амбулаторної картки може містити тільки цифри, слеш (/) та дефіс (-)'
+                })
+            
+            # Перевірка, що є хоча б одна цифра
+            if not re.search(r'\d', self.ambulatory_card_id):
+                raise ValidationError({
+                    'ambulatory_card_id': 'ID амбулаторної картки повинен містити хоча б одну цифру'
+                })
+            
+            # Перевірка унікальності (якщо не є поточним записом)
+            existing = Patient.objects.filter(ambulatory_card_id=self.ambulatory_card_id).exclude(pk=self.pk)
+            if existing.exists():
+                raise ValidationError({
+                    'ambulatory_card_id': 'Пацієнт з таким ID амбулаторної картки вже існує'
+                })
+        
+        # Перевірка дат
+        if self.treatment_start_date and self.discharge_date:
+            if self.discharge_date < self.treatment_start_date:
+                raise ValidationError({
+                    'discharge_date': 'Дата виписки не може бути раніше дати початку лікування'
+                })
+    
+    def save(self, *args, **kwargs):
+        """Перевизначений save для виклику clean"""
+        self.full_clean()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.full_name

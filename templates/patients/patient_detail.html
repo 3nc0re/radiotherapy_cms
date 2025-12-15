@@ -14,6 +14,9 @@
     <!-- Особиста інформація -->
     <div class="card patient-info">
         <h3><i class="fas fa-user-circle"></i> Особиста інформація</h3>
+        {% if patient.ambulatory_card_id %}
+        <p><strong>ID амбулаторної картки:</strong> <span class="badge badge-info">{{ patient.ambulatory_card_id }}</span></p>
+        {% endif %}
         <p><strong>Дата народження:</strong> {{ patient.birth_date|date:"d.m.Y"|default:"—" }}</p>
         <p><strong>Стать:</strong> {{ patient.gender|default:"—" }}</p>
         <p><strong>Поточний етап:</strong> <span class="badge">{{ patient.display_stage|default:"—" }}</span></p>

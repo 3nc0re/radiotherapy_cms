@@ -20,7 +20,9 @@
             {% for patient in patients %}
             <tr>
                 <td>{{ patient.ward_number|default:"—" }}</td>
-                <td>{{ patient.full_name }}</td>
+                <td>
+                    <a href="{% url 'patient_detail' patient.pk %}" class="patient-name-link">{{ patient.full_name }}</a>
+                </td>
                 <td>{{ patient.treatment_start_date|date:"d.m.Y"|default:"—" }}</td>
                 <td>{{ patient.discharge_date|date:"d.m.Y"|default:"—" }}</td>
                 <td><a href="{% url 'patient_detail' patient.pk %}" class="details-link">Картка</a></td>
@@ -68,6 +70,16 @@
     text-decoration: none;
     color: var(--primary-color);
     font-weight: bold;
+}
+.patient-name-link {
+    text-decoration: none;
+    color: var(--text-color);
+    font-weight: 500;
+    transition: color 0.2s ease;
+}
+.patient-name-link:hover {
+    color: var(--primary-color);
+    text-decoration: underline;
 }
 </style>
 {% endblock %} 
