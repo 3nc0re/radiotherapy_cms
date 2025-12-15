@@ -46,8 +46,9 @@ SESSION_SAVE_EVERY_REQUEST = True  # Оновлювати сесію при ко
 SESSION_EXPIRE_AT_BROWSER_CLOSE = False  # Сесія не закривається при закритті браузера
 
 # CSRF токен синхронізується з сесією
-CSRF_USE_SESSIONS = True  # Зберігати CSRF токен у сесії замість cookie (краще для синхронізації)
-CSRF_COOKIE_AGE = None  # CSRF токен житиме стільки ж, скільки сесія
+# Використовуємо cookie замість сесії для CSRF, щоб уникнути проблем з закритим з'єднанням БД
+CSRF_USE_SESSIONS = False  # Зберігати CSRF токен у cookie (безпечніше при проблемах з БД)
+CSRF_COOKIE_AGE = 1209600  # CSRF токен житиме стільки ж, скільки сесія (2 тижні)
 
 # Security settings for production
 if not DEBUG:
@@ -112,10 +113,12 @@ WSGI_APPLICATION = 'cms_django.wsgi.application'
 
 # Основна конфігурація бази даних. Використовується для всього,
 # крім запуску тестів (наприклад, для продакшну та db_backup).
+# conn_max_age=0 означає, що Django завжди перевідкриває з'єднання,
+# що важливо для хостингів типу Render.com, де застосунок може "засинати"
 DATABASES = {
     'default': dj_database_url.config(
         default=os.environ.get('DATABASE_URL'),
-        conn_max_age=600
+        conn_max_age=0  # Завжди перевідкривати з'єднання (виправляє "connection already closed")
     )
 }
 
