@@ -2,6 +2,88 @@
 {% block content %}
 <div class="page-header">
     <h1>Фракції пацієнтів</h1>
+    <p class="today-date"><i class="fas fa-calendar-day"></i> Сьогодні: {{ today|date:"d.m.Y" }}</p>
+</div>
+
+<!-- СЕКЦІЯ: Фракції на сьогодні -->
+{% if today_fractions %}
+<div class="card today-fractions-card">
+    <div class="card-header">
+        <h2><i class="fas fa-radiation"></i> Фракції на сьогодні ({{ today_fractions|length }})</h2>
+        <div class="bulk-actions">
+            <button type="button" class="btn btn-outline" onclick="selectAllToday()">
+                <i class="fas fa-check-double"></i> Вибрати всі
+            </button>
+            <button type="button" class="btn btn-outline" onclick="deselectAllToday()">
+                <i class="fas fa-times"></i> Прибрати всі
+            </button>
+        </div>
+    </div>
+    
+    <form method="post" action="{% url 'save_today_fractions' %}" id="today-fractions-form">
+        {% csrf_token %}
+        <table class="fractions-table today-table">
+            <thead>
+                <tr>
+                    <th class="checkbox-col">
+                        <input type="checkbox" id="select-all-checkbox" checked onchange="toggleAllToday(this)">
+                    </th>
+                    <th>Пацієнт</th>
+                    <th>Доза (Гр)</th>
+                    <th>Фракція</th>
+                    <th>Статус</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for fraction in today_fractions %}
+                <tr class="{% if fraction.delivered %}already-delivered{% endif %}">
+                    <td class="checkbox-col">
+                        <input type="checkbox" 
+                               name="delivered_fractions" 
+                               value="{{ fraction.id }}" 
+                               class="fraction-checkbox"
+                               {% if not fraction.is_missed %}checked{% endif %}>
+                    </td>
+                    <td>
+                        <a href="{% url 'patient_detail' fraction.patient.pk %}" class="patient-link">
+                            {{ fraction.patient.full_name }}
+                        </a>
+                    </td>
+                    <td>{{ fraction.dose }}</td>
+                    <td>
+                        {{ fraction.patient.current_fraction|add:1 }}/{{ fraction.patient.total_fractions }}
+                    </td>
+                    <td>
+                        {% if fraction.delivered %}
+                            <span class="badge badge-success"><i class="fas fa-check"></i> Виконана</span>
+                        {% elif fraction.is_missed %}
+                            <span class="badge badge-danger"><i class="fas fa-times"></i> Пропущена</span>
+                        {% else %}
+                            <span class="badge badge-info"><i class="fas fa-clock"></i> Очікує</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary btn-lg">
+                <i class="fas fa-save"></i> Зберегти фракції за сьогодні
+            </button>
+            <span class="hint">Відмічені пацієнти отримають фракцію, невідмічені — ні</span>
+        </div>
+    </form>
+</div>
+{% else %}
+<div class="card no-today-fractions">
+    <p><i class="fas fa-info-circle"></i> На сьогодні немає запланованих фракцій</p>
+</div>
+{% endif %}
+
+<!-- СЕКЦІЯ: Всі пацієнти з фракціями -->
+<div class="section-header">
+    <h2><i class="fas fa-history"></i> Всі пацієнти з фракціями</h2>
 </div>
 
 <div class="patients-fractions-container">
@@ -88,6 +170,155 @@
     margin-bottom: 30px; 
 }
 
+.page-header h1 {
+    color: var(--text-color);
+    margin-bottom: 10px;
+}
+
+.today-date {
+    color: var(--text-light-color);
+    font-size: 1.1rem;
+}
+
+/* Секція фракцій на сьогодні */
+.today-fractions-card {
+    margin-bottom: 40px;
+    border: 2px solid var(--primary-color);
+}
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 15px;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 15px;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+.card-header h2 {
+    margin: 0;
+    color: var(--primary-color);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.bulk-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.btn-outline {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+    padding: 8px 15px;
+    border-radius: 5px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: all 0.3s ease;
+}
+
+.btn-outline:hover {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
+.today-table {
+    margin-bottom: 20px;
+}
+
+.today-table th,
+.today-table td {
+    padding: 12px 15px;
+    color: var(--text-color);
+}
+
+.today-table th {
+    background-color: var(--table-header-bg);
+    color: var(--text-light-color);
+}
+
+.today-table tbody tr {
+    transition: background-color 0.2s ease;
+}
+
+.today-table tbody tr:hover {
+    background-color: var(--hover-bg);
+}
+
+.today-table tbody tr.already-delivered {
+    background-color: rgba(40, 167, 69, 0.1);
+}
+
+.checkbox-col {
+    width: 50px;
+    text-align: center;
+}
+
+.fraction-checkbox {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+}
+
+#select-all-checkbox {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+}
+
+.patient-link {
+    color: var(--primary-color);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.patient-link:hover {
+    text-decoration: underline;
+}
+
+.form-actions {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding-top: 15px;
+    border-top: 1px solid var(--border-color);
+}
+
+.btn-lg {
+    padding: 12px 30px;
+    font-size: 1.1rem;
+}
+
+.hint {
+    color: var(--text-light-color);
+    font-size: 0.9rem;
+}
+
+.no-today-fractions {
+    text-align: center;
+    padding: 30px;
+    color: var(--text-light-color);
+    margin-bottom: 40px;
+}
+
+.section-header {
+    margin-bottom: 20px;
+}
+
+.section-header h2 {
+    color: var(--text-color);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* Список пацієнтів */
 .patients-fractions-container {
     display: flex;
     flex-direction: column;
@@ -95,11 +326,11 @@
 }
 
 .patient-card {
-    background: white;
+    background: var(--card-bg-color);
     border: 1px solid var(--border-color);
     border-radius: 8px;
     overflow: hidden;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    box-shadow: var(--shadow);
 }
 
 .patient-header {
@@ -107,13 +338,13 @@
     justify-content: space-between;
     align-items: center;
     padding: 15px 20px;
-    background: #f8f9fa;
+    background: var(--hover-bg);
     cursor: pointer;
     transition: background-color 0.3s ease;
 }
 
 .patient-header:hover {
-    background: #e9ecef;
+    filter: brightness(0.95);
 }
 
 .patient-info h3 {
@@ -130,7 +361,6 @@
 }
 
 .patient-info h3 .patient-name-link:hover {
-    color: #0056b3;
     text-decoration: underline;
 }
 
@@ -182,11 +412,13 @@
     padding: 10px;
     text-align: left;
     border-bottom: 1px solid var(--border-color);
+    color: var(--text-color);
 }
 
 .fractions-table th {
-    background: #f8f9fa;
+    background: var(--table-header-bg);
     font-weight: 600;
+    color: var(--text-light-color);
 }
 
 .badge {
@@ -194,6 +426,9 @@
     border-radius: 4px;
     font-size: 0.8rem;
     font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
 }
 
 .badge-success { background: #d4edda; color: #155724; }
@@ -211,17 +446,40 @@
 }
 
 .btn-edit-small:hover {
-    color: #0056b3;
+    opacity: 0.8;
 }
 
 .no-data {
     text-align: center;
     padding: 40px;
-    color: #6c757d;
+    color: var(--text-light-color);
+}
+
+.btn {
+    text-decoration: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    color: white;
+    border: none;
+    cursor: pointer;
+    font-size: 1rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: opacity 0.3s ease;
+}
+
+.btn-primary {
+    background-color: var(--primary-color);
+}
+
+.btn:hover {
+    opacity: 0.9;
 }
 </style>
 
 <script>
+// Перемикання списку фракцій пацієнта
 function toggleFractions(patientId) {
     const fractionsList = document.getElementById(`fractions-${patientId}`);
     const icon = document.getElementById(`icon-${patientId}`);
@@ -234,5 +492,44 @@ function toggleFractions(patientId) {
         icon.classList.remove('rotated');
     }
 }
+
+// Вибрати всі чекбокси
+function selectAllToday() {
+    const checkboxes = document.querySelectorAll('.fraction-checkbox');
+    const selectAllCheckbox = document.getElementById('select-all-checkbox');
+    checkboxes.forEach(cb => cb.checked = true);
+    selectAllCheckbox.checked = true;
+}
+
+// Прибрати всі чекбокси
+function deselectAllToday() {
+    const checkboxes = document.querySelectorAll('.fraction-checkbox');
+    const selectAllCheckbox = document.getElementById('select-all-checkbox');
+    checkboxes.forEach(cb => cb.checked = false);
+    selectAllCheckbox.checked = false;
+}
+
+// Перемикання всіх чекбоксів через головний чекбокс
+function toggleAllToday(mainCheckbox) {
+    const checkboxes = document.querySelectorAll('.fraction-checkbox');
+    checkboxes.forEach(cb => cb.checked = mainCheckbox.checked);
+}
+
+// Оновлення головного чекбоксу при зміні окремих
+document.addEventListener('DOMContentLoaded', function() {
+    const checkboxes = document.querySelectorAll('.fraction-checkbox');
+    const selectAllCheckbox = document.getElementById('select-all-checkbox');
+    
+    if (checkboxes.length > 0 && selectAllCheckbox) {
+        checkboxes.forEach(cb => {
+            cb.addEventListener('change', function() {
+                const allChecked = Array.from(checkboxes).every(c => c.checked);
+                const someChecked = Array.from(checkboxes).some(c => c.checked);
+                selectAllCheckbox.checked = allChecked;
+                selectAllCheckbox.indeterminate = someChecked && !allChecked;
+            });
+        });
+    }
+});
 </script>
 {% endblock %} 

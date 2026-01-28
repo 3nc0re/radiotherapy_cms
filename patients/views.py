@@ -215,6 +215,13 @@ def patient_delete(request, pk):
 
 @login_required
 def fraction_list(request):
+    today = date.today()
+    
+    # Фракції на сьогодні (для всіх пацієнтів)
+    today_fractions = FractionHistory.objects.filter(
+        date=today
+    ).select_related('patient').order_by('patient__last_name', 'patient__first_name')
+    
     # Отримуємо пацієнтів, які мають фракції
     patients_with_fractions = Patient.objects.filter(
         fractions__isnull=False
@@ -235,7 +242,9 @@ def fraction_list(request):
         })
     
     return render(request, 'patients/fraction_list.html', {
-        'patients_data': patients_data
+        'patients_data': patients_data,
+        'today_fractions': today_fractions,
+        'today': today
     })
 
 @login_required
@@ -480,6 +489,48 @@ def approve_user(request, pk):
     user_to_approve.save()
     messages.success(request, f"Користувача {user_to_approve.username} було затверджено.")
     return redirect('admin_users')
+
+@login_required
+@require_POST
+def save_today_fractions(request):
+    """Зберігає фракції за сьогодні - відмічені як виконані, невідмічені як пропущені"""
+    today = date.today()
+    
+    # Отримуємо ID відмічених фракцій
+    delivered_ids = request.POST.getlist('delivered_fractions')
+    delivered_ids = [int(id) for id in delivered_ids if id]
+    
+    # Отримуємо всі фракції на сьогодні
+    today_fractions = FractionHistory.objects.filter(date=today)
+    
+    delivered_count = 0
+    missed_count = 0
+    
+    for fraction in today_fractions:
+        if fraction.id in delivered_ids:
+            # Фракція виконана
+            fraction.delivered = True
+            fraction.confirmed_by_doctor = True
+            fraction.is_missed = False
+            delivered_count += 1
+        else:
+            # Фракція пропущена
+            fraction.delivered = False
+            fraction.confirmed_by_doctor = False
+            fraction.is_missed = True
+            missed_count += 1
+        fraction.save()
+    
+    if delivered_count > 0 and missed_count > 0:
+        messages.success(request, f"Збережено: {delivered_count} виконано, {missed_count} пропущено")
+    elif delivered_count > 0:
+        messages.success(request, f"Підтверджено {delivered_count} фракцій")
+    elif missed_count > 0:
+        messages.warning(request, f"Відмічено {missed_count} пропущених фракцій")
+    else:
+        messages.info(request, "Немає фракцій для збереження")
+    
+    return redirect('fraction_list')
 
 @login_required
 @require_POST
