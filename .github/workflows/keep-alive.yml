@@ -1,0 +1,34 @@
+name: 🏓 Keep Database Alive
+
+on:
+  schedule:
+    # Запуск кожні 3 дні о 10:00 UTC (12:00 за Києвом)
+    - cron: '0 10 */3 * *'
+  workflow_dispatch:  # Можливість запустити вручну
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🏓 Ping website to keep database alive
+        run: |
+          echo "🔄 Пінгуємо сайт для підтримки активності бази даних..."
+          
+          # Пінгуємо головну сторінку (потребує авторизації, але з'єднання з БД все одно відбудеться)
+          response=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "${{ secrets.RENDER_URL }}" || echo "000")
+          
+          echo "📡 HTTP Status: $response"
+          
+          if [ "$response" = "000" ]; then
+            echo "⚠️ Сайт не відповідає, але спроба підключення зроблена"
+          elif [ "$response" = "200" ] || [ "$response" = "302" ] || [ "$response" = "301" ]; then
+            echo "✅ Сайт активний! База даних розбуджена."
+          else
+            echo "⚠️ Отримано код $response, але з'єднання з БД мало відбутися"
+          fi
+          
+          echo "🕐 Наступний пінг через 3 дні"
+
+      - name: 📊 Log timestamp
+        run: |
+          echo "✅ Keep-alive ping completed at $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
