@@ -42,6 +42,15 @@
     border: 1px solid var(--border-color);
     border-radius: 5px;
     font-size: 1rem;
+    background-color: var(--input-bg);
+    color: var(--text-color);
+}
+.form-grid input:focus, .form-grid select:focus, .form-grid textarea:focus {
+    border-color: var(--primary-color);
+    outline: none;
+}
+.form-grid .date-input-container {
+    width: 100%;
 }
 .form-actions {
     margin-top: 30px;
@@ -57,6 +66,10 @@
     color: white;
     border: none;
     cursor: pointer;
+    transition: opacity 0.3s ease;
+}
+.btn:hover {
+    opacity: 0.9;
 }
 .btn-primary { background-color: var(--primary-color); }
 .btn-secondary { background-color: #6c757d; }

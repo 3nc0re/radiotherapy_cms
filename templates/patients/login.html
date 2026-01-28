@@ -47,6 +47,12 @@
     padding: 10px;
     border: 1px solid var(--border-color);
     border-radius: 5px;
+    background-color: var(--input-bg);
+    color: var(--text-color);
+}
+.auth-container form input:focus {
+    border-color: var(--primary-color);
+    outline: none;
 }
 .auth-container button {
     width: 100%;
@@ -58,6 +64,10 @@
     font-size: 1rem;
     cursor: pointer;
     margin-top: 10px;
+    transition: opacity 0.3s ease;
+}
+.auth-container button:hover {
+    opacity: 0.9;
 }
 .error-message {
     color: #dc3545;
@@ -71,6 +81,10 @@
 .auth-switch {
     text-align: center;
     margin-top: 20px;
+    color: var(--text-color);
+}
+.auth-switch a {
+    color: var(--primary-color);
 }
 </style>
 {% endblock %} 

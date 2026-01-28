@@ -8,7 +8,6 @@
     <link rel="icon" type="image/svg+xml" href="{% static 'images/favicon.svg' %}">
     <link rel="apple-touch-icon" href="{% static 'images/favicon.svg' %}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <style>
         :root {
             --primary-color: #4A90E2;
@@ -19,6 +18,23 @@
             --text-light-color: #777;
             --border-color: #e0e0e0;
             --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            --input-bg: #ffffff;
+            --table-header-bg: #f8f9fa;
+            --hover-bg: #f8f9fa;
+        }
+        
+        [data-theme="dark"] {
+            --primary-color: #5BA0F2;
+            --secondary-color: #60F3D2;
+            --background-color: #1a1a2e;
+            --card-bg-color: #16213e;
+            --text-color: #e4e4e4;
+            --text-light-color: #a0a0a0;
+            --border-color: #2a2a4a;
+            --shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+            --input-bg: #1a1a2e;
+            --table-header-bg: #1a1a2e;
+            --hover-bg: #1f2b4a;
         }
         
         body { 
@@ -41,6 +57,17 @@
             justify-content: space-between;
             align-items: center;
             box-shadow: var(--shadow);
+        }
+        
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+        
+        .user-nav {
+            display: flex;
+            align-items: center;
         }
         
         .main-nav a, .user-nav a {
@@ -154,31 +181,144 @@
             box-shadow: 0 0 0 0.2rem rgba(74, 144, 226, 0.25);
         }
         
-        /* Покращення стилів для Flatpickr */
-        .flatpickr-input {
-            background-color: white !important;
+        /* Custom Date Input Styles */
+        .date-input-container {
+            display: inline-flex;
+            align-items: center;
+            background-color: var(--input-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            padding: 2px 8px;
+            gap: 2px;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
         }
         
-        .flatpickr-calendar {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-            border-radius: 8px;
-        }
-        
-        /* Стилі для полів введення дат */
-        .datepicker-input {
-            cursor: text;
-        }
-        
-        .datepicker-input:hover {
+        .date-input-container:focus-within {
             border-color: var(--primary-color);
+            box-shadow: 0 0 0 0.2rem rgba(74, 144, 226, 0.25);
         }
         
-        /* Покращення для placeholder */
-        .datepicker-input::placeholder {
-            color: #999;
-            font-style: italic;
+        .date-part {
+            border: none;
+            background: transparent;
+            text-align: center;
+            font-size: 1rem;
+            color: var(--text-color);
+            padding: 8px 2px;
+            outline: none;
         }
+        
+        .date-day, .date-month {
+            width: 28px;
+        }
+        
+        .date-year {
+            width: 48px;
+        }
+        
+        .date-separator {
+            color: var(--text-light-color);
+            font-weight: bold;
+            user-select: none;
+        }
+        
+        .date-part::placeholder {
+            color: var(--text-light-color);
+            opacity: 0.6;
+        }
+        
+        /* Dark theme adjustments */
+        [data-theme="dark"] .date-input-container {
+            background-color: var(--input-bg);
+            border-color: var(--border-color);
+        }
+        
+        [data-theme="dark"] .date-part {
+            color: var(--text-color);
+        }
+        
+        [data-theme="dark"] .date-input-container:focus-within {
+            box-shadow: 0 0 0 0.2rem rgba(91, 160, 242, 0.25);
+        }
+        
+        /* Theme Toggle Button */
+        .theme-toggle {
+            background: none;
+            border: 2px solid var(--border-color);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-light-color);
+            transition: all 0.3s ease;
+            margin-right: 15px;
+        }
+        
+        .theme-toggle:hover {
+            color: var(--primary-color);
+            border-color: var(--primary-color);
+            transform: rotate(15deg);
+        }
+        
+        .theme-toggle i {
+            font-size: 1.1rem;
+            transition: transform 0.3s ease;
+        }
+        
+        [data-theme="dark"] .theme-toggle {
+            background-color: var(--card-bg-color);
+        }
+        
+        /* Smooth transition for theme change */
+        body,
+        header,
+        .card,
+        .btn,
+        input,
+        select,
+        textarea,
+        table,
+        th,
+        td {
+            transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+        }
+        
+        /* Dark theme specific adjustments */
+        [data-theme="dark"] input,
+        [data-theme="dark"] select,
+        [data-theme="dark"] textarea {
+            background-color: var(--input-bg);
+            color: var(--text-color);
+            border-color: var(--border-color);
+        }
+        
+        [data-theme="dark"] input::placeholder,
+        [data-theme="dark"] textarea::placeholder {
+            color: var(--text-light-color);
+        }
+        
+        [data-theme="dark"] .form-control {
+            background-color: var(--input-bg);
+            color: var(--text-color);
+            border-color: var(--border-color);
+        }
+        
+        [data-theme="dark"] .form-control:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 0.2rem rgba(90, 160, 242, 0.25);
+        }
+        
+        [data-theme="dark"] table th {
+            background-color: var(--table-header-bg);
+        }
+        
+        [data-theme="dark"] table tbody tr:hover {
+            background-color: var(--hover-bg);
+        }
+        
     </style>
 </head>
 <body>
@@ -192,6 +332,9 @@
             <a href="/fractions/"><i class="fas fa-radiation"></i> Фракції</a>
         </nav>
         <nav class="user-nav">
+            <button id="theme-toggle" class="theme-toggle" title="Перемкнути тему">
+                <i class="fas fa-moon" id="theme-icon"></i>
+            </button>
             <a href="/admin/"><i class="fas fa-user-shield"></i> Адмін-панель</a>
             {% if user.is_staff %}
                 <a href="{% url 'admin_users' %}" class="nav-link">Адмін</a>
@@ -214,28 +357,218 @@
         {% block content %}{% endblock %}
     </main>
 
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-    <script src="https://npmcdn.com/flatpickr/dist/l10n/uk.js"></script>
+    <script>
+        // Theme Toggle - завантажуємо тему до рендерингу сторінки
+        (function() {
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            if (savedTheme === 'dark') {
+                document.documentElement.setAttribute('data-theme', 'dark');
+            }
+        })();
+    </script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            flatpickr('.datepicker-input', {
-                dateFormat: "d.m.Y",
-                locale: "uk",
-                allowInput: true,
-                clickOpens: true,
-                enableTime: false,
-                time_24hr: true,
-                placeholder: "дд.мм.рррр",
-                onOpen: function(selectedDates, dateStr, instance) {
-                    // Додаємо підказку при відкритті календаря
-                    if (!instance.input.value) {
-                        instance.input.setAttribute('title', 'Введіть дату вручну або виберіть з календаря');
+            // Custom Date Input with auto-advance
+            function initDateInputs() {
+                const dateInputs = document.querySelectorAll('.datepicker-input');
+                
+                dateInputs.forEach(function(originalInput) {
+                    // Створюємо контейнер для полів дати
+                    const container = document.createElement('div');
+                    container.className = 'date-input-container';
+                    
+                    // Створюємо три поля: день, місяць, рік
+                    const dayInput = document.createElement('input');
+                    dayInput.type = 'text';
+                    dayInput.className = 'date-part date-day';
+                    dayInput.placeholder = 'ДД';
+                    dayInput.maxLength = 2;
+                    dayInput.inputMode = 'numeric';
+                    
+                    const sep1 = document.createElement('span');
+                    sep1.className = 'date-separator';
+                    sep1.textContent = '.';
+                    
+                    const monthInput = document.createElement('input');
+                    monthInput.type = 'text';
+                    monthInput.className = 'date-part date-month';
+                    monthInput.placeholder = 'ММ';
+                    monthInput.maxLength = 2;
+                    monthInput.inputMode = 'numeric';
+                    
+                    const sep2 = document.createElement('span');
+                    sep2.className = 'date-separator';
+                    sep2.textContent = '.';
+                    
+                    const yearInput = document.createElement('input');
+                    yearInput.type = 'text';
+                    yearInput.className = 'date-part date-year';
+                    yearInput.placeholder = 'РРРР';
+                    yearInput.maxLength = 4;
+                    yearInput.inputMode = 'numeric';
+                    
+                    // Додаємо елементи в контейнер
+                    container.appendChild(dayInput);
+                    container.appendChild(sep1);
+                    container.appendChild(monthInput);
+                    container.appendChild(sep2);
+                    container.appendChild(yearInput);
+                    
+                    // Ховаємо оригінальний input
+                    originalInput.style.display = 'none';
+                    originalInput.parentNode.insertBefore(container, originalInput.nextSibling);
+                    
+                    // Парсимо існуюче значення
+                    if (originalInput.value) {
+                        const parts = originalInput.value.split('.');
+                        if (parts.length === 3) {
+                            dayInput.value = parts[0];
+                            monthInput.value = parts[1];
+                            yearInput.value = parts[2];
+                        }
                     }
-                },
-                onChange: function(selectedDates, dateStr, instance) {
-                    // Прибираємо підказку після вибору дати
-                    instance.input.removeAttribute('title');
+                    
+                    // Функція для оновлення оригінального поля
+                    function updateOriginal() {
+                        if (dayInput.value && monthInput.value && yearInput.value) {
+                            const day = dayInput.value.padStart(2, '0');
+                            const month = monthInput.value.padStart(2, '0');
+                            const year = yearInput.value;
+                            originalInput.value = `${day}.${month}.${year}`;
+                        } else if (!dayInput.value && !monthInput.value && !yearInput.value) {
+                            originalInput.value = '';
+                        }
+                    }
+                    
+                    // Обробка введення для дня
+                    dayInput.addEventListener('input', function(e) {
+                        this.value = this.value.replace(/\D/g, '');
+                        
+                        // Валідація дня (1-31)
+                        if (this.value.length === 2) {
+                            let day = parseInt(this.value, 10);
+                            if (day > 31) this.value = '31';
+                            if (day < 1 && this.value.length === 2) this.value = '01';
+                            monthInput.focus();
+                            monthInput.select();
+                        }
+                        updateOriginal();
+                    });
+                    
+                    // Обробка введення для місяця
+                    monthInput.addEventListener('input', function(e) {
+                        this.value = this.value.replace(/\D/g, '');
+                        
+                        // Валідація місяця (1-12)
+                        if (this.value.length === 2) {
+                            let month = parseInt(this.value, 10);
+                            if (month > 12) this.value = '12';
+                            if (month < 1 && this.value.length === 2) this.value = '01';
+                            yearInput.focus();
+                            yearInput.select();
+                        }
+                        updateOriginal();
+                    });
+                    
+                    // Обробка введення для року
+                    yearInput.addEventListener('input', function(e) {
+                        this.value = this.value.replace(/\D/g, '');
+                        updateOriginal();
+                    });
+                    
+                    // Автофокус на перше порожнє поле при кліку на контейнер
+                    container.addEventListener('click', function(e) {
+                        if (e.target === container) {
+                            if (!dayInput.value) dayInput.focus();
+                            else if (!monthInput.value) monthInput.focus();
+                            else if (!yearInput.value) yearInput.focus();
+                            else dayInput.focus();
+                        }
+                    });
+                    
+                    // Обробка Backspace для переходу назад
+                    monthInput.addEventListener('keydown', function(e) {
+                        if (e.key === 'Backspace' && this.value === '') {
+                            dayInput.focus();
+                            dayInput.select();
+                        }
+                    });
+                    
+                    yearInput.addEventListener('keydown', function(e) {
+                        if (e.key === 'Backspace' && this.value === '') {
+                            monthInput.focus();
+                            monthInput.select();
+                        }
+                    });
+                    
+                    // Обробка стрілок ліво/право
+                    dayInput.addEventListener('keydown', function(e) {
+                        if (e.key === 'ArrowRight' && this.selectionStart === this.value.length) {
+                            monthInput.focus();
+                            monthInput.setSelectionRange(0, 0);
+                        }
+                    });
+                    
+                    monthInput.addEventListener('keydown', function(e) {
+                        if (e.key === 'ArrowRight' && this.selectionStart === this.value.length) {
+                            yearInput.focus();
+                            yearInput.setSelectionRange(0, 0);
+                        }
+                        if (e.key === 'ArrowLeft' && this.selectionStart === 0) {
+                            dayInput.focus();
+                            dayInput.setSelectionRange(dayInput.value.length, dayInput.value.length);
+                        }
+                    });
+                    
+                    yearInput.addEventListener('keydown', function(e) {
+                        if (e.key === 'ArrowLeft' && this.selectionStart === 0) {
+                            monthInput.focus();
+                            monthInput.setSelectionRange(monthInput.value.length, monthInput.value.length);
+                        }
+                    });
+                    
+                    // При фокусі виділяємо все
+                    [dayInput, monthInput, yearInput].forEach(function(input) {
+                        input.addEventListener('focus', function() {
+                            setTimeout(() => this.select(), 0);
+                        });
+                    });
+                });
+            }
+            
+            initDateInputs();
+            
+            // Theme Toggle functionality
+            const themeToggle = document.getElementById('theme-toggle');
+            const themeIcon = document.getElementById('theme-icon');
+            
+            function updateThemeIcon() {
+                const currentTheme = document.documentElement.getAttribute('data-theme');
+                if (currentTheme === 'dark') {
+                    themeIcon.classList.remove('fa-moon');
+                    themeIcon.classList.add('fa-sun');
+                } else {
+                    themeIcon.classList.remove('fa-sun');
+                    themeIcon.classList.add('fa-moon');
                 }
+            }
+            
+            // Set initial icon state
+            updateThemeIcon();
+            
+            themeToggle.addEventListener('click', function() {
+                const currentTheme = document.documentElement.getAttribute('data-theme');
+                const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+                
+                document.documentElement.setAttribute('data-theme', newTheme);
+                localStorage.setItem('theme', newTheme);
+                
+                // Animate icon
+                themeIcon.style.transform = 'rotate(360deg)';
+                setTimeout(() => {
+                    updateThemeIcon();
+                    themeIcon.style.transform = 'rotate(0deg)';
+                }, 150);
             });
         });
     </script>

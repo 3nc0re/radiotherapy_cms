@@ -268,6 +268,9 @@ function copyDiagnosis() {
     align-items: center;
     margin-bottom: 20px;
 }
+.patient-header h1 {
+    color: var(--text-color);
+}
 .header-actions {
     display: flex;
     gap: 10px;
@@ -282,6 +285,10 @@ function copyDiagnosis() {
     gap: 8px;
     border: none;
     cursor: pointer;
+    transition: opacity 0.3s ease;
+}
+.btn:hover {
+    opacity: 0.9;
 }
 .btn-primary { background-color: var(--primary-color); }
 .btn-success { background-color: #28a745; }
@@ -306,13 +313,22 @@ function copyDiagnosis() {
     padding-bottom: 10px;
     margin-bottom: 15px;
 }
-.card p { margin: 10px 0; }
+.card p { 
+    margin: 10px 0;
+    color: var(--text-color);
+}
+.card p strong {
+    color: var(--text-light-color);
+}
 .badge {
     background-color: var(--secondary-color);
     color: white;
     padding: 3px 8px;
     border-radius: 12px;
     font-size: 0.9em;
+}
+.badge-info {
+    background-color: var(--primary-color);
 }
 .badge-success {
     background-color: #28a745;
@@ -343,7 +359,8 @@ function copyDiagnosis() {
     font-size: 14px;
     line-height: 1.4;
     resize: vertical;
-    background-color: #f8f9fa;
+    background-color: var(--input-bg);
+    color: var(--text-color);
     box-sizing: border-box;
     word-wrap: break-word;
     overflow-wrap: break-word;
@@ -361,8 +378,15 @@ function copyDiagnosis() {
 .styled-table th, .styled-table td {
     padding: 12px;
     border: 1px solid var(--border-color);
+    color: var(--text-color);
 }
-.styled-table th { background-color: #f8f9fa; }
+.styled-table th { 
+    background-color: var(--table-header-bg);
+    color: var(--text-light-color);
+}
+.styled-table tbody tr:hover {
+    background-color: var(--hover-bg);
+}
 .btn-danger-small {
     color: #dc3545;
     text-decoration: none;
@@ -383,13 +407,16 @@ function copyDiagnosis() {
     align-items: center;
     gap: 10px;
     padding: 8px 0;
+    color: var(--text-color);
 }
 .histology-description, .notes-content {
-    background-color: #f8f9fa;
+    background-color: var(--input-bg);
+    color: var(--text-color);
     padding: 10px;
     border-radius: 5px;
     margin-top: 10px;
     white-space: pre-wrap;
+    border: 1px solid var(--border-color);
 }
 </style>
 <script>

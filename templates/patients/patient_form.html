@@ -184,7 +184,7 @@
     padding: 20px;
     border: 1px solid var(--border-color);
     border-radius: 8px;
-    background-color: #f8f9fa;
+    background-color: var(--hover-bg);
 }
 .form-section h3 {
     color: var(--primary-color);
@@ -215,10 +215,22 @@
     border: 1px solid var(--border-color);
     border-radius: 5px;
     font-size: 1rem;
+    background-color: var(--input-bg);
+    color: var(--text-color);
+    transition: border-color 0.3s ease, background-color 0.3s ease;
+}
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+    border-color: var(--primary-color);
+    outline: none;
 }
 .form-group textarea {
     min-height: 100px;
     resize: vertical;
+}
+.form-text.text-muted {
+    color: var(--text-light-color);
+    font-size: 0.85rem;
+    margin-top: 4px;
 }
 .error {
     color: #dc3545;
@@ -241,6 +253,7 @@
     cursor: pointer;
     font-size: 1rem;
     display: inline-block;
+    transition: opacity 0.3s ease;
 }
 .btn-primary { 
     background-color: var(--primary-color); 
@@ -251,22 +264,9 @@
 .btn:hover {
     opacity: 0.9;
 }
-input[type="date"] {
-    font-size: 1.15rem;
-    padding: 12px 16px;
-    border-radius: 8px;
-    border: 1.5px solid var(--primary-color);
-    background: #fff;
-    color: #222;
-    min-width: 180px;
-    max-width: 100%;
-    box-sizing: border-box;
-    transition: border-color 0.2s;
-}
-input[type="date"]:focus {
-    border-color: #0056b3;
-    outline: none;
-    background: #f0f8ff;
+/* Стилі для контейнера дати в формі */
+.form-group .date-input-container {
+    width: 100%;
 }
 </style>
 {% endblock %} 
