@@ -580,6 +580,25 @@ def update_all_discharge_dates(request):
     
     return redirect('dashboard')
 
+@login_required
+@require_POST
+def approve_all_fractions(request, pk):
+    patient = get_object_or_404(Patient, pk=pk)
+    fractions_to_update = patient.fractions.filter(delivered=True, confirmed_by_doctor=False)
+    count = fractions_to_update.count()
+    if count > 0:
+        for fraction in fractions_to_update:
+            fraction.confirmed_by_doctor = True
+        FractionHistory.objects.bulk_update(fractions_to_update, ['confirmed_by_doctor'])
+        messages.success(request, f'Затверджено {count} виконаних фракцій для {patient.full_name}.')
+    else:
+        messages.info(request, f'Немає виконаних фракцій для затвердження для {patient.full_name}.')
+        
+    referer = request.META.get('HTTP_REFERER')
+    if referer:
+        return redirect(referer)
+    return redirect('patient_detail', pk=pk)
+
 class PatientData(BaseModel):
     last_name: Optional[str] = Field(None, description="Прізвище пацієнта (будь максимально точним при розпізнаванні літер!)")
     first_name: Optional[str] = Field(None, description="Ім'я пацієнта")

@@ -203,6 +203,24 @@ document.addEventListener('DOMContentLoaded', function() {
         dropZone.addEventListener(eventName, unhighlight, false);
     });
 
+    // Auto-calculate received dose
+    const totalFractionsInput = document.getElementById('id_total_fractions');
+    const dosePerFractionInput = document.getElementById('id_dose_per_fraction');
+    const receivedDoseInput = document.getElementById('id_received_dose');
+
+    function calculateDose() {
+        const fractions = parseFloat(totalFractionsInput.value);
+        const dose = parseFloat(dosePerFractionInput.value);
+        if (!isNaN(fractions) && !isNaN(dose)) {
+            receivedDoseInput.value = (fractions * dose).toFixed(1);
+        }
+    }
+
+    if (totalFractionsInput && dosePerFractionInput && receivedDoseInput) {
+        totalFractionsInput.addEventListener('input', calculateDose);
+        dosePerFractionInput.addEventListener('input', calculateDose);
+    }
+
     function highlight(e) {
         dropZone.classList.add('highlight');
     }

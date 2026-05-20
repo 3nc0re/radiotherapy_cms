@@ -97,6 +97,14 @@
                 <div class="fraction-stats">
                     <span class="stat completed">{{ patient_data.completed_fractions }}/{{ patient_data.total_fractions }}</span>
                     <span class="stat pending">{{ patient_data.pending_fractions }} очікують</span>
+                    {% if patient_data.completed_fractions > 0 %}
+                    <form method="post" action="{% url 'approve_all_fractions' patient_data.patient.pk %}" style="display: inline;" onclick="event.stopPropagation();">
+                        {% csrf_token %}
+                        <button type="submit" class="btn-outline" style="padding: 2px 8px; font-size: 0.8rem; margin-left: 10px;" title="Затвердити всі виконані фракції">
+                            <i class="fas fa-check-double"></i>
+                        </button>
+                    </form>
+                    {% endif %}
                 </div>
             </div>
             <div class="toggle-icon">

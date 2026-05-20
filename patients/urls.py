@@ -22,6 +22,7 @@ urlpatterns = [
     path('fractions/save-today/', views.save_today_fractions, name='save_today_fractions'),
     path('patients/<int:pk>/fractions/', views.fraction_list, name='patient_fraction_list'),
     path('patients/<int:patient_id>/generate_fractions/', views.generate_fractions, name='generate_fractions'),
+    path('patients/<int:pk>/approve-all/', views.approve_all_fractions, name='approve_all_fractions'),
     path('patients/<int:patient_id>/recalculate_discharge/', views.recalculate_discharge, name='recalculate_discharge'),
     path('fractions/<int:pk>/edit/', views.fraction_edit, name='fraction_edit'),
     path('fractions/confirm/doctor/', views.confirm_fractions_doctor, name='confirm_fractions_doctor'),
