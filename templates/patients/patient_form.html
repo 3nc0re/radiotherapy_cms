@@ -2,6 +2,16 @@
 {% block content %}
 <div class="form-container card">
     <h2>{% if form.instance.pk %}Редагувати пацієнта{% else %}Додати пацієнта{% endif %}</h2>
+    
+    <div id="drop-zone" class="drop-zone">
+        <p>Перетягніть медичну виписку сюди або <label for="file-upload" class="upload-link">виберіть файл</label> для автозаповнення ШІ</p>
+        <input type="file" id="file-upload" accept="image/jpeg, image/png, image/webp" style="display: none;">
+        <div id="loading-indicator" class="loading-indicator" style="display: none;">
+            <div class="spinner"></div>
+            <p>Обробка документа за допомогою ШІ...</p>
+        </div>
+    </div>
+
     <form method="post">
         {% csrf_token %}
         
@@ -168,6 +178,116 @@
     </form>
 </div>
 
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const dropZone = document.getElementById('drop-zone');
+    const fileUpload = document.getElementById('file-upload');
+    const loadingIndicator = document.getElementById('loading-indicator');
+
+    if (!dropZone) return;
+
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, preventDefaults, false);
+    });
+
+    function preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropZone.addEventListener(eventName, highlight, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, unhighlight, false);
+    });
+
+    function highlight(e) {
+        dropZone.classList.add('highlight');
+    }
+
+    function unhighlight(e) {
+        dropZone.classList.remove('highlight');
+    }
+
+    dropZone.addEventListener('drop', handleDrop, false);
+    fileUpload.addEventListener('change', function(e) {
+        handleFiles(this.files);
+    });
+
+    function handleDrop(e) {
+        let dt = e.dataTransfer;
+        let files = dt.files;
+        handleFiles(files);
+    }
+
+    function handleFiles(files) {
+        if (files.length > 0) {
+            uploadFile(files[0]);
+        }
+    }
+
+    function uploadFile(file) {
+        loadingIndicator.style.display = 'block';
+        
+        let formData = new FormData();
+        formData.append('file', file);
+
+        fetch('/api/parse-document/', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            loadingIndicator.style.display = 'none';
+            if (data.error) {
+                alert('Помилка: ' + data.error);
+                return;
+            }
+            fillForm(data);
+        })
+        .catch(error => {
+            loadingIndicator.style.display = 'none';
+            console.error('Error:', error);
+            alert('Виникла помилка під час обробки документа.');
+        });
+    }
+
+    function fillForm(data) {
+        if (data.last_name) document.getElementById('id_last_name').value = data.last_name;
+        if (data.first_name) document.getElementById('id_first_name').value = data.first_name;
+        if (data.middle_name) document.getElementById('id_middle_name').value = data.middle_name;
+        if (data.birth_date) document.getElementById('id_birth_date').value = data.birth_date;
+        if (data.gender) document.getElementById('id_gender').value = data.gender;
+        
+        let diagnosisParts = [];
+        if (data.icd_code) diagnosisParts.push(data.icd_code);
+        if (data.tumor_morphology) diagnosisParts.push(data.tumor_morphology);
+        if (diagnosisParts.length > 0) {
+            let currentDiag = document.getElementById('id_diagnosis').value;
+            let newDiag = diagnosisParts.join(' - ');
+            document.getElementById('id_diagnosis').value = currentDiag ? currentDiag + ', ' + newDiag : newDiag;
+        }
+
+        let tnm = '';
+        if (data.tnm_t) tnm += data.tnm_t.startsWith('T') ? data.tnm_t : 'T' + data.tnm_t;
+        if (data.tnm_n) tnm += data.tnm_n.startsWith('N') ? data.tnm_n : 'N' + data.tnm_n;
+        if (data.tnm_m) tnm += data.tnm_m.startsWith('M') ? data.tnm_m : 'M' + data.tnm_m;
+        if (tnm) document.getElementById('id_tnm_staging').value = tnm;
+
+        if (data.disease_stage) document.getElementById('id_disease_stage').value = data.disease_stage;
+        if (data.clinical_group) document.getElementById('id_clinical_group').value = data.clinical_group;
+        if (data.histology_date) document.getElementById('id_histology_date').value = data.histology_date;
+        if (data.histology_number) document.getElementById('id_histology_number').value = data.histology_number;
+        if (data.histology_description) document.getElementById('id_histology_description').value = data.histology_description;
+    }
+});
+</script>
+
 <style>
 .form-container {
     max-width: 1000px;
@@ -267,6 +387,41 @@
 /* Стилі для контейнера дати в формі */
 .form-group .date-input-container {
     width: 100%;
+}
+.drop-zone {
+    border: 2px dashed var(--primary-color);
+    border-radius: 8px;
+    padding: 30px;
+    text-align: center;
+    margin-bottom: 20px;
+    background-color: var(--hover-bg);
+    transition: all 0.3s ease;
+}
+.drop-zone.highlight {
+    background-color: rgba(0, 123, 255, 0.1);
+    border-color: #0056b3;
+}
+.upload-link {
+    color: var(--primary-color);
+    text-decoration: underline;
+    cursor: pointer;
+    font-weight: bold;
+}
+.loading-indicator {
+    margin-top: 15px;
+}
+.spinner {
+    border: 4px solid rgba(0, 0, 0, 0.1);
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border-left-color: var(--primary-color);
+    animation: spin 1s linear infinite;
+    margin: 0 auto 10px;
+}
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }
 </style>
 {% endblock %} 

@@ -41,4 +41,5 @@ urlpatterns = [
     # Misc
     path('confirm_blood_test/<int:patient_id>/', views.confirm_blood_test, name='confirm_blood_test'),
     path('update_all_discharge_dates/', views.update_all_discharge_dates, name='update_all_discharge_dates'),
+    path('api/parse-document/', views.parse_medical_document, name='parse_medical_document'),
 ] 

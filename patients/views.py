@@ -13,6 +13,12 @@ from django.views.decorators.csrf import csrf_exempt
 import json
 from django.views.decorators.http import require_POST
 from .decorators import login_required, staff_required, admin_required
+import os
+from google import genai
+from pydantic import BaseModel, Field
+from typing import Optional
+from PIL import Image
+import io
 
 # Create your views here.
 
@@ -573,3 +579,70 @@ def update_all_discharge_dates(request):
         messages.info(request, 'Всі дати виписки вже актуальні')
     
     return redirect('dashboard')
+
+class PatientData(BaseModel):
+    last_name: Optional[str] = Field(None, description="Прізвище пацієнта (будь максимально точним при розпізнаванні літер!)")
+    first_name: Optional[str] = Field(None, description="Ім'я пацієнта")
+    middle_name: Optional[str] = Field(None, description="По батькові пацієнта")
+    birth_date: Optional[str] = Field(None, description="Дата народження строго у форматі DD.MM.YYYY (наприклад: 15.04.1980)")
+    gender: Optional[str] = Field(None, description="Стать пацієнта. Поверни 'Ч' для чоловічої, 'Ж' для жіночої.")
+    icd_code: Optional[str] = Field(None, description="Код діагнозу за МКХ-10 (наприклад: C50.9, C34.1)")
+    tumor_morphology: Optional[str] = Field(None, description="Морфологія пухлини (наприклад: інфільтруюча карцинома, аденокарцинома)")
+    disease_stage: Optional[str] = Field(None, description="Стадія захворювання римськими цифрами (наприклад: IIA, III, IV). Не плутати з TNM!")
+    tnm_t: Optional[str] = Field(None, description="Значення T з системи TNM (наприклад: 2, 3, 4a)")
+    tnm_n: Optional[str] = Field(None, description="Значення N з системи TNM (наприклад: 0, 1, 2)")
+    tnm_m: Optional[str] = Field(None, description="Значення M з системи TNM (наприклад: 0, 1)")
+    clinical_group: Optional[str] = Field(None, description="Клінічна група (наприклад: 2, II, 3)")
+    histology_date: Optional[str] = Field(None, description="Дата проведення гістологічного дослідження / ПГЗ строго у форматі DD.MM.YYYY")
+    histology_number: Optional[str] = Field(None, description="Номер гістологічного висновку / ПГЗ (наприклад: 12345/23)")
+    histology_description: Optional[str] = Field(None, description="Детальний опис патолого-гістологічного висновку")
+
+@login_required
+@require_POST
+def parse_medical_document(request):
+    try:
+        if 'file' not in request.FILES:
+            return JsonResponse({'error': 'Файл не знайдено'}, status=400)
+            
+        file = request.FILES['file']
+        
+        if not file.content_type.startswith('image/'):
+            return JsonResponse({'error': 'Підтримуються лише зображення (JPEG, PNG, WEBP)'}, status=400)
+            
+        api_key = os.environ.get('GEMINI_API_KEY')
+        if not api_key:
+            return JsonResponse({'error': 'Ключ Gemini API не налаштовано в .env'}, status=500)
+            
+        client = genai.Client(api_key=api_key)
+        
+        image = Image.open(io.BytesIO(file.read()))
+        
+        prompt = """
+Ти досвідчений медичний реєстратор. Прочитай надану медичну виписку (епікриз, направлення) та витягни наступні дані:
+1. ПІБ пацієнта (звертай особливу увагу на правильність прізвища).
+2. Дату народження (ОБОВ'ЯЗКОВО у форматі DD.MM.YYYY).
+3. Стать (визнач за ПІБ або текстом: поверни букву 'Ч' для чоловічої, або 'Ж' для жіночої).
+4. Діагноз (код МКХ-10 та морфологію).
+5. Стадію захворювання (зверни увагу, стадія зазвичай позначається римськими цифрами, наприклад I, IIA, III, IV. Не вписуй сюди TNM).
+6. TNM стадіювання (окремо індекси T, N, M).
+7. Клінічну групу.
+8. Дані гістологічного висновку (ПГЗ, пат. гістологічне дослідження): номер, дату та опис. Дата має бути у форматі DD.MM.YYYY.
+
+Будь дуже уважним до дат і переконайся, що вони конвертовані у формат DD.MM.YYYY (День.Місяць.Рік). Якщо якихось даних немає в тексті, поверни null для цього поля.
+"""
+        
+        response = client.models.generate_content(
+            model='gemini-2.5-pro',
+            contents=[image, prompt],
+            config={
+                'response_mime_type': 'application/json',
+                'response_schema': PatientData,
+            },
+        )
+        
+        data = json.loads(response.text)
+        return JsonResponse(data)
+        
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
