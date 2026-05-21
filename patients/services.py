@@ -1,4 +1,5 @@
 from datetime import date, timedelta
+from django.db.models import Q
 from .models import Patient, FractionHistory
 
 def generate_fractions_for_patient(patient, start_date=None, total_fractions=None, dose_per_fraction=None):
@@ -29,8 +30,7 @@ def generate_fractions_for_patient(patient, start_date=None, total_fractions=Non
             patient=patient,
             date=current_date,
             dose=dose_per_fraction,
-            delivered=False,
-            confirmed_by_doctor=False
+            status='scheduled'
         )
         fractions.append(fraction)
         current_date += timedelta(days=1)
@@ -48,19 +48,27 @@ def generate_fractions_for_patient(patient, start_date=None, total_fractions=Non
 def auto_confirm_today_fractions():
     """Автоматично підтверджує фракції за сьогодні"""
     today = date.today()
-    today_fractions = FractionHistory.objects.filter(date=today)
+    active_patients_q = Q(discharge_date__isnull=True) | Q(discharge_date__gte=today)
+    active_patients = Patient.objects.filter(active_patients_q)
     
-    for fraction in today_fractions:
-        fraction.delivered = True
-        fraction.confirmed_by_doctor = True
-        fraction.save()
+    today_fractions = FractionHistory.objects.filter(
+        date=today,
+        patient__in=active_patients,
+        status='scheduled'
+    )
     
-    return today_fractions.count()
+    count = today_fractions.count()
+    if count > 0:
+        today_fractions.update(status='delivered')
+        for patient in active_patients:
+            patient.recalculate_received_dose()
+            
+    return count
 
 def get_patient_treatment_info(patient):
     """Отримує інформацію про лікування пацієнта"""
     total_fractions = patient.total_fractions or 0
-    completed_fractions = patient.fractions.filter(delivered=True).count()
+    completed_fractions = patient.fractions.filter(status='delivered').count()
     remaining_fractions = total_fractions - completed_fractions
     
     return {
@@ -88,7 +96,7 @@ def calculate_discharge_date(patient):
 
 def recalculate_discharge_date(patient):
     """Перераховує дату виписки на основі поточних фракцій"""
-    # Знаходимо останню заплановану фракцію
+    # Знаходимо останню фракцію
     last_fraction = patient.fractions.order_by('date').last()
     if last_fraction:
         patient.discharge_date = last_fraction.date
@@ -105,31 +113,18 @@ def set_discharge_date_from_fractions(patient):
         return patient.discharge_date
     return None
 
-def postpone_fraction(fraction, new_date, reason=""):
-    """Відкладає фракцію на нову дату"""
-    if not fraction.original_date:
-        fraction.original_date = fraction.date
+def shift_patient_schedule(patient, from_date):
+    """
+    Зсуває всі заплановані фракції пацієнта, починаючи з from_date,
+    на 1 день вперед (пропускаючи вихідні).
+    """
+    scheduled_fractions = list(patient.fractions.filter(status='scheduled', date__gte=from_date).order_by('date'))
+    for fraction in scheduled_fractions:
+        new_date = fraction.date + timedelta(days=1)
+        while new_date.weekday() >= 5:  # 5 = Saturday, 6 = Sunday
+            new_date += timedelta(days=1)
+        fraction.date = new_date
+        fraction.save()
     
-    fraction.date = new_date
-    fraction.is_postponed = True
-    fraction.reason = reason
-    fraction.save()
-    
-    # Перераховуємо дату виписки
-    recalculate_discharge_date(fraction.patient)
-    return fraction
-
-def mark_fraction_missed(fraction, reason=""):
-    """Позначає фракцію як пропущену"""
-    fraction.is_missed = True
-    fraction.reason = reason
-    fraction.save()
-    return fraction
-
-def get_missed_fractions_count(patient):
-    """Підраховує кількість пропущених фракцій"""
-    return patient.fractions.filter(is_missed=True).count()
-
-def get_postponed_fractions_count(patient):
-    """Підраховує кількість відкладених фракцій"""
-    return patient.fractions.filter(is_postponed=True).count() 
+    # Оновлюємо discharge_date на основі дати останньої фракції
+    recalculate_discharge_date(patient)

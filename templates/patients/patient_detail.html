@@ -16,12 +16,10 @@
             <a href="{% url 'patient_delete' patient.pk %}" class="btn btn-danger"><i class="fas fa-trash-alt"></i> Видалити</a>
         </div>
     </div>
-    <div class="treatment-progress" style="margin-top: 15px;">
         <div style="display: flex; justify-content: space-between; font-size: 0.9em; margin-bottom: 5px; font-weight: bold; color: var(--primary-color);">
-            <span>Пройдено: {{ patient.current_fraction }}/{{ patient.total_fractions }} фр. (СОД: {{ patient.received_dose|default:"0" }} Гр)</span>
+            <span>Пройдено: <span id="current-fraction-val">{{ patient.current_fraction }}</span>/<span id="total-fractions-val">{{ patient.total_fractions }}</span> фр. (СОД: <span id="received-dose-val">{{ patient.received_dose|default:"0" }}</span> Гр)</span>
         </div>
-        <progress value="{{ patient.current_fraction }}" max="{{ patient.total_fractions|default:1 }}" style="width: 100%; height: 12px; border-radius: 6px;"></progress>
-    </div>
+        <progress id="treatment-progress-bar" value="{{ patient.current_fraction }}" max="{{ patient.total_fractions|default:1 }}" style="width: 100%; height: 12px; border-radius: 6px;"></progress>
 </div>
 
 <div class="details-grid">
@@ -58,8 +56,8 @@
         <p><strong>Зона опромінення:</strong> {{ patient.irradiation_zone|default:"—" }}</p>
         <p><strong>Загальна кількість фракцій:</strong> {{ patient.total_fractions|default:"—" }}</p>
         <p><strong>РОД (Гр):</strong> {{ patient.dose_per_fraction|default:"—" }}</p>
-        <p><strong>СОД (Гр):</strong> {{ patient.received_dose|default:"—" }}</p>
-        <p><strong>Поточна фракція:</strong> {{ patient.current_fraction|default:"0" }}</p>
+        <p><strong>СОД (Гр):</strong> <span id="treatment-sod-val">{{ patient.received_dose|default:"—" }}</span></p>
+        <p><strong>Поточна фракція:</strong> <span id="treatment-current-val">{{ patient.current_fraction|default:"0" }}</span></p>
         {% if patient.fractions.exists %}
         <p><strong>Пропущені фракції:</strong> {{ missed_fractions_count }}</p>
         <p><strong>Відкладені фракції:</strong> {{ postponed_fractions_count }}</p>
@@ -84,8 +82,8 @@
         <p><strong>Дата початку лікування:</strong> {{ patient.treatment_start_date|date:"d.m.Y"|default:"—" }}</p>
         <p><strong>Загальна кількість фракцій:</strong> {{ patient.total_fractions|default:"—" }}</p>
         <p><strong>РОД (Гр):</strong> {{ patient.dose_per_fraction|default:"—" }}</p>
-        <p><strong>СОД (Гр):</strong> {{ patient.received_dose|default:"—" }}</p>
-        <p><strong>Дата виписки:</strong> {{ patient.discharge_date|date:"d.m.Y"|default:"—" }}</p>
+        <p><strong>СОД (Гр):</strong> <span id="dates-sod-val">{{ patient.received_dose|default:"—" }}</span></p>
+        <p><strong>Дата виписки:</strong> <span id="discharge-date-val">{{ patient.discharge_date|date:"d.m.Y"|default:"—" }}</span></p>
         <p><strong>Статус госпіталізації:</strong> {{ patient.inpatient_status|default:"—" }}</p>
         <p><strong>Номер палати:</strong> {{ patient.ward_number|default:"—" }}</p>
         <p><strong>Попереднє опромінення:</strong> {{ patient.prior_radiation|default:"—" }}</p>
@@ -167,12 +165,9 @@
                     <i class="fas fa-calculator"></i> Перерахувати дату виписки
                 </button>
             </form>
-            <form method="post" action="{% url 'approve_all_fractions' patient.pk %}" style="display: inline;">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-success">
-                    <i class="fas fa-check-double"></i> Затвердити всі виконані
-                </button>
-            </form>
+            <button type="button" class="btn btn-success" onclick="approveAllFractions({{ patient.pk }})">
+                <i class="fas fa-check-double"></i> Затвердити всі фракції на сьогодні
+            </button>
             {% endif %}
         </div>
         {% if fractions %}
@@ -181,8 +176,6 @@
                     <tr>
                         <th>Дата</th>
                         <th>Доза (Гр)</th>
-                        <th>Підтверджено лікарем</th>
-                        <th>Підтверджено медсестрою</th>
                         <th>Статус</th>
                         <th>Примітка</th>
                         <th>Дії</th>
@@ -190,43 +183,39 @@
                 </thead>
                 <tbody>
                     {% for fraction in fractions %}
-                    <tr>
-                        <td>{{ fraction.date|date:"d.m.Y" }}</td>
+                    <tr id="fraction-row-{{ fraction.pk }}" class="status-row-{{ fraction.status }} {% if fraction.original_date %}date-shifted{% endif %}">
+                        <td>
+                            <span class="fraction-date" id="fraction-date-{{ fraction.pk }}">{{ fraction.date|date:"d.m.Y" }}</span>
+                            {% if fraction.original_date %}
+                                <br><small class="text-muted original-date-small" style="text-decoration: line-through;">{{ fraction.original_date|date:"d.m.Y" }}</small>
+                            {% endif %}
+                        </td>
                         <td>{{ fraction.dose|default:"—" }}</td>
                         <td>
-                            <input type="checkbox" 
-                                   {% if fraction.confirmed_by_doctor %}checked{% endif %}
-                                   onchange="toggleFractionStatus({{ fraction.pk }}, 'confirmed_by_doctor', this)"
-                                   class="form-check-input fraction-toggle">
-                        </td>
-                        <td>
-                            <input type="checkbox" 
-                                   {% if fraction.delivered %}checked{% endif %}
-                                   onchange="toggleFractionStatus({{ fraction.pk }}, 'delivered', this)"
-                                   class="form-check-input fraction-toggle">
-                        </td>
-                        <td>
-                            <div style="display: flex; gap: 10px; align-items: center;">
-                                <label style="margin: 0; font-size: 0.9em; display: flex; align-items: center; gap: 4px;">
-                                    <input type="checkbox" 
-                                           {% if fraction.is_postponed %}checked{% endif %}
-                                           onchange="toggleFractionStatus({{ fraction.pk }}, 'is_postponed', this)"
-                                           class="form-check-input fraction-toggle">
-                                    <span class="badge badge-warning" style="margin: 0;">Відкладена</span>
-                                </label>
-                                <label style="margin: 0; font-size: 0.9em; display: flex; align-items: center; gap: 4px;">
-                                    <input type="checkbox" 
-                                           {% if fraction.is_missed %}checked{% endif %}
-                                           onchange="toggleFractionStatus({{ fraction.pk }}, 'is_missed', this)"
-                                           class="form-check-input fraction-toggle">
-                                    <span class="badge badge-danger" style="margin: 0;">Пропущена</span>
-                                </label>
-                                {% if not fraction.is_postponed and not fraction.is_missed %}
-                                    <span class="badge badge-success">Запланована</span>
-                                {% endif %}
+                            <div class="status-btn-group" data-fraction-id="{{ fraction.pk }}">
+                                <button type="button" 
+                                        class="status-btn btn-scheduled {% if fraction.status == 'scheduled' %}active{% endif %}" 
+                                        onclick="updateFractionStatus({{ fraction.pk }}, 'scheduled')">
+                                    Запланована
+                                </button>
+                                <button type="button" 
+                                        class="status-btn btn-delivered {% if fraction.status == 'delivered' %}active{% endif %}" 
+                                        onclick="updateFractionStatus({{ fraction.pk }}, 'delivered')">
+                                    Отримана
+                                </button>
+                                <button type="button" 
+                                        class="status-btn btn-missed {% if fraction.status == 'missed' %}active{% endif %}" 
+                                        onclick="updateFractionStatus({{ fraction.pk }}, 'missed')">
+                                    Пропущена
+                                </button>
                             </div>
                         </td>
-                        <td>{{ fraction.note|default:"—" }}</td>
+                        <td>
+                            <span class="fraction-note-text">{{ fraction.note|default:"—" }}</span>
+                            {% if fraction.reason %}
+                                <br><small class="text-warning"><i>Причина: {{ fraction.reason }}</i></small>
+                            {% endif %}
+                        </td>
                         <td>
                             <a href="{% url 'fraction_edit' fraction.pk %}" class="btn-edit-small">
                                 <i class="fas fa-edit"></i> Редагувати
@@ -339,44 +328,172 @@ function saveNotes(patientId) {
     });
 }
 
-function toggleFractionStatus(fractionId, field, checkbox) {
-    const isChecked = checkbox.checked;
-    checkbox.disabled = true; // Тимчасово блокуємо під час запиту
-    
-    fetch(`/fractions/${fractionId}/toggle/`, {
+function updateFractionStatus(fractionId, status) {
+    const group = document.querySelector(`.status-btn-group[data-fraction-id="${fractionId}"]`);
+    const buttons = group.querySelectorAll('.status-btn');
+    buttons.forEach(btn => btn.disabled = true);
+
+    fetch('/api/update-fraction-status/', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             'X-CSRFToken': '{{ csrf_token }}'
         },
-        body: JSON.stringify({ field: field, value: isChecked })
+        body: JSON.stringify({
+            fraction_id: fractionId,
+            status: status
+        })
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Помилка сервера');
+        }
+        return response.json();
+    })
     .then(data => {
-        checkbox.disabled = false;
-        if(data.success) {
-            // Оновлюємо стан чекбоксів з сервера, бо одне може змінити інше
-            const row = checkbox.closest('tr');
-            const doctorCheckbox = row.querySelector('input[onchange*="confirmed_by_doctor"]');
-            const deliveredCheckbox = row.querySelector('input[onchange*="delivered"]');
-            
-            if (doctorCheckbox) doctorCheckbox.checked = data.confirmed_by_doctor;
-            if (deliveredCheckbox) deliveredCheckbox.checked = data.delivered;
-            
-            // Якщо є елементи, що показують СОД або поточну фракцію, можна оновити їх
-            // Але для простоти сторінка сама оновить їх при наступному перезавантаженні
-            // або ми можемо перезавантажити всю сторінку, щоб уникнути розсинхрону
-            window.location.reload(); 
+        buttons.forEach(btn => btn.disabled = false);
+        if (data.success) {
+            buttons.forEach(btn => btn.classList.remove('active'));
+            const activeBtn = group.querySelector(`.btn-${status}`);
+            if (activeBtn) activeBtn.classList.add('active');
+
+            const row = document.getElementById(`fraction-row-${fractionId}`);
+            if (row) {
+                row.className = row.className.replace(/status-row-\w+/, `status-row-${status}`);
+            }
+
+            const sodValElements = [
+                document.getElementById('received-dose-val'),
+                document.getElementById('treatment-sod-val'),
+                document.getElementById('dates-sod-val')
+            ];
+            sodValElements.forEach(el => {
+                if (el) el.textContent = data.new_sod;
+            });
+
+            const currentValElements = [
+                document.getElementById('current-fraction-val'),
+                document.getElementById('treatment-current-val')
+            ];
+            currentValElements.forEach(el => {
+                if (el) el.textContent = data.current_fraction;
+            });
+
+            const progressBar = document.getElementById('treatment-progress-bar');
+            if (progressBar) {
+                progressBar.value = data.current_fraction;
+            }
+
+            const dischargeDateVal = document.getElementById('discharge-date-val');
+            if (dischargeDateVal && data.new_discharge_date) {
+                dischargeDateVal.textContent = data.new_discharge_date;
+            }
+
+            if (data.fractions) {
+                data.fractions.forEach(f => {
+                    const dateEl = document.getElementById(`fraction-date-${f.id}`);
+                    if (dateEl) {
+                        dateEl.textContent = f.date;
+                    }
+                    const r = document.getElementById(`fraction-row-${f.id}`);
+                    if (r) {
+                        let origEl = r.querySelector('.original-date-small');
+                        if (f.original_date) {
+                            r.classList.add('date-shifted');
+                            if (!origEl) {
+                                origEl = document.createElement('small');
+                                origEl.className = 'text-muted original-date-small';
+                                origEl.style.textDecoration = 'line-through';
+                                if (dateEl) {
+                                    dateEl.parentNode.appendChild(document.createElement('br'));
+                                    dateEl.parentNode.appendChild(origEl);
+                                }
+                            }
+                            origEl.textContent = f.original_date;
+                        } else {
+                            r.classList.remove('date-shifted');
+                            if (origEl) {
+                                origEl.previousSibling.remove();
+                                origEl.remove();
+                            }
+                        }
+                    }
+                });
+            }
         } else {
             alert('Помилка: ' + data.error);
-            checkbox.checked = !isChecked; // Повертаємо як було
         }
     })
     .catch(error => {
         console.error('Помилка:', error);
         alert('Помилка з\'єднання з сервером');
-        checkbox.checked = !isChecked; // Повертаємо як було
-        checkbox.disabled = false;
+        buttons.forEach(btn => btn.disabled = false);
+    });
+}
+
+function approveAllFractions(patientId) {
+    fetch(`/patients/${patientId}/approve-all/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Accept': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            if (data.fractions) {
+                data.fractions.forEach(f => {
+                    const row = document.getElementById(`fraction-row-${f.id}`);
+                    if (row) {
+                        row.className = row.className.replace(/status-row-\w+/, `status-row-${f.status}`);
+                        const grp = row.querySelector('.status-btn-group');
+                        if (grp) {
+                            const btns = grp.querySelectorAll('.status-btn');
+                            btns.forEach(btn => btn.classList.remove('active'));
+                            const activeBtn = grp.querySelector(`.btn-${f.status}`);
+                            if (activeBtn) activeBtn.classList.add('active');
+                        }
+                    }
+                });
+            }
+            
+            const sodValElements = [
+                document.getElementById('received-dose-val'),
+                document.getElementById('treatment-sod-val'),
+                document.getElementById('dates-sod-val')
+            ];
+            sodValElements.forEach(el => {
+                if (el) el.textContent = data.new_sod;
+            });
+
+            const currentValElements = [
+                document.getElementById('current-fraction-val'),
+                document.getElementById('treatment-current-val')
+            ];
+            currentValElements.forEach(el => {
+                if (el) el.textContent = data.current_fraction;
+            });
+
+            const progressBar = document.getElementById('treatment-progress-bar');
+            if (progressBar) {
+                progressBar.value = data.current_fraction;
+            }
+            
+            // Show custom premium success notice
+            const notice = document.createElement('div');
+            notice.className = 'message success';
+            notice.innerHTML = `<i class="fas fa-check-circle"></i> ${data.message}`;
+            const container = document.querySelector('.container');
+            container.insertBefore(notice, container.firstChild);
+            setTimeout(() => notice.remove(), 4000);
+        } else {
+            alert(data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Помилка:', error);
+        alert('Помилка з\'єднання з сервером');
     });
 }
 </script>
@@ -565,6 +682,58 @@ progress::-webkit-progress-value {
     margin-top: 10px;
     white-space: pre-wrap;
     border: 1px solid var(--border-color);
+}
+
+/* Premium Status Button Group Styles */
+.status-btn-group {
+    display: inline-flex;
+    background-color: var(--background-color);
+    border-radius: 20px;
+    padding: 3px;
+    border: 1px solid var(--border-color);
+}
+.status-btn {
+    border: none;
+    background: transparent;
+    padding: 6px 14px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    border-radius: 17px;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    color: var(--text-light-color);
+}
+.status-btn.btn-scheduled.active {
+    background-color: #6c757d;
+    color: #ffffff;
+    box-shadow: 0 2px 4px rgba(108, 117, 125, 0.4);
+}
+.status-btn.btn-delivered.active {
+    background-color: #28a745;
+    color: #ffffff;
+    box-shadow: 0 2px 4px rgba(40, 167, 69, 0.4);
+}
+.status-btn.btn-missed.active {
+    background-color: #dc3545;
+    color: #ffffff;
+    box-shadow: 0 2px 4px rgba(220, 53, 69, 0.4);
+}
+.status-btn:hover:not(.active) {
+    background-color: var(--border-color);
+    color: var(--text-color);
+}
+/* Row class styles depending on status */
+.status-row-delivered {
+    background-color: rgba(40, 167, 69, 0.04);
+}
+.status-row-missed {
+    background-color: rgba(220, 53, 69, 0.04);
+}
+.status-row-scheduled {
+    background-color: transparent;
+}
+.date-shifted {
+    border-left: 3px solid #ffc107;
 }
 </style>
 <script>

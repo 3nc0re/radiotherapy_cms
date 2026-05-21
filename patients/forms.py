@@ -229,15 +229,12 @@ class FractionEditForm(forms.ModelForm):
     
     class Meta:
         model = FractionHistory
-        fields = ['date', 'dose', 'delivered', 'confirmed_by_doctor', 'note', 'is_postponed', 'is_missed', 'reason']
+        fields = ['date', 'dose', 'status', 'note', 'reason']
         widgets = {
             'dose': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.1'}),
             'note': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
             'reason': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Причина зміни'}),
-            'delivered': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-            'confirmed_by_doctor': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-            'is_postponed': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-            'is_missed': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'status': forms.Select(attrs={'class': 'form-select'}),
         }
     
     def clean(self):

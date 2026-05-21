@@ -172,7 +172,7 @@ class Patient(models.Model):
     @property
     def current_fraction(self):
         """Динамічно розраховує кількість проведених фракцій."""
-        return self.fractions.filter(delivered=True).count()
+        return self.fractions.filter(status='delivered').count()
 
     @property
     def missed_days(self):
@@ -192,7 +192,7 @@ class Patient(models.Model):
             current_date += timedelta(days=1)
             
         # Кількість пропущених днів = очікувані фракції - фактичні фракції
-        delivered_fractions = self.fractions.filter(delivered=True).count()
+        delivered_fractions = self.fractions.filter(status='delivered').count()
         missed = total_weekdays - delivered_fractions
         return max(0, missed)
 
@@ -223,10 +223,10 @@ class Patient(models.Model):
         return self.medical_incapacities.order_by('-end_date').first()
 
     def recalculate_received_dose(self):
-        """Перераховує отриману дозу на основі виконаних фракцій"""
-        from django.db.models import Sum
-        total = self.fractions.filter(delivered=True).aggregate(total_dose=Sum('dose'))['total_dose']
-        self.received_dose = total or 0.0
+        """Перераховує отриману дозу на основі виконаних фракцій за формулою: кількість delivered * dose_per_fraction"""
+        delivered_count = self.fractions.filter(status='delivered').count()
+        dose_per = self.dose_per_fraction or 0.0
+        self.received_dose = delivered_count * dose_per
         self.save()
 
     def get_diagnosis_text_for_copy(self):
@@ -337,15 +337,21 @@ class FractionHistory(models.Model):
     patient = models.ForeignKey('Patient', models.DO_NOTHING, related_name='fractions')
     date = models.DateField()
     dose = models.FloatField()
-    delivered = models.BooleanField(blank=True, null=True)
-    confirmed_by_doctor = models.BooleanField(blank=True, null=True)
     note = models.TextField(blank=True, null=True)
-    
-    # Нові поля для редагування фракцій
-    is_postponed = models.BooleanField(default=False, help_text="Чи відкладена фракція")
     original_date = models.DateField(blank=True, null=True, help_text="Оригінальна дата фракції")
     reason = models.CharField(max_length=255, blank=True, null=True, help_text="Причина зміни дати")
-    is_missed = models.BooleanField(default=False, help_text="Чи пропущена фракція")
+
+    STATUS_CHOICES = [
+        ('scheduled', 'Запланована'),
+        ('delivered', 'Отримана'),
+        ('missed', 'Пропущена'),
+    ]
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='scheduled',
+        help_text="Статус фракції"
+    )
 
     class Meta:
         db_table = 'fraction_history'

@@ -13,8 +13,7 @@ from .services import (
     auto_confirm_today_fractions,
     get_patient_treatment_info,
     recalculate_discharge_date,
-    postpone_fraction,
-    mark_fraction_missed
+    shift_patient_schedule
 )
 
 User = get_user_model()
@@ -194,7 +193,7 @@ class CriticalModelTests(TestCase):
             patient=patient,
             date=date.today() - timedelta(days=1),
             dose=2.0,
-            delivered=True
+            status='delivered'
         )
         
         self.assertEqual(patient.current_fraction, 1)
@@ -505,7 +504,7 @@ class PatientModelPropertiesTests(TestCase):
                 patient=self.patient,
                 date=self.patient.treatment_start_date + timedelta(days=i),
                 dose=2.0,
-                delivered=True
+                status='delivered'
             )
         
         # За 10 робочих днів має бути 5 виконаних, отже 5 пропущених
@@ -626,8 +625,7 @@ class ServicesTests(TestCase):
             patient=self.patient,
             date=date.today(),
             dose=2.0,
-            delivered=False,
-            confirmed_by_doctor=False
+            status='scheduled'
         )
         
         count = auto_confirm_today_fractions()
@@ -636,8 +634,7 @@ class ServicesTests(TestCase):
         
         # Перевіряємо, що наша фракція підтверджена
         fraction.refresh_from_db()
-        self.assertTrue(fraction.delivered)
-        self.assertTrue(fraction.confirmed_by_doctor)
+        self.assertEqual(fraction.status, 'delivered')
     
     def test_get_patient_treatment_info(self):
         """Тест отримання інформації про лікування"""
@@ -647,7 +644,7 @@ class ServicesTests(TestCase):
                 patient=self.patient,
                 date=self.patient.treatment_start_date + timedelta(days=i),
                 dose=2.0,
-                delivered=True
+                status='delivered'
             )
         
         info = get_patient_treatment_info(self.patient)
@@ -676,34 +673,36 @@ class ServicesTests(TestCase):
         self.assertEqual(new_date, date.today() + timedelta(days=10))
         self.assertEqual(self.patient.discharge_date, date.today() + timedelta(days=10))
     
-    def test_postpone_fraction(self):
-        """Тест відкладення фракції"""
-        fraction = FractionHistory.objects.create(
-            patient=self.patient,
-            date=date.today() + timedelta(days=5),
-            dose=2.0
-        )
+    def test_shift_patient_schedule(self):
+        """Тест зсуву запланованих фракцій пацієнта"""
+        # Створюємо 3 заплановані фракції починаючи з понеділка
+        # Щоб дата була фіксованою, візьмемо 2026-05-25 (це понеділок)
+        start_date = date(2026, 5, 25)
+        FractionHistory.objects.filter(patient=self.patient).delete()
         
-        new_date = date.today() + timedelta(days=10)
-        postponed = postpone_fraction(fraction, new_date, "Причина відкладення")
+        f1 = FractionHistory.objects.create(patient=self.patient, date=start_date, dose=2.0, status='scheduled')
+        f2 = FractionHistory.objects.create(patient=self.patient, date=start_date + timedelta(days=1), dose=2.0, status='scheduled')
+        f3 = FractionHistory.objects.create(patient=self.patient, date=start_date + timedelta(days=2), dose=2.0, status='scheduled')
         
-        self.assertTrue(postponed.is_postponed)
-        self.assertEqual(postponed.date, new_date)
-        self.assertEqual(postponed.reason, "Причина відкладення")
-        self.assertEqual(postponed.original_date, date.today() + timedelta(days=5))
-    
-    def test_mark_fraction_missed(self):
-        """Тест позначення фракції як пропущеної"""
-        fraction = FractionHistory.objects.create(
-            patient=self.patient,
-            date=date.today() - timedelta(days=1),
-            dose=2.0
-        )
+        self.patient.discharge_date = f3.date
+        self.patient.save()
         
-        missed = mark_fraction_missed(fraction, "Причина пропуску")
+        # Зсуваємо розклад з другої фракції
+        shift_patient_schedule(self.patient, f2.date)
         
-        self.assertTrue(missed.is_missed)
-        self.assertEqual(missed.reason, "Причина пропуску")
+        f1.refresh_from_db()
+        f2.refresh_from_db()
+        f3.refresh_from_db()
+        
+        # f1 не має змінитись
+        self.assertEqual(f1.date, start_date)
+        # f2 зміщується на +1 день
+        self.assertEqual(f2.date, start_date + timedelta(days=2)) # середа
+        # f3 зміщується на +1 день
+        self.assertEqual(f3.date, start_date + timedelta(days=3)) # четвер
+        
+        self.patient.refresh_from_db()
+        self.assertEqual(self.patient.discharge_date, f3.date)
 
 
 class FormValidationTests(TestCase):
@@ -845,26 +844,8 @@ class FormValidationTests(TestCase):
         self.assertFalse(form.is_valid())
         self.assertIn('Дата закінчення не може бути раніше дати початку', str(form.errors))
     
-    def test_fraction_edit_form_past_date_validation(self):
-        """Тест валідації FractionEditForm: дата не може бути в минулому (якщо не пропущена)"""
-        fraction = FractionHistory.objects.create(
-            patient=self.patient,
-            date=date.today() + timedelta(days=5),
-            dose=2.0
-        )
-        
-        # Спробуємо встановити дату в минулому без позначки is_missed
-        form_data = {
-            'date': (date.today() - timedelta(days=1)).strftime('%d.%m.%Y'),
-            'dose': 2.0,
-            'is_missed': False
-        }
-        
-        form = FractionEditForm(data=form_data, instance=fraction)
-        self.assertFalse(form.is_valid())
-    
-    def test_fraction_edit_form_past_date_with_missed(self):
-        """Тест: дата в минулому дозволена, якщо фракція позначена як пропущена"""
+    def test_fraction_edit_form_valid(self):
+        """Тест валідації FractionEditForm"""
         fraction = FractionHistory.objects.create(
             patient=self.patient,
             date=date.today() + timedelta(days=5),
@@ -872,9 +853,11 @@ class FormValidationTests(TestCase):
         )
         
         form_data = {
-            'date': (date.today() - timedelta(days=1)).strftime('%d.%m.%Y'),
+            'date': (date.today() + timedelta(days=5)).strftime('%d.%m.%Y'),
             'dose': 2.0,
-            'is_missed': True
+            'status': 'delivered',
+            'note': 'Отримана вчасно',
+            'reason': ''
         }
         
         form = FractionEditForm(data=form_data, instance=fraction)
