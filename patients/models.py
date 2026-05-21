@@ -222,6 +222,13 @@ class Patient(models.Model):
     def get_latest_medical_incapacity(self):
         return self.medical_incapacities.order_by('-end_date').first()
 
+    def recalculate_received_dose(self):
+        """Перераховує отриману дозу на основі виконаних фракцій"""
+        from django.db.models import Sum
+        total = self.fractions.filter(delivered=True).aggregate(total_dose=Sum('dose'))['total_dose']
+        self.received_dose = total or 0.0
+        self.save()
+
     def get_diagnosis_text_for_copy(self):
         """Формує текст діагнозу для копіювання в інші системи"""
         parts = []
