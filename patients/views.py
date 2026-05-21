@@ -251,6 +251,20 @@ def toggle_fraction_status(request, pk):
             # Якщо лікар підтверджує, то вона автоматично "Отримана"
             if fraction.confirmed_by_doctor:
                 fraction.delivered = True
+        elif field == 'is_missed':
+            fraction.is_missed = bool(value)
+            # Якщо ставимо пропуск, знімаємо галочки "Отримана" та "Відкладена"
+            if fraction.is_missed:
+                fraction.delivered = False
+                fraction.confirmed_by_doctor = False
+                fraction.is_postponed = False
+        elif field == 'is_postponed':
+            fraction.is_postponed = bool(value)
+            # Якщо ставимо відкладення, знімаємо галочки "Отримана" та "Пропущена"
+            if fraction.is_postponed:
+                fraction.delivered = False
+                fraction.confirmed_by_doctor = False
+                fraction.is_missed = False
         else:
             return JsonResponse({'success': False, 'error': 'Invalid field'}, status=400)
             
@@ -264,6 +278,8 @@ def toggle_fraction_status(request, pk):
             'success': True, 
             'delivered': fraction.delivered, 
             'confirmed_by_doctor': fraction.confirmed_by_doctor,
+            'is_missed': fraction.is_missed,
+            'is_postponed': fraction.is_postponed,
             'received_dose': patient.received_dose,
             'current_fraction': patient.current_fraction
         })
@@ -287,6 +303,15 @@ def update_patient_notes(request, pk):
 @login_required
 def fraction_list(request):
     today = date.today()
+    
+    # АВТОМАТИКА: Всі вчорашні (і старіші) невідмічені фракції стають пропущеними
+    FractionHistory.objects.filter(
+        date__lt=today,
+        delivered=False,
+        is_postponed=False,
+        is_missed=False
+    ).update(is_missed=True)
+    
     active_patients_q = Q(discharge_date__isnull=True) | Q(discharge_date__gte=today)
     
     # Фракції на сьогодні (для всіх активних пацієнтів)

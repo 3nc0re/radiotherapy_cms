@@ -206,13 +206,25 @@
                                    class="form-check-input fraction-toggle">
                         </td>
                         <td>
-                            {% if fraction.is_postponed %}
-                                <span class="badge badge-warning">Відкладена</span>
-                            {% elif fraction.is_missed %}
-                                <span class="badge badge-danger">Пропущена</span>
-                            {% else %}
-                                <span class="badge badge-success">Запланована</span>
-                            {% endif %}
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <label style="margin: 0; font-size: 0.9em; display: flex; align-items: center; gap: 4px;">
+                                    <input type="checkbox" 
+                                           {% if fraction.is_postponed %}checked{% endif %}
+                                           onchange="toggleFractionStatus({{ fraction.pk }}, 'is_postponed', this)"
+                                           class="form-check-input fraction-toggle">
+                                    <span class="badge badge-warning" style="margin: 0;">Відкл.</span>
+                                </label>
+                                <label style="margin: 0; font-size: 0.9em; display: flex; align-items: center; gap: 4px;">
+                                    <input type="checkbox" 
+                                           {% if fraction.is_missed %}checked{% endif %}
+                                           onchange="toggleFractionStatus({{ fraction.pk }}, 'is_missed', this)"
+                                           class="form-check-input fraction-toggle">
+                                    <span class="badge badge-danger" style="margin: 0;">Проп.</span>
+                                </label>
+                                {% if not fraction.is_postponed and not fraction.is_missed %}
+                                    <span class="badge badge-success">Запланована</span>
+                                {% endif %}
+                            </div>
                         </td>
                         <td>{{ fraction.note|default:"—" }}</td>
                         <td>
