@@ -287,14 +287,17 @@ def update_patient_notes(request, pk):
 @login_required
 def fraction_list(request):
     today = date.today()
+    active_patients_q = Q(discharge_date__isnull=True) | Q(discharge_date__gte=today)
     
-    # Фракції на сьогодні (для всіх пацієнтів)
+    # Фракції на сьогодні (для всіх активних пацієнтів)
     today_fractions = FractionHistory.objects.filter(
-        date=today
+        date=today,
+        patient__in=Patient.objects.filter(active_patients_q)
     ).select_related('patient').order_by('patient__last_name', 'patient__first_name')
     
-    # Отримуємо пацієнтів, які мають фракції
+    # Отримуємо активних пацієнтів, які мають фракції
     patients_with_fractions = Patient.objects.filter(
+        active_patients_q,
         fractions__isnull=False
     ).distinct().prefetch_related(
         'fractions'
