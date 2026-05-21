@@ -552,7 +552,7 @@ function toggleFractionStatus(fractionId, field, checkbox) {
     const isChecked = checkbox.checked;
     checkbox.disabled = true; // Тимчасово блокуємо під час запиту
     
-    fetch(`/patients/fractions/${fractionId}/toggle/`, {
+    fetch(`/fractions/${fractionId}/toggle/`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
