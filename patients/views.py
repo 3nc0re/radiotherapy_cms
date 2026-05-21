@@ -220,6 +220,18 @@ def patient_delete(request, pk):
     return render(request, 'patients/patient_confirm_delete.html', {'patient': patient})
 
 @login_required
+@require_POST
+def archive_patient(request, pk):
+    """Примусово переводить пацієнта в архів, встановлюючи дату виписки на вчорашній день"""
+    patient = get_object_or_404(Patient, pk=pk)
+    # Встановлюємо дату виписки в минулому, щоб пацієнт одразу потрапив у статус "Архів"
+    yesterday = date.today() - timedelta(days=1)
+    patient.discharge_date = yesterday
+    patient.save()
+    messages.success(request, f'Пацієнта {patient.full_name} успішно переведено в архів.')
+    return redirect('patient_list')
+
+@login_required
 def fraction_list(request):
     today = date.today()
     

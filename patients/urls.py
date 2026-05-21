@@ -15,6 +15,7 @@ urlpatterns = [
     path('patients/filter/<str:filter_type>/', views.patient_list, name='patient_list_filtered'),
     path('patients/<int:pk>/', views.patient_detail, name='patient_detail'),
     path('patients/<int:pk>/edit/', views.patient_update, name='patient_update'),
+    path('patients/<int:pk>/archive/', views.archive_patient, name='archive_patient'),
     path('patients/<int:pk>/delete/', views.patient_delete, name='patient_delete'),
     
     # Fractions

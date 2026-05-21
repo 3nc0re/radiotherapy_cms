@@ -6,6 +6,12 @@
     <div class="header-top">
         <h1>{{ patient.full_name }}</h1>
         <div class="header-actions">
+            {% if patient.display_stage != 'Архів' %}
+            <form method="post" action="{% url 'archive_patient' patient.pk %}" style="display: inline;" onsubmit="return confirm('Ви впевнені, що хочете завершити лікування та перевести пацієнта в архів?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-warning" style="color: black;"><i class="fas fa-archive"></i> В архів</button>
+            </form>
+            {% endif %}
             <a href="{% url 'patient_update' patient.pk %}" class="btn btn-primary"><i class="fas fa-edit"></i> Редагувати</a>
             <a href="{% url 'patient_delete' patient.pk %}" class="btn btn-danger"><i class="fas fa-trash-alt"></i> Видалити</a>
         </div>
