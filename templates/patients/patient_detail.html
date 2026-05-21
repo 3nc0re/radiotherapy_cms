@@ -193,8 +193,18 @@
                     <tr>
                         <td>{{ fraction.date|date:"d.m.Y" }}</td>
                         <td>{{ fraction.dose|default:"—" }}</td>
-                        <td>{{ fraction.confirmed_by_doctor|yesno:"Так,Ні" }}</td>
-                        <td>{{ fraction.delivered|yesno:"Так,Ні" }}</td>
+                        <td>
+                            <input type="checkbox" 
+                                   {% if fraction.confirmed_by_doctor %}checked{% endif %}
+                                   onchange="toggleFractionStatus({{ fraction.pk }}, 'confirmed_by_doctor', this)"
+                                   class="form-check-input fraction-toggle">
+                        </td>
+                        <td>
+                            <input type="checkbox" 
+                                   {% if fraction.delivered %}checked{% endif %}
+                                   onchange="toggleFractionStatus({{ fraction.pk }}, 'delivered', this)"
+                                   class="form-check-input fraction-toggle">
+                        </td>
                         <td>
                             {% if fraction.is_postponed %}
                                 <span class="badge badge-warning">Відкладена</span>
@@ -314,6 +324,47 @@ function saveNotes(patientId) {
             btn.innerHTML = originalText;
             btn.style.backgroundColor = 'var(--primary-color)';
         }, 2000);
+    });
+}
+
+function toggleFractionStatus(fractionId, field, checkbox) {
+    const isChecked = checkbox.checked;
+    checkbox.disabled = true; // Тимчасово блокуємо під час запиту
+    
+    fetch(`/patients/fractions/${fractionId}/toggle/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({ field: field, value: isChecked })
+    })
+    .then(response => response.json())
+    .then(data => {
+        checkbox.disabled = false;
+        if(data.success) {
+            // Оновлюємо стан чекбоксів з сервера, бо одне може змінити інше
+            const row = checkbox.closest('tr');
+            const doctorCheckbox = row.querySelector('input[onchange*="confirmed_by_doctor"]');
+            const deliveredCheckbox = row.querySelector('input[onchange*="delivered"]');
+            
+            if (doctorCheckbox) doctorCheckbox.checked = data.confirmed_by_doctor;
+            if (deliveredCheckbox) deliveredCheckbox.checked = data.delivered;
+            
+            // Якщо є елементи, що показують СОД або поточну фракцію, можна оновити їх
+            // Але для простоти сторінка сама оновить їх при наступному перезавантаженні
+            // або ми можемо перезавантажити всю сторінку, щоб уникнути розсинхрону
+            window.location.reload(); 
+        } else {
+            alert('Помилка: ' + data.error);
+            checkbox.checked = !isChecked; // Повертаємо як було
+        }
+    })
+    .catch(error => {
+        console.error('Помилка:', error);
+        alert('Помилка з\'єднання з сервером');
+        checkbox.checked = !isChecked; // Повертаємо як було
+        checkbox.disabled = false;
     });
 }
 </script>

@@ -242,14 +242,6 @@ class FractionEditForm(forms.ModelForm):
     
     def clean(self):
         cleaned_data = super().clean()
-        date = cleaned_data.get('date')
-        is_postponed = cleaned_data.get('is_postponed')
-        is_missed = cleaned_data.get('is_missed')
-        
-        # Перевірка, що дата не в минулому (якщо не пропущена)
-        if date and date < date.today() and not is_missed:
-            raise ValidationError('Дата фракції не може бути в минулому, якщо фракція не пропущена')
-        
         return cleaned_data
 
 class UserRegistrationForm(UserCreationForm):

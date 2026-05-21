@@ -27,6 +27,7 @@ urlpatterns = [
     path('patients/<int:pk>/approve-all/', views.approve_all_fractions, name='approve_all_fractions'),
     path('patients/<int:patient_id>/recalculate_discharge/', views.recalculate_discharge, name='recalculate_discharge'),
     path('fractions/<int:pk>/edit/', views.fraction_edit, name='fraction_edit'),
+    path('fractions/<int:pk>/toggle/', views.toggle_fraction_status, name='toggle_fraction_status'),
     path('fractions/confirm/doctor/', views.confirm_fractions_doctor, name='confirm_fractions_doctor'),
     path('fractions/confirm/nurse/', views.confirm_fractions_nurse, name='confirm_fractions_nurse'),
 

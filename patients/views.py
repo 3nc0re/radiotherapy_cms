@@ -233,6 +233,46 @@ def archive_patient(request, pk):
 
 @login_required
 @require_POST
+def toggle_fraction_status(request, pk):
+    """Швидке перемикання статусу фракції (delivered або confirmed_by_doctor) через AJAX"""
+    fraction = get_object_or_404(FractionHistory, pk=pk)
+    try:
+        data = json.loads(request.body)
+        field = data.get('field')
+        value = data.get('value')
+        
+        if field == 'delivered':
+            fraction.delivered = bool(value)
+            # Якщо знімаємо галочку "Отримана", то логічно зняти і "Підтверджено лікарем"
+            if not fraction.delivered:
+                fraction.confirmed_by_doctor = False
+        elif field == 'confirmed_by_doctor':
+            fraction.confirmed_by_doctor = bool(value)
+            # Якщо лікар підтверджує, то вона автоматично "Отримана"
+            if fraction.confirmed_by_doctor:
+                fraction.delivered = True
+        else:
+            return JsonResponse({'success': False, 'error': 'Invalid field'}, status=400)
+            
+        fraction.save()
+        
+        # Оновлюємо СОД пацієнта
+        patient = fraction.patient
+        patient.recalculate_received_dose()
+        
+        return JsonResponse({
+            'success': True, 
+            'delivered': fraction.delivered, 
+            'confirmed_by_doctor': fraction.confirmed_by_doctor,
+            'received_dose': patient.received_dose,
+            'current_fraction': patient.current_fraction
+        })
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=400)
+
+
+@login_required
+@require_POST
 def update_patient_notes(request, pk):
     """Оновлення нотаток пацієнта через AJAX"""
     patient = get_object_or_404(Patient, pk=pk)
