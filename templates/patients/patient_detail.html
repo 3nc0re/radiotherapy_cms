@@ -140,12 +140,15 @@
     </div>
 
     <!-- Примітки -->
-    {% if patient.notes %}
     <div class="card notes-info">
-        <h3><i class="fas fa-sticky-note"></i> Примітки</h3>
-        <div class="notes-content">{{ patient.notes }}</div>
+        <h3><i class="fas fa-sticky-note"></i> Нотатки</h3>
+        <div class="notes-container" style="display: flex; flex-direction: column; gap: 10px;">
+            <textarea id="patientNotes" class="diagnosis-text" placeholder="Додайте нотатки про пацієнта...">{{ patient.notes|default:'' }}</textarea>
+            <button onclick="saveNotes({{ patient.pk }})" id="saveNotesBtn" class="btn btn-primary copy-btn">
+                <i class="fas fa-save"></i> Зберегти нотатку
+            </button>
+        </div>
     </div>
-    {% endif %}
 
     <!-- Історія фракцій -->
     <div class="card full-width">
@@ -272,6 +275,46 @@ function copyDiagnosis() {
     } catch (err) {
         console.error('Помилка копіювання: ', err);
     }
+}
+
+function saveNotes(patientId) {
+    const notes = document.getElementById('patientNotes').value;
+    const btn = document.getElementById('saveNotesBtn');
+    const originalText = btn.innerHTML;
+    
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Збереження...';
+    
+    fetch(`/patients/${patientId}/update_notes/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({ notes: notes })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if(data.success) {
+            btn.innerHTML = '<i class="fas fa-check"></i> Збережено!';
+            btn.style.backgroundColor = '#28a745';
+        } else {
+            btn.innerHTML = '<i class="fas fa-times"></i> Помилка';
+            btn.style.backgroundColor = '#dc3545';
+        }
+        setTimeout(() => {
+            btn.innerHTML = originalText;
+            btn.style.backgroundColor = 'var(--primary-color)';
+        }, 2000);
+    })
+    .catch(error => {
+        console.error('Помилка:', error);
+        btn.innerHTML = '<i class="fas fa-times"></i> Помилка';
+        btn.style.backgroundColor = '#dc3545';
+        setTimeout(() => {
+            btn.innerHTML = originalText;
+            btn.style.backgroundColor = 'var(--primary-color)';
+        }, 2000);
+    });
 }
 </script>
 

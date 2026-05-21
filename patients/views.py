@@ -232,6 +232,19 @@ def archive_patient(request, pk):
     return redirect('patient_list')
 
 @login_required
+@require_POST
+def update_patient_notes(request, pk):
+    """Оновлення нотаток пацієнта через AJAX"""
+    patient = get_object_or_404(Patient, pk=pk)
+    try:
+        data = json.loads(request.body)
+        patient.notes = data.get('notes', '')
+        patient.save()
+        return JsonResponse({'success': True})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=400)
+
+@login_required
 def fraction_list(request):
     today = date.today()
     

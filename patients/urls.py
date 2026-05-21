@@ -16,6 +16,7 @@ urlpatterns = [
     path('patients/<int:pk>/', views.patient_detail, name='patient_detail'),
     path('patients/<int:pk>/edit/', views.patient_update, name='patient_update'),
     path('patients/<int:pk>/archive/', views.archive_patient, name='archive_patient'),
+    path('patients/<int:pk>/update_notes/', views.update_patient_notes, name='update_patient_notes'),
     path('patients/<int:pk>/delete/', views.patient_delete, name='patient_delete'),
     
     # Fractions
