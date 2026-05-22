@@ -30,9 +30,15 @@
         <p><strong>ID амбулаторної картки:</strong> <span class="badge badge-info">{{ patient.ambulatory_card_id }}</span></p>
         {% endif %}
         <p><strong>Дата народження:</strong> {{ patient.birth_date|date:"d.m.Y"|default:"—" }}</p>
-        <p><strong>Стать:</strong> {{ patient.gender|default:"—" }}</p>
+        <p><strong>Стать:</strong> {{ patient.get_gender_display|default:"—" }}</p>
         <p><strong>Поточний етап:</strong> <span class="badge">{{ patient.display_stage|default:"—" }}</span></p>
-        <p><strong>Статус госпіталізації:</strong> {{ patient.inpatient_status|default:"—" }}</p>
+        <p><strong>Статус госпіталізації:</strong> {{ patient.get_hospitalization_status_display|default:"—" }}</p>
+        {% if patient.hospitalization_status == 'queue' and patient.planned_admission_date %}
+        <p><strong>Планова дата госпіталізації:</strong> {{ patient.planned_admission_date|date:"d.m.Y" }}</p>
+        {% endif %}
+        {% if patient.hospitalization_status == 'inpatient' %}
+        <p><strong>Власник ліжка:</strong> {{ patient.bed_owner }}</p>
+        {% endif %}
         {% if patient.ward_number %}
         <p><strong>Номер палати:</strong> {{ patient.ward_number }}</p>
         {% endif %}
@@ -83,8 +89,14 @@
         <p><strong>Загальна кількість фракцій:</strong> {{ patient.total_fractions|default:"—" }}</p>
         <p><strong>РОД (Гр):</strong> {{ patient.dose_per_fraction|default:"—" }}</p>
         <p><strong>СОД (Гр):</strong> <span id="dates-sod-val">{{ patient.received_dose|default:"—" }}</span></p>
-        <p><strong>Дата виписки:</strong> <span id="discharge-date-val">{{ patient.discharge_date|date:"d.m.Y"|default:"—" }}</span></p>
-        <p><strong>Статус госпіталізації:</strong> {{ patient.inpatient_status|default:"—" }}</p>
+        <p><strong>Дата виписки:</strong> <span id="discharge-date-val">{{ patient.get_actual_discharge_date|date:"d.m.Y"|default:"—" }}</span></p>
+        <p><strong>Статус госпіталізації:</strong> {{ patient.get_hospitalization_status_display|default:"—" }}</p>
+        {% if patient.hospitalization_status == 'queue' and patient.planned_admission_date %}
+        <p><strong>Планова дата госпіталізації:</strong> {{ patient.planned_admission_date|date:"d.m.Y" }}</p>
+        {% endif %}
+        {% if patient.hospitalization_status == 'inpatient' %}
+        <p><strong>Власник ліжка:</strong> {{ patient.bed_owner }}</p>
+        {% endif %}
         <p><strong>Номер палати:</strong> {{ patient.ward_number|default:"—" }}</p>
         <p><strong>Попереднє опромінення:</strong> {{ patient.prior_radiation|default:"—" }}</p>
         <p><strong>Дата останнього аналізу крові:</strong> {{ patient.last_blood_test_date|date:"d.m.Y"|default:"—" }}</p>
@@ -117,6 +129,9 @@
                         {% elif notification.type == 'incapacity' %}
                             <i class="fas fa-file-medical-alt" style="color: #ffc107;"></i>
                             Закінчується МВТН {{ notification.incapacity_end_date|date:"d.m.Y" }}.
+                        {% elif notification.type == 'incapacity_alert' %}
+                            <i class="fas fa-exclamation-triangle" style="color: #dc3545;"></i>
+                            <span>⚠️ У пацієнта {{ patient.full_name }} МВТН НЕ покриває курс лікування або збігає! Діє до: {{ notification.incapacity_end_date|date:"d.m.Y" }}. Реальне завершення лікування: {{ notification.actual_discharge_date|date:"d.m.Y"|default:"—" }}. Потрібно продовжити вручну.</span>
                         {% endif %}
                     </li>
                 {% endfor %}

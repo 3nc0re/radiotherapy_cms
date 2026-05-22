@@ -148,9 +148,26 @@
                     <label for="{{ form.irradiation_zone.id_for_label }}">Зона опромінення</label>
                     {{ form.irradiation_zone }}
                 </div>
-                <div class="form-group">
-                    <label for="{{ form.inpatient_status.id_for_label }}">Статус госпіталізації</label>
-                    {{ form.inpatient_status }}
+                <div class="form-group" id="group_hospitalization_status">
+                    <label for="{{ form.hospitalization_status.id_for_label }}">Статус госпіталізації</label>
+                    {{ form.hospitalization_status }}
+                    {% if form.hospitalization_status.errors %}
+                        <div class="error">{{ form.hospitalization_status.errors.0 }}</div>
+                    {% endif %}
+                </div>
+                <div class="form-group" id="group_planned_admission_date" style="display: none;">
+                    <label for="{{ form.planned_admission_date.id_for_label }}">Планова дата госпіталізації</label>
+                    {{ form.planned_admission_date }}
+                    {% if form.planned_admission_date.errors %}
+                        <div class="error">{{ form.planned_admission_date.errors.0 }}</div>
+                    {% endif %}
+                </div>
+                <div class="form-group" id="group_bed_owner" style="display: none;">
+                    <label for="{{ form.bed_owner.id_for_label }}">Власник ліжка</label>
+                    {{ form.bed_owner }}
+                    {% if form.bed_owner.errors %}
+                        <div class="error">{{ form.bed_owner.errors.0 }}</div>
+                    {% endif %}
                 </div>
                 <div class="form-group">
                     <label for="{{ form.ward_number.id_for_label }}">Номер палати</label>
@@ -180,6 +197,31 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Hospitalization status dependent fields dynamic visibility
+    const statusSelect = document.getElementById('id_hospitalization_status');
+    const groupPlannedAdmission = document.getElementById('group_planned_admission_date');
+    const groupBedOwner = document.getElementById('group_bed_owner');
+
+    function toggleHospitalizationFields() {
+        if (!statusSelect) return;
+        const val = statusSelect.value;
+        if (val === 'queue') {
+            groupPlannedAdmission.style.display = 'flex';
+            groupBedOwner.style.display = 'none';
+        } else if (val === 'inpatient') {
+            groupPlannedAdmission.style.display = 'none';
+            groupBedOwner.style.display = 'flex';
+        } else {
+            groupPlannedAdmission.style.display = 'none';
+            groupBedOwner.style.display = 'none';
+        }
+    }
+
+    if (statusSelect) {
+        statusSelect.addEventListener('change', toggleHospitalizationFields);
+        toggleHospitalizationFields(); // Run on startup
+    }
+
     const dropZone = document.getElementById('drop-zone');
     const fileUpload = document.getElementById('file-upload');
     const loadingIndicator = document.getElementById('loading-indicator');

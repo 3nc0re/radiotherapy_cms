@@ -990,3 +990,263 @@ class CRUDOperationsTests(TestCase):
         # Перевіряємо, що пацієнт видалений
         self.assertFalse(Patient.objects.filter(id=patient_id).exists())
 
+
+class MVTNNotificationTests(TestCase):
+    """Тести для сповіщень МВТН (лікарняних листів)"""
+
+    def setUp(self):
+        self.client = Client()
+        self.user = User.objects.create_user(
+            username='doctor_mvtn',
+            password='testpass123',
+            role='doctor',
+            approved=True
+        )
+
+    def test_mvtn_notification_flow(self):
+        """
+        Тест-кейс:
+        1. Створюємо пацієнта з 5 фракціями починаючи з понеділка 2026-05-25.
+        2. Додаємо MedicalIncapacity, що повністю покриває курс (2026-05-25 по 2026-05-29).
+        3. Перевіряємо відсутність критичного алерта на дашборді.
+        4. Робимо одну фракцію пропущеною (missed) -> курс зсувається на 1 робочий день (до 2026-06-01).
+        5. Перевіряємо появу критичного алерта на дашборді з правильними датами.
+        """
+        import datetime
+        from unittest.mock import patch
+
+        # Заморозимо час на понеділок, 2026-05-25
+        with patch('django.utils.timezone.now') as mock_now:
+            mock_now.return_value = datetime.datetime(2026, 5, 25, 12, 0, 0, tzinfo=datetime.timezone.utc)
+            
+            # 1. Створюємо пацієнта
+            patient = Patient.objects.create(
+                last_name='Петренко',
+                first_name='Іван',
+                middle_name='Петрович',
+                diagnosis='Тестовий діагноз',
+                treatment_start_date=datetime.date(2026, 5, 25),
+                total_fractions=5,
+                dose_per_fraction=2.0
+            )
+            
+            # Перевіряємо, що фракції згенеровані
+            fractions = list(patient.fractions.all().order_by('date'))
+            self.assertEqual(len(fractions), 5)
+            self.assertEqual(fractions[0].date, datetime.date(2026, 5, 25))
+            self.assertEqual(fractions[4].date, datetime.date(2026, 5, 29))
+            
+            # 2. Додаємо МВТН, що покриває курс (з 25 по 29 травня)
+            incapacity = MedicalIncapacity.objects.create(
+                patient=patient,
+                start_date=datetime.date(2026, 5, 25),
+                end_date=datetime.date(2026, 5, 29),
+                mvt_number='1234-5678-9012-3456'
+            )
+            
+            # Авторизуємо клієнта
+            self.client.login(username='doctor_mvtn', password='testpass123')
+            
+            # 3. Перевіряємо відсутність критичного алерта на дашборді
+            response = self.client.get(reverse('dashboard'))
+            self.assertEqual(response.status_code, 200)
+            
+            # Перевіряємо context
+            notifications = response.context['notifications']
+            incapacity_alerts = [n for n in notifications if n['type'] == 'incapacity_alert']
+            self.assertEqual(len(incapacity_alerts), 0)
+            
+            # 4. Пропускаємо одну фракцію (наприклад, у вівторок 26 травня)
+            tuesday_fraction = patient.fractions.get(date=datetime.date(2026, 5, 26))
+            tuesday_fraction.status = 'missed'
+            tuesday_fraction.save()
+            
+            # Зсуваємо розклад
+            shift_patient_schedule(patient, tuesday_fraction.date)
+            patient.recalculate_received_dose()
+            patient.refresh_from_db()
+            
+            # Перевіряємо, що дата останньої фракції змістилася на понеділок 2026-06-01
+            # (оскільки п'ятнична фракція перенеслася на понеділок)
+            new_last_date = patient.get_actual_discharge_date
+            self.assertEqual(new_last_date, datetime.date(2026, 6, 1))
+            
+            # 5. Перевіряємо появу критичного алерта на дашборді
+            response = self.client.get(reverse('dashboard'))
+            self.assertEqual(response.status_code, 200)
+            
+            notifications = response.context['notifications']
+            incapacity_alerts = [n for n in notifications if n['type'] == 'incapacity_alert']
+            self.assertEqual(len(incapacity_alerts), 1)
+            
+            alert = incapacity_alerts[0]
+            self.assertEqual(alert['patient'], patient)
+            self.assertEqual(alert['incapacity_end_date'], datetime.date(2026, 5, 29))
+            self.assertEqual(alert['actual_discharge_date'], datetime.date(2026, 6, 1))
+            
+            # Перевіряємо, що в HTML є правильний текст попередження
+            self.assertContains(response, 'Петренко Іван Петрович')
+            self.assertContains(response, 'МВТН НЕ покриває курс лікування або збігає')
+            self.assertContains(response, 'Діє до: 29.05.2026')
+            self.assertContains(response, 'Реальне завершення лікування: 01.06.2026')
+
+    def test_mvtn_expiring_soon_alert(self):
+        """
+        Тест-кейс:
+        1. МВТН закінчується через 2 дні від 'сьогодні'.
+        2. Перевіряємо появу алерта про швидке закінчення МВТН.
+        """
+        import datetime
+        from unittest.mock import patch
+
+        with patch('django.utils.timezone.now') as mock_now:
+            # Співпадіння: сьогодні понеділок 2026-05-25
+            mock_now.return_value = datetime.datetime(2026, 5, 25, 12, 0, 0, tzinfo=datetime.timezone.utc)
+            
+            # Створюємо пацієнта з лікуванням, що закінчується через 1 день (2026-05-26)
+            patient = Patient.objects.create(
+                last_name='Коваленко',
+                first_name='Ольга',
+                middle_name='Миколаївна',
+                diagnosis='Тестовий діагноз',
+                treatment_start_date=datetime.date(2026, 5, 25),
+                total_fractions=2,
+                dose_per_fraction=2.0
+            )
+            
+            # МВТН діє до 2026-05-26 (закінчується завтра, тобто залишився 1 день)
+            MedicalIncapacity.objects.create(
+                patient=patient,
+                start_date=datetime.date(2026, 5, 25),
+                end_date=datetime.date(2026, 5, 26),
+                mvt_number='9876-5432-1098-7654'
+            )
+            
+            self.client.login(username='doctor_mvtn', password='testpass123')
+            response = self.client.get(reverse('dashboard'))
+            self.assertEqual(response.status_code, 200)
+            
+            notifications = response.context['notifications']
+            incapacity_alerts = [n for n in notifications if n['type'] == 'incapacity_alert']
+            self.assertEqual(len(incapacity_alerts), 1)
+            
+            self.assertContains(response, 'Коваленко Ольга Миколаївна')
+            self.assertContains(response, 'Діє до: 26.05.2026')
+
+
+class InpatientModuleTests(TestCase):
+    """Тести для модуля стаціонару та ліжкового фонду"""
+
+    def setUp(self):
+        self.client = Client()
+        self.user = User.objects.create_user(
+            username='doctor_inpatient',
+            password='testpass123',
+            role='doctor',
+            approved=True
+        )
+
+    def test_bed_allocation_and_free_beds(self):
+        """
+        Тест розрахунку ліжкового фонду:
+        - 2 власні чоловічі та 2 власні жіночі ліжка
+        - Розрахунок вільних ліжок та виявлення позичених ліжок
+        """
+        # Створюємо 2 власних госпіталізованих чоловіків
+        p_male1 = Patient.objects.create(
+            last_name='Чоловік', first_name='Один', gender='M',
+            hospitalization_status='inpatient', bed_owner='Олег', is_active=True
+        )
+        p_male2 = Patient.objects.create(
+            last_name='Чоловік', first_name='Два', gender='M',
+            hospitalization_status='inpatient', bed_owner='Олег', is_active=True
+        )
+        # Створюємо 1 позиченого чоловіка
+        p_male_borrowed = Patient.objects.create(
+            last_name='Чоловік', first_name='Позичений', gender='M',
+            hospitalization_status='inpatient', bed_owner='Петренко', is_active=True
+        )
+
+        # Створюємо 1 власну госпіталізовану жінку
+        p_female1 = Patient.objects.create(
+            last_name='Жінка', first_name='Одна', gender='F',
+            hospitalization_status='inpatient', bed_owner='Олег', is_active=True
+        )
+
+        self.client.login(username='doctor_inpatient', password='testpass123')
+        response = self.client.get(reverse('inpatient_list'))
+        self.assertEqual(response.status_code, 200)
+
+        # Перевіряємо завантажену матрицю ліжок
+        own_male_beds = response.context['own_male_beds']
+        own_female_beds = response.context['own_female_beds']
+        borrowed_male_patients = response.context['borrowed_male_patients']
+        borrowed_female_patients = response.context['borrowed_female_patients']
+
+        # Перевіряємо кількість власних ліжок (завжди 2)
+        self.assertEqual(len(own_male_beds), 2)
+        self.assertEqual(len(own_female_beds), 2)
+
+        # Обидва чоловічі ліжка зайняті
+        self.assertTrue(own_male_beds[0]['occupied'])
+        self.assertEqual(own_male_beds[0]['patient'], p_male2)
+        self.assertTrue(own_male_beds[1]['occupied'])
+        self.assertEqual(own_male_beds[1]['patient'], p_male1)
+
+        # Тільки одне жіноче ліжко зайняте
+        self.assertTrue(own_female_beds[0]['occupied'])
+        self.assertEqual(own_female_beds[0]['patient'], p_female1)
+        self.assertFalse(own_female_beds[1]['occupied'])
+        self.assertIsNone(own_female_beds[1]['patient'])
+
+        # Чоловік-позичений має бути в списку позичених
+        self.assertEqual(len(borrowed_male_patients), 1)
+        self.assertEqual(borrowed_male_patients[0], p_male_borrowed)
+        self.assertEqual(len(borrowed_female_patients), 0)
+
+        # Перевіряємо наявність тексту "Позичено у: Петренко" в HTML
+        self.assertContains(response, 'Позичено у: Петренко')
+
+    def test_admit_patient_from_queue(self):
+        """
+        Тест переходу пацієнта з черги в стаціонар:
+        - Перевірка зміни статусу на 'inpatient'
+        - Встановлення дати початку на сьогодні
+        - Призначення bed_owner
+        - Автоматичне генерування фракцій
+        """
+        # Створюємо пацієнта у черзі з плановою кількістю фракцій
+        patient = Patient.objects.create(
+            last_name='Черговий',
+            first_name='Пацієнт',
+            gender='M',
+            hospitalization_status='queue',
+            planned_admission_date=date.today(),
+            total_fractions=10,
+            dose_per_fraction=2.0,
+            is_active=True
+        )
+
+        self.client.login(username='doctor_inpatient', password='testpass123')
+        
+        # Виконуємо POST запит на госпіталізацію з призначенням ліжка лікаря 'Петренко'
+        response = self.client.post(
+            reverse('admit_patient', kwargs={'pk': patient.pk}),
+            data={'bed_owner': 'Петренко'}
+        )
+        self.assertEqual(response.status_code, 302) # редірект назад на inpatient_list
+
+        patient.refresh_from_db()
+        self.assertEqual(patient.hospitalization_status, 'inpatient')
+        self.assertEqual(patient.treatment_start_date, date.today())
+        self.assertEqual(patient.bed_owner, 'Петренко')
+
+        # Фракції мають бути автоматично згенеровані
+        fractions_count = patient.fractions.count()
+        self.assertEqual(fractions_count, 10)
+        # Перевіримо статус першої фракції
+        first_fraction = patient.fractions.order_by('date').first()
+        self.assertEqual(first_fraction.status, 'scheduled')
+
+
+

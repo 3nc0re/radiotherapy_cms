@@ -11,7 +11,7 @@
         <ul>
             <li><span>{{ ct_today_count }}</span> пацієнтів на КТ-симуляцію</li>
             <li><span>{{ start_today_count }}</span> пацієнтів на початок лікування</li>
-            <li><span>{{ discharge_today_count }}</span> запланованих виписок</li>
+            <li><span>{{ discharge_today_count }}</span> Заплановані виписки (сьогодні/завтра)</li>
         </ul>
     </div>
     
@@ -32,6 +32,9 @@
                         <i class="fas fa-file-medical-alt" style="color: #ffc107;"></i>
                         У пацієнта <a href="{% url 'patient_detail' notification.patient.id %}">{{ notification.patient.full_name }}</a> 
                         закінчується МВТН {{ notification.incapacity_end_date|date:"d.m.Y" }}.
+                    {% elif notification.type == 'incapacity_alert' %}
+                        <i class="fas fa-exclamation-triangle" style="color: #dc3545;"></i>
+                        <span>⚠️ У пацієнта <a href="{% url 'patient_detail' notification.patient.id %}">{{ notification.patient.full_name }}</a> МВТН НЕ покриває курс лікування або збігає! Діє до: {{ notification.incapacity_end_date|date:"d.m.Y" }}. Реальне завершення лікування: {{ notification.actual_discharge_date|date:"d.m.Y"|default:"—" }}. Потрібно продовжити вручну.</span>
                     {% endif %}
                 </li>
             {% empty %}

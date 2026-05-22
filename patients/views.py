@@ -5,7 +5,8 @@ from django.http import JsonResponse
 from datetime import date, timedelta
 from django.contrib.auth import login, logout, authenticate
 from django.contrib import messages
-from django.db.models import Q, Count
+from django.db.models import Q, Count, Max, F, DateField, Prefetch
+from django.db.models.functions import Coalesce
 from django.db import models
 from django.utils import timezone
 from .services import generate_fractions_for_patient, auto_confirm_today_fractions, get_patient_treatment_info
@@ -31,56 +32,72 @@ def splash(request):
 
 @login_required
 def dashboard(request):
-    today = date.today()
+    today = timezone.now().date()
+    tomorrow = today + timedelta(days=1)
     
-    # Статистика на сьогодні
-    ct_today_count = Patient.objects.filter(
-        ct_simulation_date=today
+    ct_today_count = Patient.objects.filter(ct_simulation_date=today).count()
+    start_today_count = Patient.objects.filter(treatment_start_date=today).count()
+    
+    active_patients_q = Q(discharge_date__isnull=True) | Q(discharge_date__gte=today)
+    discharge_today_count = Patient.objects.filter(active_patients_q).annotate(
+        actual_discharge_date=Coalesce(
+            Max('fractions__date'),
+            F('treatment_start_date'),
+            output_field=DateField()
+        )
+    ).filter(
+        actual_discharge_date__in=[today, tomorrow]
     ).count()
     
-    start_today_count = Patient.objects.filter(
-        treatment_start_date=today
-    ).count()
+    ct_count = Patient.objects.filter(ct_simulation_date__isnull=False, treatment_start_date__isnull=True).count()
+    start_count = Patient.objects.filter(treatment_start_date__isnull=False, treatment_start_date__gt=today).count()
+    in_treatment_count = Patient.objects.filter(treatment_start_date__isnull=False, treatment_start_date__lte=today, discharge_date__isnull=True).count()
     
-    discharge_today_count = Patient.objects.filter(
-        discharge_date=today
-    ).count()
-    
-    # Загальна статистика - використовуємо фільтрацію за датами замість current_stage
-    ct_count = Patient.objects.filter(
-        ct_simulation_date__isnull=False,
-        treatment_start_date__isnull=True
-    ).count()
-    
-    start_count = Patient.objects.filter(
-        treatment_start_date__isnull=False,
-        treatment_start_date__gt=today
-    ).count()
-    
-    in_treatment_count = Patient.objects.filter(
-        treatment_start_date__isnull=False,
-        treatment_start_date__lte=today,
-        discharge_date__isnull=True
-    ).count()
-    
-    # Сповіщення про аналізи крові
     notifications = []
-    in_treatment = Patient.objects.filter(
-        treatment_start_date__isnull=False,
-        treatment_start_date__lte=today,
-        discharge_date__isnull=True
+    active_patients = Patient.objects.filter(active_patients_q).prefetch_related(
+        Prefetch(
+            'medical_incapacities',
+            queryset=MedicalIncapacity.objects.order_by('-end_date'),
+            to_attr='prefetched_incapacities'
+        ),
+        'fractions'
     )
-    for patient in in_treatment:
-        last = patient.last_blood_test_date or patient.treatment_start_date
-        if not last or (today - last).days >= 10:
-            notifications.append({'patient': patient})
     
-    # Виписані цього тижня
+    for patient in active_patients:
+        # Blood test check
+        if patient.is_in_treatment:
+            last = patient.last_blood_test_date or patient.treatment_start_date
+            if not last or (today - last).days >= 10:
+                notifications.append({
+                    'type': 'blood_test',
+                    'patient': patient,
+                    'due_date': patient.next_blood_test_due_date or (last + timedelta(days=10) if last else today)
+                })
+        
+        # MVTN/Incapacity check
+        incapacity = patient.prefetched_incapacities[0] if hasattr(patient, 'prefetched_incapacities') and patient.prefetched_incapacities else None
+        if incapacity and incapacity.end_date and incapacity.end_date >= today:
+            actual_end = patient.get_actual_discharge_date
+            incapacity_end = incapacity.end_date
+            cond_a = actual_end and actual_end > incapacity_end
+            cond_b = (incapacity_end - today).days <= 2
+            
+            if cond_a or cond_b:
+                actual_end_str = actual_end.strftime('%d.%m.%Y') if actual_end else '—'
+                incapacity_end_str = incapacity_end.strftime('%d.%m.%Y')
+                message = f"⚠️ У пацієнта {patient.full_name} МВТН НЕ покриває курс лікування або збігає! Діє до: {incapacity_end_str}. Реальне завершення лікування: {actual_end_str}. Потрібно продовжити вручну."
+                notifications.append({
+                    'type': 'incapacity_alert',
+                    'patient': patient,
+                    'message': message,
+                    'incapacity_end_date': incapacity_end,
+                    'actual_discharge_date': actual_end
+                })
+                
+    notifications.sort(key=lambda n: 0 if n['type'] == 'incapacity_alert' else 1)
+    
     from_date = today - timedelta(days=7)
-    discharged_this_week = Patient.objects.filter(
-        discharge_date__isnull=False,
-        discharge_date__gte=from_date
-    ).count()
+    discharged_this_week = Patient.objects.filter(discharge_date__isnull=False, discharge_date__gte=from_date).count()
     
     context = {
         'ct_today_count': ct_today_count,
@@ -587,15 +604,84 @@ def search_patients(request):
 
 @login_required
 def inpatient_list(request):
-    """Список стаціонарних пацієнтів"""
-    inpatients = Patient.objects.filter(
-        inpatient_status='стаціонарно',
-        discharge_date__isnull=True
+    """Список стаціонарних пацієнтів та ліжкового фонду"""
+    # Фільтруємо пацієнтів ВИКЛЮЧНО за статусом inpatient та is_active=True
+    current_inpatients = Patient.objects.filter(
+        hospitalization_status='inpatient',
+        is_active=True
     ).order_by('last_name', 'first_name')
     
+    # Збагачуємо пацієнтів динамічною датою виписки та прапорцем позиченого ліжка
+    for p in current_inpatients:
+        p.actual_discharge_date = p.get_actual_discharge_date
+        p.is_borrowed = (p.bed_owner != 'Олег')
+        
+    # Розподіл за статтю
+    own_male_patients = [p for p in current_inpatients if p.gender == 'M' and p.bed_owner == 'Олег']
+    borrowed_male_patients = [p for p in current_inpatients if p.gender == 'M' and p.bed_owner != 'Олег']
+    
+    own_female_patients = [p for p in current_inpatients if p.gender == 'F' and p.bed_owner == 'Олег']
+    borrowed_female_patients = [p for p in current_inpatients if p.gender == 'F' and p.bed_owner != 'Олег']
+    
+    # Про всяк випадок переносимо надлишок власних пацієнтів у секцію додаткових карток
+    if len(own_male_patients) > 2:
+        borrowed_male_patients.extend(own_male_patients[2:])
+        own_male_patients = own_male_patients[:2]
+        
+    if len(own_female_patients) > 2:
+        borrowed_female_patients.extend(own_female_patients[2:])
+        own_female_patients = own_female_patients[:2]
+        
+    # Формуємо матрицю власних ліжок (завжди довжиною 2)
+    own_male_beds = []
+    for i in range(2):
+        if i < len(own_male_patients):
+            own_male_beds.append({'occupied': True, 'patient': own_male_patients[i]})
+        else:
+            own_male_beds.append({'occupied': False, 'patient': None})
+            
+    own_female_beds = []
+    for i in range(2):
+        if i < len(own_female_patients):
+            own_female_beds.append({'occupied': True, 'patient': own_female_patients[i]})
+        else:
+            own_female_beds.append({'occupied': False, 'patient': None})
+            
+    # Пацієнти у черзі (статус queue)
+    queue_patients = Patient.objects.filter(
+        hospitalization_status='queue',
+        is_active=True
+    ).order_by('planned_admission_date', 'last_name', 'first_name')
+    
     return render(request, 'patients/inpatient_list.html', {
-        'patients': inpatients
+        'patients': current_inpatients,
+        'own_male_beds': own_male_beds,
+        'own_female_beds': own_female_beds,
+        'borrowed_male_patients': borrowed_male_patients,
+        'borrowed_female_patients': borrowed_female_patients,
+        'queue_patients': queue_patients,
     })
+
+@login_required
+@require_POST
+def admit_patient(request, pk):
+    """Госпіталізація пацієнта з черги у стаціонар"""
+    patient = get_object_or_404(Patient, pk=pk)
+    bed_owner = request.POST.get('bed_owner', 'Олег').strip()
+    if not bed_owner:
+        bed_owner = 'Олег'
+        
+    patient.hospitalization_status = 'inpatient'
+    patient.treatment_start_date = date.today()
+    patient.bed_owner = bed_owner
+    patient.save()
+    
+    # Автоматично генеруємо фракції, якщо вказано загальну кількість та РОД
+    if patient.total_fractions and patient.dose_per_fraction:
+        generate_fractions_for_patient(patient)
+        
+    messages.success(request, f'Пацієнта {patient.full_name} успішно госпіталізовано.')
+    return redirect('inpatient_list')
 
 @login_required
 def patient_archive(request):
@@ -775,7 +861,7 @@ class PatientData(BaseModel):
     first_name: Optional[str] = Field(None, description="Ім'я пацієнта")
     middle_name: Optional[str] = Field(None, description="По батькові пацієнта")
     birth_date: Optional[str] = Field(None, description="Дата народження строго у форматі DD.MM.YYYY (наприклад: 15.04.1980)")
-    gender: Optional[str] = Field(None, description="Стать пацієнта. Поверни 'Ч' для чоловічої, 'Ж' для жіночої.")
+    gender: Optional[str] = Field(None, description="Стать пацієнта. Поверни 'M' для чоловічої, 'F' для жіночої.")
     icd_code: Optional[str] = Field(None, description="Код діагнозу за МКХ-10 (наприклад: C50.9, C34.1)")
     tumor_morphology: Optional[str] = Field(None, description="Морфологія пухлини (наприклад: інфільтруюча карцинома, аденокарцинома)")
     disease_stage: Optional[str] = Field(None, description="Стадія захворювання римськими цифрами (наприклад: IIA, III, IV). Не плутати з TNM!")
@@ -811,7 +897,7 @@ def parse_medical_document(request):
 Ти досвідчений медичний реєстратор. Прочитай надану медичну виписку (епікриз, направлення) та витягни наступні дані:
 1. ПІБ пацієнта (звертай особливу увагу на правильність прізвища).
 2. Дату народження (ОБОВ'ЯЗКОВО у форматі DD.MM.YYYY).
-3. Стать (визнач за ПІБ або текстом: поверни букву 'Ч' для чоловічої, або 'Ж' для жіночої).
+3. Стать (визнач за ПІБ або текстом: поверни букву 'M' для чоловічої, або 'F' для жіночої).
 4. Діагноз (код МКХ-10 та морфологію).
 5. Стадію захворювання (зверни увагу, стадія зазвичай позначається римськими цифрами, наприклад I, IIA, III, IV. Не вписуй сюди TNM).
 6. TNM стадіювання (окремо індекси T, N, M).
@@ -831,6 +917,11 @@ def parse_medical_document(request):
         )
         
         data = json.loads(response.text)
+        # Fallback gender mapping
+        if data.get('gender') == 'Ч':
+            data['gender'] = 'M'
+        elif data.get('gender') == 'Ж':
+            data['gender'] = 'F'
         return JsonResponse(data)
         
     except Exception as e:

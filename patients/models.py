@@ -79,7 +79,7 @@ class Patient(models.Model):
     first_name = models.CharField(max_length=255, blank=True, null=True, help_text="Ім'я")
     middle_name = models.CharField(max_length=255, blank=True, null=True, help_text="По батькові")
     birth_date = models.DateField(blank=True, null=True, help_text="Дата народження")
-    gender = models.CharField(max_length=10, blank=True, null=True, choices=[('Ч', 'Чоловіча'), ('Ж', 'Жіноча')], help_text="Стать")
+    gender = models.CharField(max_length=10, blank=True, null=True, choices=[('M', 'Чоловіча'), ('F', 'Жіноча')], help_text="Стать")
     
     # Діагноз та стадіювання
     diagnosis = models.CharField(max_length=255, blank=True, null=True, help_text="Діагноз")
@@ -107,7 +107,10 @@ class Patient(models.Model):
     histology_description = models.TextField(blank=True, null=True, help_text="Опис гістології")
     
     # Стаціонар та інше
-    inpatient_status = models.CharField(max_length=50, blank=True, null=True, help_text="Статус госпіталізації")
+    is_active = models.BooleanField(default=True, help_text="Чи є пацієнт активним (не в архіві)")
+    hospitalization_status = models.CharField(max_length=20, choices=[('outpatient', 'Амбулаторно'), ('inpatient', 'Стаціонар'), ('queue', 'У черзі')], default='outpatient', blank=True, help_text="Статус госпіталізації")
+    planned_admission_date = models.DateField(null=True, blank=True, help_text="Планова дата госпіталізації")
+    bed_owner = models.CharField(max_length=100, default='Олег', blank=True, help_text="Прізвище лікаря, чиє ліжко зайнято. Якщо 'Олег' — це власне ліжко.")
     ward_number = models.IntegerField(blank=True, null=True, help_text="Номер палати")
     prior_radiation = models.CharField(max_length=255, blank=True, null=True, help_text="Попереднє опромінення")
     notes = models.TextField(blank=True, null=True, help_text="Примітки")
@@ -168,6 +171,23 @@ class Patient(models.Model):
             return "Початок лікування"
 
         return "Новий"
+
+    @property
+    def get_actual_discharge_date(self):
+        """
+        Повертає дату найостаннішої фракції пацієнта з FractionHistory.
+        Якщо фракцій немає, повертає treatment_start_date або None.
+        """
+        if hasattr(self, '_prefetched_objects_cache') and 'fractions' in self._prefetched_objects_cache:
+            fractions = list(self.fractions.all())
+            if fractions:
+                return max(f.date for f in fractions)
+            return self.treatment_start_date or None
+            
+        latest_fraction = self.fractions.order_by('date').last()
+        if latest_fraction:
+            return latest_fraction.date
+        return self.treatment_start_date or None
 
     @property
     def current_fraction(self):

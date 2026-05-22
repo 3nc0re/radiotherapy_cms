@@ -1,46 +1,284 @@
 {% extends 'base.html' %}
 {% block content %}
 <div class="page-header">
-    <h1>Пацієнти в стаціонарі</h1>
-    <a href="{% url 'dashboard' %}" class="back-link">← Назад до дашборду</a>
+    <h1><i class="fas fa-hospital-user"></i> Стаціонар та Ліжковий Фонд</h1>
+    <a href="{% url 'dashboard' %}" class="back-link"><i class="fas fa-arrow-left"></i> Назад до дашборду</a>
 </div>
 
-<div class="card">
-    <table class="patients-table">
-        <thead>
-            <tr>
-                <th>Палата №</th>
-                <th>ПІБ</th>
-                <th>Дата початку лікування</th>
-                <th>Дата виписки</th>
-                <th>Деталі</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for patient in patients %}
-            <tr>
-                <td>{{ patient.ward_number|default:"—" }}</td>
-                <td>
-                    <a href="{% url 'patient_detail' patient.pk %}" class="patient-name-link">{{ patient.full_name }}</a>
-                </td>
-                <td>{{ patient.treatment_start_date|date:"d.m.Y"|default:"—" }}</td>
-                <td>{{ patient.discharge_date|date:"d.m.Y"|default:"—" }}</td>
-                <td><a href="{% url 'patient_detail' patient.pk %}" class="details-link">Картка</a></td>
-            </tr>
-            {% empty %}
-            <tr>
-                <td colspan="5">Пацієнтів у стаціонарі немає</td>
-            </tr>
+<!-- Матриця ліжок (Bed Matrix) -->
+<div class="bed-matrix-container">
+    <!-- Чоловіча секція -->
+    <div class="gender-section">
+        <h2 class="gender-title male-title">
+            <i class="fas fa-mars"></i> Чоловічі ліжка
+        </h2>
+        <div class="beds-grid">
+            {% for bed in own_male_beds %}
+                {% if bed.occupied %}
+                    <div class="bed-card occupied">
+                        <span class="bed-badge">Власне ліжко (Зайнято)</span>
+                        <div class="bed-patient-name">
+                            <a href="{% url 'patient_detail' bed.patient.pk %}" class="bed-patient-link">
+                                {{ bed.patient.full_name }}
+                            </a>
+                        </div>
+                        <div class="bed-details">
+                            Палата №{{ bed.patient.ward_number|default:"—" }}<br>
+                            Виписка: {{ bed.patient.actual_discharge_date|date:"d.m.Y"|default:"не визначено" }}
+                        </div>
+                    </div>
+                {% else %}
+                    <div class="bed-card free">
+                        <span class="bed-badge">Власне ліжко</span>
+                        <div style="font-size: 1.5rem; margin: 10px 0;"><i class="fas fa-bed"></i></div>
+                        <div>Вільне ліжко</div>
+                    </div>
+                {% endif %}
             {% endfor %}
-        </tbody>
-    </table>
+        </div>
+
+        {% if borrowed_male_patients %}
+            <h3 class="borrowed-section-title">Додаткові ліжка (Позичені)</h3>
+            <div class="borrowed-cards">
+                {% for patient in borrowed_male_patients %}
+                    <div class="borrowed-card">
+                        <div class="borrowed-info">
+                            <span class="borrowed-badge"><i class="fas fa-handshake"></i> Позичено у: {{ patient.bed_owner }}</span>
+                            <a href="{% url 'patient_detail' patient.pk %}" class="bed-patient-link borrowed-patient-name">
+                                {{ patient.full_name }}
+                            </a>
+                            <span style="font-size: 0.8rem; color: var(--text-light-color);">
+                                Палата: {{ patient.ward_number|default:"—" }} | Виписка: {{ patient.actual_discharge_date|date:"d.m.Y"|default:"не визначено" }}
+                            </span>
+                        </div>
+                        <a href="{% url 'patient_detail' patient.pk %}" class="btn-icon" title="Переглянути картку">
+                            <i class="fas fa-chevron-right"></i>
+                        </a>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- Жіноча секція -->
+    <div class="gender-section">
+        <h2 class="gender-title female-title">
+            <i class="fas fa-venus"></i> Жіночі ліжка
+        </h2>
+        <div class="beds-grid">
+            {% for bed in own_female_beds %}
+                {% if bed.occupied %}
+                    <div class="bed-card occupied female-occupied">
+                        <span class="bed-badge female-badge">Власне ліжко (Зайнято)</span>
+                        <div class="bed-patient-name">
+                            <a href="{% url 'patient_detail' bed.patient.pk %}" class="bed-patient-link">
+                                {{ bed.patient.full_name }}
+                            </a>
+                        </div>
+                        <div class="bed-details">
+                            Палата №{{ bed.patient.ward_number|default:"—" }}<br>
+                            Виписка: {{ bed.patient.actual_discharge_date|date:"d.m.Y"|default:"не визначено" }}
+                        </div>
+                    </div>
+                {% else %}
+                    <div class="bed-card free female-free">
+                        <span class="bed-badge female-badge">Власне ліжко</span>
+                        <div style="font-size: 1.5rem; margin: 10px 0;"><i class="fas fa-bed"></i></div>
+                        <div>Вільне ліжко</div>
+                    </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+
+        {% if borrowed_female_patients %}
+            <h3 class="borrowed-section-title">Додаткові ліжка (Позичені)</h3>
+            <div class="borrowed-cards">
+                {% for patient in borrowed_female_patients %}
+                    <div class="borrowed-card female-borrowed">
+                        <div class="borrowed-info">
+                            <span class="borrowed-badge female-borrowed-badge"><i class="fas fa-handshake"></i> Позичено у: {{ patient.bed_owner }}</span>
+                            <a href="{% url 'patient_detail' patient.pk %}" class="bed-patient-link borrowed-patient-name">
+                                {{ patient.full_name }}
+                            </a>
+                            <span style="font-size: 0.8rem; color: var(--text-light-color);">
+                                Палата: {{ patient.ward_number|default:"—" }} | Виписка: {{ patient.actual_discharge_date|date:"d.m.Y"|default:"не визначено" }}
+                            </span>
+                        </div>
+                        <a href="{% url 'patient_detail' patient.pk %}" class="btn-icon" title="Переглянути картку">
+                            <i class="fas fa-chevron-right"></i>
+                        </a>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    </div>
 </div>
 
+<!-- Списки пацієнтів -->
+<div class="inpatient-lists-container">
+    <!-- Таблиця госпіталізованих -->
+    <div class="section-card">
+        <div class="section-card-header">
+            <h2><i class="fas fa-user-injured"></i> Пацієнти у відділенні</h2>
+            <span class="badge badge-info">{{ patients.count }} госпіталізовано</span>
+        </div>
+        <div class="table-responsive">
+            <table class="patients-table">
+                <thead>
+                    <tr>
+                        <th>ПІБ</th>
+                        <th>Стать</th>
+                        <th>Палата №</th>
+                        <th>Власник ліжка</th>
+                        <th>Реальна дата виписки</th>
+                        <th style="text-align: right;">Дії</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for patient in patients %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'patient_detail' patient.pk %}" class="patient-name-link">{{ patient.full_name }}</a>
+                        </td>
+                        <td>
+                            {% if patient.gender == 'M' %}
+                                <span class="gender-tag male"><i class="fas fa-mars"></i> Чол</span>
+                            {% else %}
+                                <span class="gender-tag female"><i class="fas fa-venus"></i> Жін</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ patient.ward_number|default:"—" }}</td>
+                        <td>
+                            {% if patient.bed_owner == 'Олег' %}
+                                <span class="owner-tag own">Власне</span>
+                            {% else %}
+                                <span class="owner-tag borrowed" title="Позичено у: {{ patient.bed_owner }}">
+                                    🤝 {{ patient.bed_owner }}
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <strong>{{ patient.actual_discharge_date|date:"d.m.Y"|default:"не визначено" }}</strong>
+                        </td>
+                        <td style="text-align: right;">
+                            <a href="{% url 'patient_detail' patient.pk %}" class="btn-action" title="Картка пацієнта">
+                                <i class="fas fa-folder-open"></i> Картка
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" style="text-align: center; padding: 30px; color: var(--text-light-color);">
+                            <i class="fas fa-info-circle" style="font-size: 1.5rem; margin-bottom: 10px; display: block;"></i>
+                            У відділенні немає госпіталізованих пацієнтів
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Черга на госпіталізацію -->
+    <div class="section-card" style="margin-top: 30px;">
+        <div class="section-card-header">
+            <h2><i class="fas fa-clock"></i> Лист очікування (Черга)</h2>
+            <span class="badge badge-warning">{{ queue_patients.count }} у черзі</span>
+        </div>
+        <div class="table-responsive">
+            <table class="patients-table">
+                <thead>
+                    <tr>
+                        <th>ПІБ</th>
+                        <th>Стать</th>
+                        <th>Планова дата госпіталізації</th>
+                        <th>Діагноз</th>
+                        <th style="text-align: right;">Дії</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for patient in queue_patients %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'patient_detail' patient.pk %}" class="patient-name-link">{{ patient.full_name }}</a>
+                        </td>
+                        <td>
+                            {% if patient.gender == 'M' %}
+                                <span class="gender-tag male"><i class="fas fa-mars"></i> Чол</span>
+                            {% else %}
+                                <span class="gender-tag female"><i class="fas fa-venus"></i> Жін</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="date-tag">
+                                <i class="far fa-calendar-alt"></i> {{ patient.planned_admission_date|date:"d.m.Y"|default:"не вказано" }}
+                            </span>
+                        </td>
+                        <td class="text-truncate" style="max-width: 250px;" title="{{ patient.diagnosis }}">
+                            {{ patient.diagnosis|default:"—" }}
+                        </td>
+                        <td style="text-align: right;">
+                            <button type="button" class="btn btn-primary btn-sm" onclick="openAdmissionModal({{ patient.pk }}, '{{ patient.full_name|escapejs }}')">
+                                <i class="fas fa-user-plus"></i> Госпіталізувати
+                            </button>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" style="text-align: center; padding: 30px; color: var(--text-light-color);">
+                            <i class="fas fa-info-circle" style="font-size: 1.5rem; margin-bottom: 10px; display: block;"></i>
+                            У черзі немає пацієнтів
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Модальне вікно госпіталізації -->
+<div id="admissionModal" class="modal">
+    <div class="modal-content">
+        <span class="close-btn" onclick="closeModal()">&times;</span>
+        <h2><i class="fas fa-hospital-user" style="color: var(--primary-color);"></i> Госпіталізація</h2>
+        <p style="margin-bottom: 20px;">Ви збираєтесь госпіталізувати пацієнта: <br><strong id="modalPatientName" style="font-size: 1.1rem; color: var(--text-color);"></strong></p>
+        
+        <form id="admissionForm" method="POST" action="">
+            {% csrf_token %}
+            <div class="form-group">
+                <label for="bedOwnerSelect">Власник ліжка:</label>
+                <select id="bedOwnerSelect" name="bed_owner_select" onchange="toggleBedOwnerInput(this)" class="form-control">
+                    <option value="Олег">Власне ліжко (Олег)</option>
+                    <option value="other">Позичене ліжко в іншого лікаря</option>
+                </select>
+            </div>
+            
+            <div id="customBedOwnerGroup" class="form-group" style="display: none; margin-top: 15px;">
+                <label for="bedOwnerInput">Прізвище лікаря (власника ліжка):</label>
+                <input type="text" id="bedOwnerInput" name="bed_owner" value="Олег" class="form-control" placeholder="Введіть прізвище лікаря">
+            </div>
+            
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeModal()">Скасувати</button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-check"></i> Підтвердити</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Стилі -->
 <style>
 .page-header {
     text-align: center;
     position: relative;
-    margin-bottom: 20px;
+    margin-bottom: 30px;
+}
+.page-header h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    margin: 0;
+    color: var(--text-color);
 }
 .back-link {
     position: absolute;
@@ -49,37 +287,540 @@
     transform: translateY(-50%);
     text-decoration: none;
     color: var(--primary-color);
+    font-weight: 500;
+    transition: transform 0.2s ease;
+}
+.back-link:hover {
+    transform: translateY(-50%) translateX(-4px);
+}
+
+/* Bed Matrix Styles */
+.bed-matrix-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 25px;
+    margin-bottom: 40px;
+}
+@media (max-width: 992px) {
+    .bed-matrix-container {
+        grid-template-columns: 1fr;
+    }
+}
+.gender-section {
+    background-color: var(--card-bg-color);
+    border-radius: 14px;
+    padding: 25px;
+    box-shadow: var(--shadow);
+    border: 1px solid var(--border-color);
+}
+.gender-title {
+    font-size: 1.3rem;
+    font-weight: 600;
+    margin-top: 0;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--border-color);
+}
+.male-title {
+    color: #3182ce;
+    border-bottom-color: rgba(49, 130, 206, 0.2);
+}
+.female-title {
+    color: #d53f8c;
+    border-bottom-color: rgba(213, 63, 140, 0.2);
+}
+.beds-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+.bed-card {
+    border-radius: 10px;
+    padding: 20px;
+    text-align: center;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    box-sizing: border-box;
+}
+.bed-card.free {
+    background-color: rgba(72, 187, 120, 0.04);
+    border: 2px dashed rgba(72, 187, 120, 0.3);
+    color: #38a169;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    min-height: 140px;
+}
+.bed-card.free:hover {
+    background-color: rgba(72, 187, 120, 0.08);
+    border-color: rgba(72, 187, 120, 0.5);
+    transform: translateY(-3px);
+}
+.bed-card.occupied {
+    background-color: rgba(49, 130, 206, 0.04);
+    border: 2px solid rgba(49, 130, 206, 0.2);
+    color: var(--text-color);
+    text-align: left;
+    min-height: 140px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+.bed-card.occupied.female-occupied {
+    background-color: rgba(213, 63, 140, 0.04);
+    border: 2px solid rgba(213, 63, 140, 0.2);
+}
+.bed-card.occupied:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 15px rgba(49, 130, 206, 0.12);
+}
+.bed-card.occupied.female-occupied:hover {
+    box-shadow: 0 6px 15px rgba(213, 63, 140, 0.12);
+}
+.bed-badge {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 12px;
+    align-self: flex-start;
+    letter-spacing: 0.5px;
+}
+.bed-card.free .bed-badge {
+    background-color: rgba(72, 187, 120, 0.12);
+    color: #38a169;
+}
+.bed-card.occupied .bed-badge {
+    background-color: rgba(49, 130, 206, 0.12);
+    color: #3182ce;
+}
+.bed-card.occupied.female-occupied .bed-badge {
+    background-color: rgba(213, 63, 140, 0.12);
+    color: #d53f8c;
+}
+.bed-patient-name {
+    font-weight: 600;
+    font-size: 1.05rem;
+    margin-top: 12px;
+    margin-bottom: 6px;
+    line-height: 1.3;
+}
+.bed-patient-link {
+    color: var(--text-color);
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+.bed-patient-link:hover {
+    color: var(--primary-color);
+    text-decoration: underline;
+}
+.bed-details {
+    font-size: 0.8rem;
+    color: var(--text-light-color);
+    line-height: 1.4;
+}
+
+.borrowed-section-title {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    color: var(--text-light-color);
+    margin-top: 25px;
+    margin-bottom: 12px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.borrowed-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.borrowed-card {
+    background-color: rgba(221, 107, 32, 0.03);
+    border: 1px solid rgba(221, 107, 32, 0.25);
+    border-radius: 10px;
+    padding: 14px 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: all 0.2s ease;
+}
+.borrowed-card.female-borrowed {
+    background-color: rgba(213, 63, 140, 0.02);
+    border: 1px solid rgba(213, 63, 140, 0.2);
+}
+.borrowed-card:hover {
+    transform: translateX(4px);
+    background-color: rgba(221, 107, 32, 0.06);
+    box-shadow: 0 2px 8px rgba(221, 107, 32, 0.08);
+}
+.borrowed-card.female-borrowed:hover {
+    background-color: rgba(213, 63, 140, 0.05);
+    box-shadow: 0 2px 8px rgba(213, 63, 140, 0.05);
+}
+.borrowed-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.borrowed-badge {
+    font-size: 0.72rem;
+    color: #dd6b20;
+    font-weight: 700;
+    text-transform: uppercase;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    letter-spacing: 0.5px;
+}
+.borrowed-card.female-borrowed .borrowed-badge {
+    color: #d53f8c;
+}
+.borrowed-patient-name {
+    font-size: 1rem;
+    font-weight: 600;
+}
+.btn-icon {
+    color: var(--text-light-color);
+    text-decoration: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s, color 0.2s;
+}
+.borrowed-card:hover .btn-icon {
+    background-color: rgba(221, 107, 32, 0.1);
+    color: #dd6b20;
+}
+.borrowed-card.female-borrowed:hover .btn-icon {
+    background-color: rgba(213, 63, 140, 0.1);
+    color: #d53f8c;
+}
+
+/* Sections */
+.section-card {
+    background-color: var(--card-bg-color);
+    border-radius: 14px;
+    padding: 25px;
+    box-shadow: var(--shadow);
+    border: 1px solid var(--border-color);
+}
+.section-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+.section-card-header h2 {
+    font-size: 1.4rem;
+    font-weight: 600;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.badge {
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+.badge-info {
+    background-color: rgba(49, 130, 206, 0.12);
+    color: #3182ce;
+}
+.badge-warning {
+    background-color: rgba(221, 107, 32, 0.12);
+    color: #dd6b20;
+}
+
+/* Tables */
+.table-responsive {
+    overflow-x: auto;
 }
 .patients-table {
     width: 100%;
     border-collapse: collapse;
 }
 .patients-table th, .patients-table td {
-    padding: 15px;
+    padding: 14px 18px;
     text-align: left;
     border-bottom: 1px solid var(--border-color);
+    font-size: 0.95rem;
 }
 .patients-table th {
     font-weight: 600;
     color: var(--text-light-color);
+    background-color: var(--table-header-bg);
+}
+.patients-table tbody tr {
+    transition: background-color 0.2s ease;
 }
 .patients-table tbody tr:hover {
-    background-color: #f8f9fa;
-}
-.details-link {
-    text-decoration: none;
-    color: var(--primary-color);
-    font-weight: bold;
+    background-color: var(--hover-bg);
 }
 .patient-name-link {
     text-decoration: none;
     color: var(--text-color);
-    font-weight: 500;
+    font-weight: 600;
     transition: color 0.2s ease;
 }
 .patient-name-link:hover {
     color: var(--primary-color);
     text-decoration: underline;
 }
+
+.gender-tag {
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+.gender-tag.male {
+    background-color: rgba(49, 130, 206, 0.08);
+    color: #3182ce;
+}
+.gender-tag.female {
+    background-color: rgba(213, 63, 140, 0.08);
+    color: #d53f8c;
+}
+
+.owner-tag {
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 6px;
+}
+.owner-tag.own {
+    background-color: rgba(72, 187, 120, 0.08);
+    color: #38a169;
+}
+.owner-tag.borrowed {
+    background-color: rgba(221, 107, 32, 0.08);
+    color: #dd6b20;
+}
+.date-tag {
+    color: var(--text-light-color);
+    font-size: 0.9rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn-action {
+    background-color: transparent;
+    color: var(--primary-color);
+    border: 1px solid var(--primary-color);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.btn-action:hover {
+    background-color: var(--primary-color);
+    color: white;
+}
+.btn-sm {
+    padding: 6px 12px;
+    font-size: 0.85rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.text-truncate {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Modal Window */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 2000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(5px);
+}
+.modal-content {
+    background-color: var(--card-bg-color);
+    margin: 12% auto;
+    padding: 30px;
+    border: 1px solid var(--border-color);
+    width: 460px;
+    border-radius: 14px;
+    box-shadow: 0 10px 35px rgba(0,0,0,0.18);
+    position: relative;
+    animation: slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    box-sizing: border-box;
+}
+@keyframes slideDown {
+    from { transform: translateY(-30px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+.close-btn {
+    position: absolute;
+    right: 22px;
+    top: 18px;
+    font-size: 28px;
+    font-weight: 500;
+    cursor: pointer;
+    color: var(--text-light-color);
+    transition: color 0.2s;
+    line-height: 1;
+}
+.close-btn:hover {
+    color: var(--text-color);
+}
+.modal h2 {
+    font-size: 1.35rem;
+    font-weight: 600;
+    margin-top: 0;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.form-group {
+    margin-bottom: 20px;
+    text-align: left;
+}
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+.form-control {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-sizing: border-box;
+    background-color: var(--input-bg);
+    color: var(--text-color);
+    font-size: 0.95rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+.form-control:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.15);
+}
+.modal-actions {
+    margin-top: 25px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+}
+.btn {
+    padding: 10px 18px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.92rem;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+.btn-primary {
+    background-color: var(--primary-color);
+    color: white;
+}
+.btn-primary:hover {
+    background-color: #357ABD;
+    transform: translateY(-1px);
+}
+.btn-secondary {
+    background-color: var(--border-color);
+    color: var(--text-color);
+}
+.btn-secondary:hover {
+    background-color: rgba(0, 0, 0, 0.1);
+}
+[data-theme="dark"] .btn-secondary:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
 </style>
-{% endblock %} 
+
+<!-- JavaScript -->
+<script>
+function openAdmissionModal(patientId, patientName) {
+    const modal = document.getElementById('admissionModal');
+    const form = document.getElementById('admissionForm');
+    const patientNameEl = document.getElementById('modalPatientName');
+    
+    patientNameEl.textContent = patientName;
+    form.action = `/patients/${patientId}/admit/`;
+    
+    // Reset state
+    document.getElementById('bedOwnerSelect').value = 'Олег';
+    document.getElementById('bedOwnerInput').value = 'Олег';
+    document.getElementById('customBedOwnerGroup').style.display = 'none';
+    
+    modal.style.display = 'block';
+}
+
+function closeModal() {
+    document.getElementById('admissionModal').style.display = 'none';
+}
+
+function toggleBedOwnerInput(select) {
+    const inputGroup = document.getElementById('customBedOwnerGroup');
+    const input = document.getElementById('bedOwnerInput');
+    if (select.value === 'other') {
+        inputGroup.style.display = 'block';
+        input.value = '';
+        input.focus();
+    } else {
+        inputGroup.style.display = 'none';
+        input.value = 'Олег';
+    }
+}
+
+// Close when clicking outside modal content
+window.onclick = function(event) {
+    const modal = document.getElementById('admissionModal');
+    if (event.target == modal) {
+        closeModal();
+    }
+}
+
+document.getElementById('admissionForm').addEventListener('submit', function(e) {
+    const select = document.getElementById('bedOwnerSelect');
+    const input = document.getElementById('bedOwnerInput');
+    
+    if (select.value === 'Олег') {
+        input.value = 'Олег';
+    } else if (!input.value || input.value.trim() === '') {
+        alert('Будь ласка, введіть прізвище лікаря, у якого позичаєте ліжко.');
+        e.preventDefault();
+    }
+});
+</script>
+{% endblock %}

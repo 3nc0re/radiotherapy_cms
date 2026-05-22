@@ -35,12 +35,17 @@ class PatientForm(forms.ModelForm):
         required=False,
         widget=forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input', 'placeholder': 'дд.мм.рррр'})
     )
+    planned_admission_date = forms.DateField(
+        input_formats=['%d.%m.%Y', '%Y-%m-%d'],
+        required=False,
+        widget=forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input', 'placeholder': 'дд.мм.рррр'})
+    )
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Форматуємо дати для відображення в полях
         date_fields = ['birth_date', 'histology_date', 'ct_simulation_date', 
-                      'treatment_start_date', 'discharge_date', 'last_blood_test_date']
+                      'treatment_start_date', 'discharge_date', 'last_blood_test_date', 'planned_admission_date']
         for field_name in date_fields:
             if self.instance.pk and getattr(self.instance, field_name):
                 date_value = getattr(self.instance, field_name)
@@ -56,7 +61,8 @@ class PatientForm(forms.ModelForm):
             'histology_description', 'ct_simulation_date', 'treatment_start_date',
             'total_fractions', 'dose_per_fraction', 'received_dose',
             'discharge_date', 'treatment_phase',
-            'irradiation_zone', 'inpatient_status', 'ward_number', 'prior_radiation', 
+            'irradiation_zone', 'hospitalization_status', 'planned_admission_date',
+            'bed_owner', 'ward_number', 'prior_radiation', 
             'last_blood_test_date', 'notes'
         ]
         widgets = {
@@ -71,8 +77,8 @@ class PatientForm(forms.ModelForm):
             'middle_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Введіть по батькові'}),
             'gender': forms.Select(attrs={'class': 'form-control'}, choices=[
                 ('', 'Виберіть стать'),
-                ('Ч', 'Чоловіча'),
-                ('Ж', 'Жіноча')
+                ('M', 'Чоловіча'),
+                ('F', 'Жіноча')
             ]),
             'diagnosis': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Введіть діагноз'}),
             'tnm_staging': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Наприклад: T2N0M0'}),
@@ -106,11 +112,13 @@ class PatientForm(forms.ModelForm):
                 ('третя', 'Третя фаза')
             ]),
             'irradiation_zone': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Зона опромінення'}),
-            'inpatient_status': forms.Select(attrs={'class': 'form-control'}, choices=[
-                ('', 'Виберіть статус'),
-                ('амбулаторно', 'Амбулаторно'),
-                ('стаціонарно', 'Стаціонарно')
+            'hospitalization_status': forms.Select(attrs={'class': 'form-control'}, choices=[
+                ('outpatient', 'Амбулаторно'),
+                ('inpatient', 'Стаціонар'),
+                ('queue', 'У черзі')
             ]),
+            'planned_admission_date': forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input', 'placeholder': 'дд.мм.рррр'}),
+            'bed_owner': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Введіть прізвище лікаря'}),
             'ward_number': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': 'Номер палати'}),
             'prior_radiation': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Попереднє опромінення'}),
             'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 4, 'placeholder': 'Додаткові примітки'}),
