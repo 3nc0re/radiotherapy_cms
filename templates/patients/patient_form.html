@@ -379,7 +379,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (data.requires_review) {
                 summaryBox.classList.add('requires-review');
                 htmlContent += `
-                <div class="warning-section" style="margin-top: 15px; padding: 15px; background: #fff3cd; border: 1px solid #ffeeba; border-radius: 5px; color: #856404;">
+                <div class="warning-section">
                     <strong>⚠️ Потребує додаткової перевірки лікарем:</strong>
                     <ul style="margin: 5px 0 0 20px; padding: 0;">
                 `;
@@ -405,7 +405,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
             } else {
                 htmlContent += `
-                <div style="margin-top: 15px; padding: 12px; background: #d4edda; border: 1px solid #c3e6cb; border-radius: 5px; color: #155724;">
+                <div class="success-section">
                     ✅ <strong>Діагноз відповідає стандартам кодування Наказу № 473.</strong>
                 </div>
                 `;
@@ -553,11 +553,14 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 .invalid-field {
     border: 2px solid #dc3545 !important;
-    background-color: #fdf3f4 !important;
+    background-color: rgba(220, 53, 69, 0.08) !important;
 }
 .date-input-container.invalid-field {
     border-color: #dc3545 !important;
-    background-color: #fdf3f4 !important;
+    background-color: rgba(220, 53, 69, 0.08) !important;
+}
+.date-input-container.invalid-field .date-part {
+    background-color: transparent !important;
 }
 .doctor-summary-box {
     padding: 20px;
@@ -566,18 +569,37 @@ document.addEventListener('DOMContentLoaded', function() {
     background-color: var(--hover-bg);
     border-left: 5px solid var(--primary-color);
     box-shadow: var(--shadow);
+    color: var(--text-color);
 }
 .doctor-summary-box.requires-review {
     border-left-color: #dc3545;
-    background-color: #fdf3f4;
+    background-color: rgba(220, 53, 69, 0.06);
+    border: 1px solid rgba(220, 53, 69, 0.15);
+    border-left-width: 5px;
 }
 .doctor-summary-box h3 {
     margin-top: 0;
-    margin-bottom: 10px;
+    margin-bottom: 12px;
     color: var(--primary-color);
 }
 .doctor-summary-box.requires-review h3 {
     color: #dc3545;
+}
+.warning-section {
+    margin-top: 15px;
+    padding: 15px;
+    background-color: rgba(255, 193, 7, 0.12);
+    border: 1px solid rgba(255, 193, 7, 0.25);
+    border-radius: 5px;
+    color: var(--text-color);
+}
+.success-section {
+    margin-top: 15px;
+    padding: 12px;
+    background-color: rgba(40, 167, 69, 0.12);
+    border: 1px solid rgba(40, 167, 69, 0.25);
+    border-radius: 5px;
+    color: var(--text-color);
 }
 </style>
 {% endblock %} 
