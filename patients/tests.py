@@ -1341,12 +1341,18 @@ class OncologyCodingTests(TestCase):
             mock_response.text = json.dumps({
                 "doctor_summary": "Дифузна B-крупноклітинна лімфома. Стандартний TNM не застосовний.",
                 "icd_code": "C83.3",
+                "diagnosis_name": "Дифузна B-крупноклітинна лімфома",
                 "morphology_code": "9680/3",
                 "tnm_stage": None,
-                "is_standard_tnm_applicable": False,
+                "disease_stage": "IIE",
+                "clinical_group": "II",
+                "ihc_markers": "CD20+, CD5-, CD10+",
+                "surgery_status": "біопсія лімфатичного вузла від 10.05.2026",
                 "grade": "G3",
                 "histology_date": "20.05.2026",
                 "histology_number": "9845/26",
+                "histology_text": "Плоскоклітинний характер не виявлено, картина відповідає крупноклітинній лімфомі.",
+                "is_standard_tnm_applicable": False,
                 "requires_review": False,
                 "review_reasons": []
             })

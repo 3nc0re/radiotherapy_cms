@@ -320,9 +320,80 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    const isValid = (val) => {
+        if (!val) return false;
+        const s = String(val).trim();
+        if (!s) return false;
+        const low = s.toLowerCase();
+        return low !== "null" && low !== "n/a" && low !== "не вказано";
+    };
+
+    function buildDiagnosisString(data) {
+        let diag = "";
+        
+        // Збираємо основну частину
+        if (isValid(data.icd_code)) {
+            diag += data.icd_code;
+        }
+        if (isValid(data.diagnosis_name)) {
+            diag += (diag ? " " : "") + data.diagnosis_name;
+        }
+        if (isValid(data.morphology_code)) {
+            diag += (diag ? " (" : "(") + data.morphology_code + ")";
+        }
+        
+        if (isValid(data.tnm_stage)) {
+            diag += (diag ? ", " : "") + data.tnm_stage;
+        }
+        if (isValid(data.grade)) {
+            diag += (diag ? ", " : "") + data.grade;
+        }
+        if (isValid(data.ihc_markers)) {
+            diag += (diag ? ", " : "") + data.ihc_markers;
+        }
+        if (isValid(data.disease_stage)) {
+            diag += (diag ? ", стадія " : "стадія ") + data.disease_stage;
+        }
+        if (isValid(data.clinical_group)) {
+            diag += (diag ? ", клінічна група " : "клінічна група ") + data.clinical_group;
+        }
+        
+        // Гістологічне підтвердження
+        let histPart = "";
+        if (isValid(data.histology_date)) {
+            histPart += "морфологічно підтверджено " + data.histology_date;
+        }
+        if (isValid(data.histology_number)) {
+            histPart += (histPart ? " (ПГЗ №" : "ПГЗ №") + data.histology_number + ")";
+        }
+        
+        if (histPart) {
+            diag += (diag ? ", " : "") + histPart + ".";
+        } else if (diag) {
+            diag += ".";
+        }
+        
+        // Хірургічне лікування
+        if (isValid(data.surgery_status)) {
+            diag += " Стан після хірургічного лікування (" + data.surgery_status + ").";
+        }
+
+        // Блок ПГЗ
+        let histText = isValid(data.histology_text) ? data.histology_text : "";
+        let histNumber = isValid(data.histology_number) ? data.histology_number : "";
+        let histDate = isValid(data.histology_date) ? data.histology_date : "";
+        
+        let hist = `ПГЗ № ${histNumber} від ${histDate}`;
+        if (histText) {
+            hist += `: ${histText}`;
+        }
+
+        return `Сформований онкологічний діагноз\n${diag}\n\nГістологічний висновок (для копіювання)\n${hist}`;
+    }
+
     function fillForm(data) {
         // Скидаємо попередні червоні підсвічування
-        const fields = ['id_diagnosis', 'id_tnm_staging', 'id_histology_date', 'id_histology_number', 'id_histology_description'];
+        const fields = ['id_diagnosis', 'id_tnm_staging', 'id_disease_stage', 'id_clinical_group', 'id_histology_date', 'id_histology_number', 'id_histology_description'];
         fields.forEach(id => {
             const el = document.getElementById(id);
             if (el) {
@@ -337,15 +408,16 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         // Заповнення полів форми
-        let diagVal = '';
-        if (data.icd_code) diagVal += data.icd_code;
-        if (data.morphology_code) diagVal += (diagVal ? ' - ' : '') + data.morphology_code;
-        if (diagVal) {
-            document.getElementById('id_diagnosis').value = diagVal;
-        }
+        document.getElementById('id_diagnosis').value = buildDiagnosisString(data);
         
         if (data.tnm_stage) {
             document.getElementById('id_tnm_staging').value = data.tnm_stage;
+        }
+        if (data.disease_stage) {
+            document.getElementById('id_disease_stage').value = data.disease_stage;
+        }
+        if (data.clinical_group) {
+            document.getElementById('id_clinical_group').value = data.clinical_group;
         }
         if (data.histology_date) {
             document.getElementById('id_histology_date').value = data.histology_date;
@@ -363,7 +435,9 @@ document.addEventListener('DOMContentLoaded', function() {
         if (data.histology_number) {
             document.getElementById('id_histology_number').value = data.histology_number;
         }
-        if (data.grade) {
+        if (data.histology_text) {
+            document.getElementById('id_histology_description').value = data.histology_text;
+        } else if (data.grade) {
             document.getElementById('id_histology_description').value = 'Grade: ' + data.grade;
         }
 

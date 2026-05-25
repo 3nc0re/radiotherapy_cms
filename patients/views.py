@@ -935,14 +935,20 @@ def parse_medical_document(request):
 
 class OncologyAnalysisResult(BaseModel):
     doctor_summary: str = Field(description="Текстовий опис для лікаря (висновок, обґрунтування згідно з Наказом № 473)")
-    icd_code: Optional[str] = Field(None, description="Код МКХ-10 (ICD-10) основного захворювання (наприклад: C50, C34.1)")
-    morphology_code: Optional[str] = Field(None, description="Код морфології за МКХ-О (ICD-O-4) (наприклад: 8070/3, 8140/3)")
-    tnm_stage: Optional[str] = Field(None, description="Стадія за класифікацією TNM (наприклад: T2N0M0, T1N1M0)")
-    is_standard_tnm_applicable: bool = Field(True, description="Чи застосовна стандартна класифікація TNM для цієї пухлини (false для лімфом, лейкемій, пухлин ЦНС)")
-    grade: Optional[str] = Field(None, description="Ступінь диференціювання пухлини (G1, G2, G3, G4, GX)")
-    histology_date: Optional[str] = Field(None, description="Дата проведення гістологічного дослідження / ПГЗ у форматі DD.MM.YYYY")
-    histology_number: Optional[str] = Field(None, description="Номер гістологічного висновку / ПГЗ (наприклад: 12345/23)")
-    requires_review: bool = Field(False, description="Чи потребує діагноз додаткової перевірки лікарем (true, якщо є відхилення або неповні дані)")
+    icd_code: Optional[str] = Field(default=None, description="Код МКХ-10 (ICD-10) основного захворювання (наприклад: C50, C34.1)")
+    diagnosis_name: Optional[str] = Field(default=None, description="Повна анатомічна та гістологічна назва пухлини українською мовою")
+    morphology_code: Optional[str] = Field(default=None, description="Код морфології за МКХ-О (ICD-O-4) (наприклад: 8070/3, 8140/3)")
+    tnm_stage: Optional[str] = Field(default=None, description="Стадія за класифікацією TNM (наприклад: T2N0M0, T1N1M0)")
+    disease_stage: Optional[str] = Field(default=None, description="Клінічна або патологічна стадія захворювання (наприклад: IA, IIB, III, IV)")
+    clinical_group: Optional[str] = Field(default=None, description="Клінічна група пацієнта (наприклад: II, III)")
+    ihc_markers: Optional[str] = Field(default=None, description="Маркери імуногістохімії (ІГХ), якщо є (наприклад: ER(8), PR(5), HER2(1+), Ki-67 - 25%)")
+    surgery_status: Optional[str] = Field(default=None, description="Назва та дата проведеного хірургічного втручання, якщо є")
+    grade: Optional[str] = Field(default=None, description="Ступінь диференціювання пухлини (G1, G2, G3, G4, GX)")
+    histology_date: Optional[str] = Field(default=None, description="Дата проведення гістологічного дослідження / ПГЗ у форматі DD.MM.YYYY")
+    histology_number: Optional[str] = Field(default=None, description="Номер гістологічного висновку / ПГЗ (наприклад: 12345/23)")
+    histology_text: Optional[str] = Field(default=None, description="Повний або стислий текст гістологічного висновку / ПГЗ")
+    is_standard_tnm_applicable: bool = Field(default=True, description="Чи застосовна стандартна класифікація TNM для цієї пухлини (false для лімфом, лейкемій, пухлин ЦНС)")
+    requires_review: bool = Field(default=False, description="Чи потребує діагноз додаткової перевірки лікарем (true, якщо є відхилення або неповні дані)")
     review_reasons: List[str] = Field(default_factory=list, description="Список причин для перегляду лікарем, якщо requires_review=true")
 
 
