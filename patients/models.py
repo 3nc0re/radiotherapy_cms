@@ -341,6 +341,27 @@ class Patient(models.Model):
                 raise ValidationError({
                     'discharge_date': 'Дата виписки не може бути раніше дати початку лікування'
                 })
+
+    def validate_diagnosis_compliance(self):
+        """
+        Перевіряє, чи заповнені ключові поля відповідно до Наказу № 473.
+        Шукає коди МКХ-10 та морфології у полях diagnosis та histology_description.
+        Повертає True, якщо все заповнено коректно, інакше False.
+        """
+        import re
+        diag = self.diagnosis or ''
+        hist_desc = self.histology_description or ''
+        
+        # Код МКХ-10: C00-D48 (літера C або D, дві/три цифри)
+        icd_pattern = r'\b[CDcd][0-9]{2}(\.[0-9])?\b'
+        
+        # Код морфології: XXXX/X (4 цифри, слеш, 1 цифра)
+        morph_pattern = r'\b[0-9]{4}/[0-9]\b'
+        
+        has_icd = bool(re.search(icd_pattern, diag))
+        has_morph = bool(re.search(morph_pattern, diag) or re.search(morph_pattern, hist_desc))
+        
+        return has_icd and has_morph
     
     def save(self, *args, **kwargs):
         """Перевизначений save для виклику clean"""

@@ -17,7 +17,8 @@ from .decorators import login_required, staff_required, admin_required
 import os
 from google import genai
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
+from django.conf import settings
 from PIL import Image
 import io
 
@@ -210,7 +211,9 @@ def patient_create(request):
         print("Form errors:", form.errors)
         print("Non-field errors:", form.non_field_errors())
         if form.is_valid():
-            form.save()
+            patient = form.save()
+            if not patient.validate_diagnosis_compliance():
+                messages.warning(request, "Діагноз неповний згідно з Наказом № 473")
             return redirect('patient_list')
     else:
         form = PatientForm()
@@ -222,7 +225,9 @@ def patient_update(request, pk):
     if request.method == 'POST':
         form = PatientForm(request.POST, instance=patient)
         if form.is_valid():
-            form.save()
+            patient = form.save()
+            if not patient.validate_diagnosis_compliance():
+                messages.warning(request, "Діагноз неповний згідно з Наказом № 473")
             return redirect('patient_list')
     else:
         form = PatientForm(instance=patient)
@@ -922,6 +927,95 @@ def parse_medical_document(request):
             data['gender'] = 'M'
         elif data.get('gender') == 'Ж':
             data['gender'] = 'F'
+        return JsonResponse(data)
+        
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+class OncologyAnalysisResult(BaseModel):
+    doctor_summary: str = Field(description="Текстовий опис для лікаря (висновок, обґрунтування згідно з Наказом № 473)")
+    icd_code: Optional[str] = Field(None, description="Код МКХ-10 (ICD-10) основного захворювання (наприклад: C50, C34.1)")
+    morphology_code: Optional[str] = Field(None, description="Код морфології за МКХ-О (ICD-O-4) (наприклад: 8070/3, 8140/3)")
+    tnm_stage: Optional[str] = Field(None, description="Стадія за класифікацією TNM (наприклад: T2N0M0, T1N1M0)")
+    is_standard_tnm_applicable: bool = Field(True, description="Чи застосовна стандартна класифікація TNM для цієї пухлини (false для лімфом, лейкемій, пухлин ЦНС)")
+    grade: Optional[str] = Field(None, description="Ступінь диференціювання пухлини (G1, G2, G3, G4, GX)")
+    histology_date: Optional[str] = Field(None, description="Дата проведення гістологічного дослідження / ПГЗ у форматі DD.MM.YYYY")
+    histology_number: Optional[str] = Field(None, description="Номер гістологічного висновку / ПГЗ (наприклад: 12345/23)")
+    requires_review: bool = Field(False, description="Чи потребує діагноз додаткової перевірки лікарем (true, якщо є відхилення або неповні дані)")
+    review_reasons: List[str] = Field(default_factory=list, description="Список причин для перегляду лікарем, якщо requires_review=true")
+
+
+@login_required
+@require_POST
+def parse_medical_document_api(request):
+    """Ендпоінт для ШІ-парсингу медичного документа згідно з Наказом № 473"""
+    try:
+        if 'file' not in request.FILES:
+            return JsonResponse({'error': 'Файл не знайдено'}, status=400)
+            
+        file = request.FILES['file']
+        mime_type = file.content_type
+        
+        # Визначення дозволених типів (зображення та PDF)
+        allowed_mime_types = [
+            'image/jpeg', 'image/png', 'image/webp', 'application/pdf'
+        ]
+        if mime_type not in allowed_mime_types:
+            ext = os.path.splitext(file.name)[1].lower()
+            if ext == '.pdf':
+                mime_type = 'application/pdf'
+            elif ext in ['.jpg', '.jpeg']:
+                mime_type = 'image/jpeg'
+            elif ext == '.png':
+                mime_type = 'image/png'
+            elif ext == '.webp':
+                mime_type = 'image/webp'
+            else:
+                return JsonResponse({'error': 'Підтримуються лише зображення та PDF файли'}, status=400)
+                
+        api_key = os.environ.get('GEMINI_API_KEY')
+        if not api_key:
+            return JsonResponse({'error': 'Ключ Gemini API не налаштовано в .env'}, status=500)
+            
+        client = genai.Client(api_key=api_key)
+        
+        # Зчитування бази знань з oncology_protocol.txt
+        protocol_path = os.path.join(settings.BASE_DIR, 'ai_config', 'oncology_protocol.txt')
+        protocol_content = ""
+        if os.path.exists(protocol_path):
+            with open(protocol_path, 'r', encoding='utf-8') as f:
+                protocol_content = f.read()
+        else:
+            protocol_content = "Наказ МОЗ України № 473. Кодування: МКХ-10, морфологія МКХ-О, TNM стадія, Grade."
+            
+        file_bytes = file.read()
+        from google.genai import types
+        part = types.Part.from_bytes(
+            data=file_bytes,
+            mime_type=mime_type,
+        )
+        
+        system_prompt = f"""Ти — лікар-онколог. Твоя мета — структурувати дані виключно за цим Протоколом.
+Якщо в документі немає даних для якогось пункту — постав null.
+Якщо випадок нестандартний (напр. лімфома або пухлина ЦНС) — встанови is_standard_tnm_applicable: false.
+
+---
+ПРОТОКОЛ:
+{protocol_content}
+"""
+        
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=[part, system_prompt],
+            config={
+                'response_mime_type': 'application/json',
+                'response_schema': OncologyAnalysisResult,
+                'temperature': 0.0,
+            },
+        )
+        
+        data = json.loads(response.text)
         return JsonResponse(data)
         
     except Exception as e:

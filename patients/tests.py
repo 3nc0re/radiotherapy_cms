@@ -1249,4 +1249,127 @@ class InpatientModuleTests(TestCase):
         self.assertEqual(first_fraction.status, 'scheduled')
 
 
+class OncologyCodingTests(TestCase):
+    """Тести для модуля автоматизації онкологічного кодування та Наказу № 473"""
+
+    def setUp(self):
+        self.client = Client()
+        self.user = User.objects.create_user(
+            username='doctor_oncologist',
+            password='testpass123',
+            role='doctor',
+            approved=True
+        )
+
+    def test_validate_diagnosis_compliance_valid(self):
+        """Тест правильного визначення відповідності діагнозу Наказу № 473"""
+        # Діагноз містить МКХ-10 (C50) та опис містить код морфології (8070/3)
+        patient_valid = Patient(
+            last_name='Петров',
+            first_name='Іван',
+            diagnosis='Рак легень C34.1',
+            histology_description='Плоскоклітинний рак 8070/3'
+        )
+        self.assertTrue(patient_valid.validate_diagnosis_compliance())
+
+        # Діагноз містить і МКХ-10, і код морфології в одному полі
+        patient_valid_combined = Patient(
+            last_name='Петров',
+            first_name='Іван',
+            diagnosis='C50.9 - 8140/3 аденокарцинома',
+            histology_description='Гістологічне підтвердження'
+        )
+        self.assertTrue(patient_valid_combined.validate_diagnosis_compliance())
+
+    def test_validate_diagnosis_compliance_invalid(self):
+        """Тест виявлення невідповідностей у діагнозах (відсутні коди)"""
+        # Відсутній код МКХ-10
+        patient_no_icd = Patient(
+            last_name='Петров',
+            first_name='Іван',
+            diagnosis='Рак легень без коду',
+            histology_description='Плоскоклітинний рак 8070/3'
+        )
+        self.assertFalse(patient_no_icd.validate_diagnosis_compliance())
+
+        # Відсутній код морфології
+        patient_no_morph = Patient(
+            last_name='Петров',
+            first_name='Іван',
+            diagnosis='Рак легень C34.1',
+            histology_description='Плоскоклітинний рак'
+        )
+        self.assertFalse(patient_no_morph.validate_diagnosis_compliance())
+
+    def test_patient_form_validation_warning(self):
+        """Тест появи попередження (messages.warning) у представленнях при неповному діагнозі"""
+        self.client.login(username='doctor_oncologist', password='testpass123')
+        
+        # Створення пацієнта з неповним діагнозом (без кодів)
+        response = self.client.post(
+            reverse('patient_create'),
+            data={
+                'last_name': 'Тестовий',
+                'first_name': 'Неповний',
+                'gender': 'M',
+                'diagnosis': 'Діагноз без кодів',
+                'hospitalization_status': 'outpatient'
+            }
+        )
+        self.assertEqual(response.status_code, 302) # успішне створення (редірект)
+        
+        # Перевірка наявності попередження в повідомленнях
+        response_list = self.client.get(reverse('patient_list'))
+        messages = list(response_list.context['messages'])
+        warning_messages = [str(m) for m in messages if 'Наказом № 473' in str(m)]
+        self.assertEqual(len(warning_messages), 1)
+        self.assertEqual(warning_messages[0], "Діагноз неповний згідно з Наказом № 473")
+
+    def test_parse_medical_document_api_lymphoma(self):
+        """Тест парсингу нестандартного випадку (лімфома) через API"""
+        from unittest.mock import patch, MagicMock
+        import json
+        import io
+
+        with patch('google.genai.Client') as mock_client_class:
+            # Налаштовуємо мок клієнта
+            mock_client = MagicMock()
+            mock_client_class.return_value = mock_client
+            
+            # Налаштовуємо мок відповіді
+            mock_response = MagicMock()
+            mock_response.text = json.dumps({
+                "doctor_summary": "Дифузна B-крупноклітинна лімфома. Стандартний TNM не застосовний.",
+                "icd_code": "C83.3",
+                "morphology_code": "9680/3",
+                "tnm_stage": None,
+                "is_standard_tnm_applicable": False,
+                "grade": "G3",
+                "histology_date": "20.05.2026",
+                "histology_number": "9845/26",
+                "requires_review": False,
+                "review_reasons": []
+            })
+            mock_client.models.generate_content.return_value = mock_response
+
+            self.client.login(username='doctor_oncologist', password='testpass123')
+            
+            # Робимо POST-запит з файлом-пустушкою
+            dummy_file = io.BytesIO(b"dummy pdf content")
+            dummy_file.name = "test_document.pdf"
+            
+            response = self.client.post(
+                reverse('parse_medical_document_api'),
+                data={'file': dummy_file}
+            )
+            self.assertEqual(response.status_code, 200)
+            
+            data = response.json()
+            self.assertEqual(data['icd_code'], 'C83.3')
+            self.assertEqual(data['morphology_code'], '9680/3')
+            self.assertFalse(data['is_standard_tnm_applicable'])
+
+
+
+
 
