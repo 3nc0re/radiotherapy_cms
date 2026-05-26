@@ -130,7 +130,10 @@ def shift_patient_schedule(patient, from_date=None):
     today = timezone.localdate()
     
     if from_date is None:
-        from_date = max(today, patient.treatment_start_date)
+        if patient.treatment_start_date:
+            from_date = max(today, patient.treatment_start_date)
+        else:
+            from_date = today
 
     delivered_count = patient.fractions.filter(status='delivered').count()
     remaining = total - delivered_count
@@ -176,7 +179,7 @@ def shift_patient_schedule(patient, from_date=None):
     for i in range(num_to_update):
         fraction = scheduled_to_update[i]
         fraction.date = target_dates[i]
-        fraction.dose = patient.dose_per_fraction
+        fraction.dose = patient.dose_per_fraction or 0.0
         fraction.save()
         
     if len(target_dates) > len(scheduled_to_update):
@@ -185,7 +188,7 @@ def shift_patient_schedule(patient, from_date=None):
             new_fractions.append(FractionHistory(
                 patient=patient,
                 date=target_dates[i],
-                dose=patient.dose_per_fraction,
+                dose=patient.dose_per_fraction or 0.0,
                 status='scheduled'
             ))
         if new_fractions:
