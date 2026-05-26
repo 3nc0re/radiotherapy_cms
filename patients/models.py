@@ -364,9 +364,15 @@ class Patient(models.Model):
         return has_icd and has_morph
     
     def save(self, *args, **kwargs):
-        """Перевизначений save для виклику clean"""
+        """Перевизначений save для виклику clean та автоматичного оновлення статусу активності"""
+        from datetime import date
+        if self.discharge_date and self.discharge_date < date.today():
+            self.is_active = False
+        else:
+            self.is_active = True
         self.full_clean()
         super().save(*args, **kwargs)
+
 
     def __str__(self):
         return self.full_name
