@@ -257,7 +257,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const fractions = parseFloat(totalFractionsInput.value);
         const dose = parseFloat(dosePerFractionInput.value);
         if (!isNaN(fractions) && !isNaN(dose)) {
-            receivedDoseInput.value = (fractions * dose).toFixed(1);
+            receivedDoseInput.value = (fractions * dose).toFixed(2);
         }
     }
 

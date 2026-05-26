@@ -94,8 +94,8 @@ class PatientForm(forms.ModelForm):
             'histology_description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': 'Опис гістологічного дослідження'}),
             'treatment_start_date': forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input', 'placeholder': 'дд.мм.рррр'}),
             'total_fractions': forms.NumberInput(attrs={'class': 'form-control', 'min': 0, 'placeholder': 'Кількість фракцій'}),
-            'dose_per_fraction': forms.NumberInput(attrs={'class': 'form-control', 'min': 0, 'step': 0.1, 'placeholder': 'Доза на фракцію (Гр)'}),
-            'received_dose': forms.NumberInput(attrs={'class': 'form-control', 'min': 0, 'step': 0.1, 'placeholder': 'Отримана доза (Гр)'}),
+            'dose_per_fraction': forms.NumberInput(attrs={'class': 'form-control', 'min': 0, 'step': 0.01, 'placeholder': 'Доза на фракцію (Гр)'}),
+            'received_dose': forms.NumberInput(attrs={'class': 'form-control', 'min': 0, 'step': 0.01, 'placeholder': 'Отримана доза (Гр)'}),
             'missed_days': forms.NumberInput(attrs={'class': 'form-control', 'min': 0, 'placeholder': 'Пропущені дні'}),
             'discharge_date': forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input', 'placeholder': 'дд.мм.рррр'}),
             'current_stage': forms.Select(attrs={'class': 'form-control'}, choices=[
@@ -239,7 +239,7 @@ class FractionEditForm(forms.ModelForm):
         model = FractionHistory
         fields = ['date', 'dose', 'status', 'note', 'reason']
         widgets = {
-            'dose': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.1'}),
+            'dose': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
             'note': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
             'reason': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Причина зміни'}),
             'status': forms.Select(attrs={'class': 'form-select'}),
