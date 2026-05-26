@@ -675,34 +675,54 @@ class ServicesTests(TestCase):
     
     def test_shift_patient_schedule(self):
         """Тест зсуву запланованих фракцій пацієнта"""
-        # Створюємо 3 заплановані фракції починаючи з понеділка
-        # Щоб дата була фіксованою, візьмемо 2026-05-25 (це понеділок)
-        start_date = date(2026, 5, 25)
-        FractionHistory.objects.filter(patient=self.patient).delete()
+        from unittest.mock import patch
+        import datetime
         
-        f1 = FractionHistory.objects.create(patient=self.patient, date=start_date, dose=2.0, status='scheduled')
-        f2 = FractionHistory.objects.create(patient=self.patient, date=start_date + timedelta(days=1), dose=2.0, status='scheduled')
-        f3 = FractionHistory.objects.create(patient=self.patient, date=start_date + timedelta(days=2), dose=2.0, status='scheduled')
-        
-        self.patient.discharge_date = f3.date
-        self.patient.save()
-        
-        # Зсуваємо розклад з другої фракції
-        shift_patient_schedule(self.patient, f2.date)
-        
-        f1.refresh_from_db()
-        f2.refresh_from_db()
-        f3.refresh_from_db()
-        
-        # f1 не має змінитись
-        self.assertEqual(f1.date, start_date)
-        # f2 зміщується на +1 день
-        self.assertEqual(f2.date, start_date + timedelta(days=2)) # середа
-        # f3 зміщується на +1 день
-        self.assertEqual(f3.date, start_date + timedelta(days=3)) # четвер
-        
-        self.patient.refresh_from_db()
-        self.assertEqual(self.patient.discharge_date, f3.date)
+        with patch('django.utils.timezone.now') as mock_now:
+            mock_now.return_value = datetime.datetime(2026, 5, 25, 12, 0, 0, tzinfo=datetime.timezone.utc)
+            
+            # Створюємо 3 заплановані фракції починаючи з понеділка
+            # Щоб дата була фіксованою, візьмемо 2026-05-25 (це понеділок)
+            start_date = datetime.date(2026, 5, 25)
+            FractionHistory.objects.filter(patient=self.patient).delete()
+            
+            f1 = FractionHistory.objects.create(patient=self.patient, date=start_date, dose=2.0, status='scheduled')
+            f2 = FractionHistory.objects.create(patient=self.patient, date=start_date + timedelta(days=1), dose=2.0, status='scheduled')
+            f3 = FractionHistory.objects.create(patient=self.patient, date=start_date + timedelta(days=2), dose=2.0, status='scheduled')
+            
+            self.patient.discharge_date = f3.date
+            self.patient.save()
+            
+            # Робимо другу фракцію (вівторок) пропущеною
+            f2.status = 'missed'
+            f2.save()
+            
+            # Зсуваємо розклад
+            shift_patient_schedule(self.patient)
+            
+            f1.refresh_from_db()
+            f2.refresh_from_db()
+            f3.refresh_from_db()
+            
+            # f1 не має змінитись
+            self.assertEqual(f1.date, start_date)
+            # f2 залишається на вівторок, але статус тепер 'missed'
+            self.assertEqual(f2.date, start_date + timedelta(days=1))
+            self.assertEqual(f2.status, 'missed')
+            # f3 залишається на середу
+            self.assertEqual(f3.date, start_date + timedelta(days=2))
+            
+            # Перевіряємо кількість запланованих фракцій (має бути 5)
+            all_scheduled = self.patient.fractions.filter(status='scheduled').order_by('date')
+            self.assertEqual(all_scheduled.count(), 5)
+            self.assertEqual(all_scheduled[0].date, datetime.date(2026, 5, 25))
+            self.assertEqual(all_scheduled[1].date, datetime.date(2026, 5, 27))
+            self.assertEqual(all_scheduled[2].date, datetime.date(2026, 5, 28))
+            self.assertEqual(all_scheduled[3].date, datetime.date(2026, 5, 29))
+            self.assertEqual(all_scheduled[4].date, datetime.date(2026, 6, 1))
+            
+            self.patient.refresh_from_db()
+            self.assertEqual(self.patient.discharge_date, datetime.date(2026, 6, 1))
 
 
 class FormValidationTests(TestCase):

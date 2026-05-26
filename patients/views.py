@@ -272,10 +272,10 @@ def update_fraction_status_api(request):
         
         patient = fraction.patient
         
-        # Якщо статус змінився на 'missed', запускаємо перенесення розкладу на 1 день вперед
-        if status == 'missed' and old_status != 'missed':
+        # Якщо статус змінився, запускаємо перебудову розкладу
+        if status != old_status:
             from .services import shift_patient_schedule
-            shift_patient_schedule(patient, fraction.date)
+            shift_patient_schedule(patient)
             
         # Завжди перераховуємо отриману дозу
         patient.recalculate_received_dose()
@@ -340,7 +340,7 @@ def fraction_list(request):
             patient = Patient.objects.get(pk=patient_id)
             patient.fractions.filter(date__lt=today, status='scheduled').update(status='missed')
             from .services import shift_patient_schedule
-            shift_patient_schedule(patient, earliest_date)
+            shift_patient_schedule(patient)
             patient.recalculate_received_dose()
             
     # Фракції на сьогодні (для всіх активних пацієнтів)
@@ -410,10 +410,10 @@ def fraction_edit(request, pk):
             old_status = fraction.status
             fraction = form.save()
             
-            # Якщо статус змінився на 'missed', запускаємо перенесення розкладу на 1 день вперед
-            if fraction.status == 'missed' and old_status != 'missed':
+            # Якщо статус змінився, запускаємо перебудову розкладу
+            if fraction.status != old_status:
                 from .services import shift_patient_schedule
-                shift_patient_schedule(fraction.patient, fraction.date)
+                shift_patient_schedule(fraction.patient)
                 
             # Завжди перераховуємо отриману дозу
             fraction.patient.recalculate_received_dose()
@@ -469,7 +469,7 @@ def patient_detail(request, pk):
             earliest_date = overdue_fractions.first().date
             overdue_fractions.update(status='missed')
             from .services import shift_patient_schedule
-            shift_patient_schedule(patient, earliest_date)
+            shift_patient_schedule(patient)
             # Перечитуємо пацієнта після оновлення дат та виписки
             patient.refresh_from_db()
             patient.recalculate_received_dose()
@@ -742,15 +742,14 @@ def save_today_fractions(request):
         else:
             fraction.status = 'missed'
             missed_count += 1
-            if old_status != 'missed':
-                # Зсуваємо розклад
-                from .services import shift_patient_schedule
-                shift_patient_schedule(fraction.patient, fraction.date)
-                
+            
         fraction.save()
-        patients_to_recalculate.add(fraction.patient)
+        if fraction.status != old_status:
+            patients_to_recalculate.add(fraction.patient)
         
     for patient in patients_to_recalculate:
+        from .services import shift_patient_schedule
+        shift_patient_schedule(patient)
         patient.recalculate_received_dose()
         
     if delivered_count > 0 and missed_count > 0:
@@ -771,7 +770,9 @@ def confirm_fractions_doctor(request):
     if fraction_ids:
         FractionHistory.objects.filter(id__in=fraction_ids).update(status='delivered')
         patients = Patient.objects.filter(fractions__id__in=fraction_ids).distinct()
+        from .services import shift_patient_schedule
         for patient in patients:
+            shift_patient_schedule(patient)
             patient.recalculate_received_dose()
         messages.success(request, f"Підтверджено {len(fraction_ids)} фракцій.")
     return redirect('fraction_list')
@@ -783,7 +784,9 @@ def confirm_fractions_nurse(request):
     if fraction_ids:
         FractionHistory.objects.filter(id__in=fraction_ids).update(status='delivered')
         patients = Patient.objects.filter(fractions__id__in=fraction_ids).distinct()
+        from .services import shift_patient_schedule
         for patient in patients:
+            shift_patient_schedule(patient)
             patient.recalculate_received_dose()
         messages.success(request, f"Підтверджено {len(fraction_ids)} фракцій.")
     return redirect('fraction_list')
