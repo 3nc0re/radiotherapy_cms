@@ -2,7 +2,7 @@
 from django.db import migrations
 
 def heal_schedules(apps, schema_editor):
-    from patients.models import Patient
+    Patient = apps.get_model('patients', 'Patient')
     from patients.services import shift_patient_schedule
     
     # Run scheduling healing for all patients to fix any historical gaps/errors

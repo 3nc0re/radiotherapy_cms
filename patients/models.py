@@ -43,6 +43,9 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_superuser = models.BooleanField(default=False)
     is_staff = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
+    pin_code = models.CharField(max_length=255, blank=True, null=True, help_text="Хеш PIN-коду")
+    pin_failed_attempts = models.IntegerField(default=0, help_text="Кількість неуспішних спроб введення PIN-коду")
+    pin_lockout_until = models.DateTimeField(blank=True, null=True, help_text="Час блокування введення PIN-коду")
     
     # To avoid clashes with default User model's relations
     groups = models.ManyToManyField(
@@ -54,6 +57,35 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     objects = UserManager()
     USERNAME_FIELD = 'username'
+
+    def set_pin(self, raw_pin):
+        from django.contrib.auth.hashers import make_password
+        self.pin_code = make_password(raw_pin)
+        self.pin_failed_attempts = 0
+        self.pin_lockout_until = None
+        
+    def check_pin(self, raw_pin):
+        from django.contrib.auth.hashers import check_password
+        from django.utils import timezone
+        
+        # Перевірка на блокування
+        if self.pin_lockout_until and self.pin_lockout_until > timezone.now():
+            return False, "locked"
+            
+        if not self.pin_code:
+            return False, "no_pin"
+            
+        if check_password(raw_pin, self.pin_code):
+            self.pin_failed_attempts = 0
+            self.pin_lockout_until = None
+            self.save()
+            return True, "success"
+        else:
+            self.pin_failed_attempts += 1
+            if self.pin_failed_attempts >= 3:
+                self.pin_lockout_until = timezone.now() + timezone.timedelta(minutes=15)
+            self.save()
+            return False, "invalid"
     
     @property
     def full_name(self):
@@ -114,8 +146,11 @@ class Patient(models.Model):
     ward_number = models.IntegerField(blank=True, null=True, help_text="Номер палати")
     prior_radiation = models.CharField(max_length=255, blank=True, null=True, help_text="Попереднє опромінення")
     notes = models.TextField(blank=True, null=True, help_text="Примітки")
+    raw_diagnosis = models.TextField(blank=True, null=True, help_text="Оригінальний вставлений діагноз")
+    has_radiomodification = models.BooleanField(default=False, help_text="Потребує радіомодифікації (щотижневий аналіз крові)")
+    encrypted_confidential_notes = models.TextField(blank=True, null=True, help_text="Зашифровані конфіденційні примітки")
     
-    # Системні
+    #  Системні
     created_at = models.DateTimeField(auto_now_add=True, blank=True, null=True)
 
     @property
@@ -218,11 +253,12 @@ class Patient(models.Model):
 
     @property
     def next_blood_test_due_date(self):
-        """Розраховує наступну рекомендовану дату аналізу крові (через 10 днів, тільки будні)."""
+        """Розраховує наступну рекомендовану дату аналізу крові (через 7 днів для радіомодифікації, або 10 днів для звичайних, тільки будні)."""
         if not self.last_blood_test_date or not self.is_in_treatment:
             return None
             
-        target_date = self.last_blood_test_date + timedelta(days=10)
+        days = 7 if self.has_radiomodification else 10
+        target_date = self.last_blood_test_date + timedelta(days=days)
         
         # Якщо дата випадає на вихідний, переносимо на найближчий понеділок
         if target_date.weekday() >= 5: # Saturday or Sunday

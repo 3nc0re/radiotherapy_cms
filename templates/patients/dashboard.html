@@ -17,30 +17,51 @@
     
     <div class="card">
         <h3><i class="fas fa-bell"></i> Сповіщення</h3>
-        <ul>
-            {% for notification in notifications %}
-                <li>
+        
+        {# Спочатку виводимо критичні алерти по МВТН з ефектом пульсації #}
+        {% for notification in notifications %}
+            {% if notification.type == 'incapacity_alert' %}
+                <div class="incapacity-warning-box">
+                    <i class="fas fa-exclamation-triangle warning-icon"></i>
+                    <div>
+                        <strong class="warning-title">КРИТИЧНО: МВТН закінчується або не покриває лікування!</strong><br>
+                        <span>Пацієнт: <strong><a href="{% url 'patient_detail' notification.patient.id %}" class="warning-link">{{ notification.patient.full_name }}</a></strong></span><br>
+                        <span>Діє до: <span class="badge badge-warning">{{ notification.incapacity_end_date|date:"d.m.Y" }}</span>. Завершення лікування: <span class="badge badge-danger">{{ notification.actual_discharge_date|date:"d.m.Y"|default:"—" }}</span>.</span><br>
+                        <span class="warning-action">⚠️ Будь ласка, продовжіть лікарняний в медичній інформаційній системі (МІС)!</span>
+                    </div>
+                </div>
+            {% endif %}
+        {% endfor %}
+        
+        {% if not notifications %}
+            <p style="color: var(--text-light-color); padding: 10px 0; text-align: center;">Сповіщень немає</p>
+        {% else %}
+            <ul>
+                {% for notification in notifications %}
                     {% if notification.type == 'blood_test' %}
-                        <i class="fas fa-tint" style="color: #dc3545;"></i>
-                        <a href="{% url 'patient_detail' notification.patient.id %}">{{ notification.patient.full_name }}</a> 
-                        має здати аналіз крові (термін до {{ notification.due_date|date:"d.m.Y" }}).
-                        <form method="post" action="{% url 'confirm_blood_test' notification.patient.id %}" class="inline-form">
-                            {% csrf_token %}
-                            <button type="submit" class="link-button">Підтвердити</button>
-                        </form>
+                        <li>
+                            <i class="fas fa-tint" style="color: #dc3545; font-size: 1.2rem;"></i>
+                            <div>
+                                <a href="{% url 'patient_detail' notification.patient.id %}"><strong>{{ notification.patient.full_name }}</strong></a> 
+                                має здати аналіз крові (до {{ notification.due_date|date:"d.m.Y" }}).
+                            </div>
+                            <form method="post" action="{% url 'confirm_blood_test' notification.patient.id %}" class="inline-form">
+                                {% csrf_token %}
+                                <button type="submit" class="link-button">Підтвердити</button>
+                            </form>
+                        </li>
                     {% elif notification.type == 'incapacity' %}
-                        <i class="fas fa-file-medical-alt" style="color: #ffc107;"></i>
-                        У пацієнта <a href="{% url 'patient_detail' notification.patient.id %}">{{ notification.patient.full_name }}</a> 
-                        закінчується МВТН {{ notification.incapacity_end_date|date:"d.m.Y" }}.
-                    {% elif notification.type == 'incapacity_alert' %}
-                        <i class="fas fa-exclamation-triangle" style="color: #dc3545;"></i>
-                        <span>⚠️ У пацієнта <a href="{% url 'patient_detail' notification.patient.id %}">{{ notification.patient.full_name }}</a> МВТН НЕ покриває курс лікування або збігає! Діє до: {{ notification.incapacity_end_date|date:"d.m.Y" }}. Реальне завершення лікування: {{ notification.actual_discharge_date|date:"d.m.Y"|default:"—" }}. Потрібно продовжити вручну.</span>
+                        <li>
+                            <i class="fas fa-file-medical-alt" style="color: #ffc107; font-size: 1.2rem;"></i>
+                            <div>
+                                У пацієнта <a href="{% url 'patient_detail' notification.patient.id %}"><strong>{{ notification.patient.full_name }}</strong></a> 
+                                закінчується МВТН {{ notification.incapacity_end_date|date:"d.m.Y" }}.
+                            </div>
+                        </li>
                     {% endif %}
-                </li>
-            {% empty %}
-                <li>Сповіщень немає</li>
-            {% endfor %}
-        </ul>
+                {% endfor %}
+            </ul>
+        {% endif %}
     </div>
     
     <div class="card">
@@ -60,6 +81,12 @@
                 {% csrf_token %}
                 <button type="submit" class="btn btn-primary">
                     <i class="fas fa-sync-alt"></i> Оновити всі дати виписки
+                </button>
+            </form>
+            <form method="post" action="{% url 'auto_confirm_fractions' %}" style="display: inline;" onsubmit="return confirm('Ви впевнені, що хочете автоматично провести сьогоднішні сеанси для всіх пацієнтів?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-success">
+                    <i class="fas fa-bolt"></i> Провести сьогоднішні фракції
                 </button>
             </form>
         </div>
@@ -100,7 +127,7 @@
     padding: 0;
 }
 .card li {
-    padding: 10px 0;
+    padding: 12px 0;
     border-bottom: 1px solid var(--border-color);
     display: flex;
     align-items: center;
@@ -157,16 +184,94 @@
     gap: 8px;
     font-size: 0.9rem;
     transition: background-color 0.3s ease, color 0.3s ease;
+    font-weight: 500;
 }
 
 .btn-primary {
     background-color: var(--primary-color);
     color: white;
 }
-
 .btn-primary:hover {
     opacity: 0.9;
     filter: brightness(1.1);
+}
+
+.btn-success {
+    background-color: #28a745;
+    color: white;
+}
+.btn-success:hover {
+    background-color: #218838;
+}
+
+/* Стилі для критичних сповіщень МВТН з ефектом пульсації */
+@keyframes warning-pulse {
+    0% {
+        border-color: rgba(220, 53, 69, 0.4);
+        box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.4);
+    }
+    70% {
+        border-color: rgba(220, 53, 69, 1);
+        box-shadow: 0 0 0 8px rgba(220, 53, 69, 0);
+    }
+    100% {
+        border-color: rgba(220, 53, 69, 0.4);
+        box-shadow: 0 0 0 0 rgba(220, 53, 69, 0);
+    }
+}
+
+.incapacity-warning-box {
+    background-color: rgba(220, 53, 69, 0.08);
+    border: 2px solid #dc3545;
+    border-radius: 6px;
+    padding: 12px 15px;
+    margin-bottom: 15px;
+    animation: warning-pulse 2s infinite;
+    color: var(--text-color);
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.warning-icon {
+    color: #dc3545;
+    font-size: 1.4rem;
+    margin-top: 2px;
+}
+
+.warning-title {
+    color: #dc3545;
+    font-size: 0.95rem;
+}
+
+.warning-link {
+    color: var(--primary-color) !important;
+    text-decoration: underline !important;
+}
+
+.warning-action {
+    display: block;
+    margin-top: 4px;
+    font-weight: bold;
+    color: #d9534f;
+}
+
+.badge {
+    display: inline-block;
+    padding: 2px 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    border-radius: 4px;
+}
+.badge-warning {
+    background-color: #ffeeba;
+    color: #856404;
+    border: 1px solid #ffeeba;
+}
+.badge-danger {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f8d7da;
 }
 </style>
 {% endblock %} 

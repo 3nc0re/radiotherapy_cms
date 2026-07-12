@@ -15,12 +15,8 @@ import json
 from django.views.decorators.http import require_POST
 from .decorators import login_required, staff_required, admin_required
 import os
-from google import genai
-from pydantic import BaseModel, Field
 from typing import Optional, List
 from django.conf import settings
-from PIL import Image
-import io
 
 # Create your views here.
 
@@ -67,12 +63,16 @@ def dashboard(request):
     for patient in active_patients:
         # Blood test check
         if patient.is_in_treatment:
-            last = patient.last_blood_test_date or patient.treatment_start_date
-            if not last or (today - last).days >= 10:
+            due_date = patient.next_blood_test_due_date
+            # Якщо дата останнього аналізу не вказана, орієнтуємось на дату початку лікування
+            if not patient.last_blood_test_date:
+                due_date = patient.treatment_start_date
+                
+            if due_date and due_date <= today:
                 notifications.append({
                     'type': 'blood_test',
                     'patient': patient,
-                    'due_date': patient.next_blood_test_due_date or (last + timedelta(days=10) if last else today)
+                    'due_date': due_date
                 })
         
         # MVTN/Incapacity check
@@ -864,169 +864,174 @@ def approve_all_fractions(request, pk):
         return redirect(referer)
     return redirect('patient_detail', pk=pk)
 
-class PatientData(BaseModel):
-    last_name: Optional[str] = Field(None, description="Прізвище пацієнта (будь максимально точним при розпізнаванні літер!)")
-    first_name: Optional[str] = Field(None, description="Ім'я пацієнта")
-    middle_name: Optional[str] = Field(None, description="По батькові пацієнта")
-    birth_date: Optional[str] = Field(None, description="Дата народження строго у форматі DD.MM.YYYY (наприклад: 15.04.1980)")
-    gender: Optional[str] = Field(None, description="Стать пацієнта. Поверни 'M' для чоловічої, 'F' для жіночої.")
-    icd_code: Optional[str] = Field(None, description="Код діагнозу за МКХ-10 (наприклад: C50.9, C34.1)")
-    tumor_morphology: Optional[str] = Field(None, description="Морфологія пухлини (наприклад: інфільтруюча карцинома, аденокарцинома)")
-    disease_stage: Optional[str] = Field(None, description="Стадія захворювання римськими цифрами (наприклад: IIA, III, IV). Не плутати з TNM!")
-    tnm_t: Optional[str] = Field(None, description="Значення T з системи TNM (наприклад: 2, 3, 4a)")
-    tnm_n: Optional[str] = Field(None, description="Значення N з системи TNM (наприклад: 0, 1, 2)")
-    tnm_m: Optional[str] = Field(None, description="Значення M з системи TNM (наприклад: 0, 1)")
-    clinical_group: Optional[str] = Field(None, description="Клінічна група (наприклад: 2, II, 3)")
-    histology_date: Optional[str] = Field(None, description="Дата проведення гістологічного дослідження / ПГЗ строго у форматі DD.MM.YYYY")
-    histology_number: Optional[str] = Field(None, description="Номер гістологічного висновку / ПГЗ (наприклад: 12345/23)")
-    histology_description: Optional[str] = Field(None, description="Детальний опис патолого-гістологічного висновку")
+
+from django.views.decorators.http import require_POST
+from django.http import JsonResponse
+import json
+from .services import encrypt_notes, decrypt_notes
 
 @login_required
 @require_POST
-def parse_medical_document(request):
+def set_user_pin(request):
     try:
-        if 'file' not in request.FILES:
-            return JsonResponse({'error': 'Файл не знайдено'}, status=400)
+        data = json.loads(request.body)
+        password = data.get('password')
+        pin = data.get('pin')
+        
+        if not password or not pin:
+            return JsonResponse({'success': False, 'error': 'Пароль та PIN-код обов\'язкові'}, status=400)
             
-        file = request.FILES['file']
-        
-        if not file.content_type.startswith('image/'):
-            return JsonResponse({'error': 'Підтримуються лише зображення (JPEG, PNG, WEBP)'}, status=400)
+        if not request.user.check_password(password):
+            return JsonResponse({'success': False, 'error': 'Невірний пароль облікового запису'}, status=403)
             
-        api_key = os.environ.get('GEMINI_API_KEY')
-        if not api_key:
-            return JsonResponse({'error': 'Ключ Gemini API не налаштовано в .env'}, status=500)
+        if not pin.isdigit() or len(pin) != 4:
+            return JsonResponse({'success': False, 'error': 'PIN-код має складатися з 4 цифр'}, status=400)
             
-        client = genai.Client(api_key=api_key)
-        
-        image = Image.open(io.BytesIO(file.read()))
-        
-        prompt = """
-Ти досвідчений медичний реєстратор. Прочитай надану медичну виписку (епікриз, направлення) та витягни наступні дані:
-1. ПІБ пацієнта (звертай особливу увагу на правильність прізвища).
-2. Дату народження (ОБОВ'ЯЗКОВО у форматі DD.MM.YYYY).
-3. Стать (визнач за ПІБ або текстом: поверни букву 'M' для чоловічої, або 'F' для жіночої).
-4. Діагноз (код МКХ-10 та морфологію).
-5. Стадію захворювання (зверни увагу, стадія зазвичай позначається римськими цифрами, наприклад I, IIA, III, IV. Не вписуй сюди TNM).
-6. TNM стадіювання (окремо індекси T, N, M).
-7. Клінічну групу.
-8. Дані гістологічного висновку (ПГЗ, пат. гістологічне дослідження): номер, дату та опис. Дата має бути у форматі DD.MM.YYYY.
-
-Будь дуже уважним до дат і переконайся, що вони конвертовані у формат DD.MM.YYYY (День.Місяць.Рік). Якщо якихось даних немає в тексті, поверни null для цього поля.
-"""
-        
-        response = client.models.generate_content(
-            model='gemini-2.5-pro',
-            contents=[image, prompt],
-            config={
-                'response_mime_type': 'application/json',
-                'response_schema': PatientData,
-            },
-        )
-        
-        data = json.loads(response.text)
-        # Fallback gender mapping
-        if data.get('gender') == 'Ч':
-            data['gender'] = 'M'
-        elif data.get('gender') == 'Ж':
-            data['gender'] = 'F'
-        return JsonResponse(data)
-        
+        request.user.set_pin(pin)
+        request.user.save()
+        return JsonResponse({'success': True})
     except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
-
-
-class OncologyAnalysisResult(BaseModel):
-    doctor_summary: str = Field(description="Текстовий опис для лікаря (висновок, обґрунтування згідно з Наказом № 473)")
-    icd_code: Optional[str] = Field(default=None, description="Код МКХ-10 (ICD-10) основного захворювання (наприклад: C50, C34.1)")
-    diagnosis_name: Optional[str] = Field(default=None, description="Повна анатомічна та гістологічна назва пухлини українською мовою")
-    morphology_code: Optional[str] = Field(default=None, description="Код морфології за МКХ-О (ICD-O-4) (наприклад: 8070/3, 8140/3)")
-    tnm_stage: Optional[str] = Field(default=None, description="Стадія за класифікацією TNM (наприклад: T2N0M0, T1N1M0)")
-    disease_stage: Optional[str] = Field(default=None, description="Клінічна або патологічна стадія захворювання (наприклад: IA, IIB, III, IV)")
-    clinical_group: Optional[str] = Field(default=None, description="Клінічна група пацієнта (наприклад: II, III)")
-    ihc_markers: Optional[str] = Field(default=None, description="Маркери імуногістохімії (ІГХ), якщо є (наприклад: ER(8), PR(5), HER2(1+), Ki-67 - 25%)")
-    surgery_status: Optional[str] = Field(default=None, description="Назва та дата проведеного хірургічного втручання, якщо є")
-    grade: Optional[str] = Field(default=None, description="Ступінь диференціювання пухлини (G1, G2, G3, G4, GX)")
-    histology_date: Optional[str] = Field(default=None, description="Дата проведення гістологічного дослідження / ПГЗ у форматі DD.MM.YYYY")
-    histology_number: Optional[str] = Field(default=None, description="Номер гістологічного висновку / ПГЗ (наприклад: 12345/23)")
-    histology_text: Optional[str] = Field(default=None, description="Повний або стислий текст гістологічного висновку / ПГЗ")
-    is_standard_tnm_applicable: bool = Field(default=True, description="Чи застосовна стандартна класифікація TNM для цієї пухлини (false для лімфом, лейкемій, пухлин ЦНС)")
-    requires_review: bool = Field(default=False, description="Чи потребує діагноз додаткової перевірки лікарем (true, якщо є відхилення або неповні дані)")
-    review_reasons: List[str] = Field(default_factory=list, description="Список причин для перегляду лікарем, якщо requires_review=true")
-
+        return JsonResponse({'success': False, 'error': str(e)}, status=400)
 
 @login_required
 @require_POST
-def parse_medical_document_api(request):
-    """Ендпоінт для ШІ-парсингу медичного документа згідно з Наказом № 473"""
+def decrypt_patient_notes(request, pk):
     try:
-        if 'file' not in request.FILES:
-            return JsonResponse({'error': 'Файл не знайдено'}, status=400)
+        data = json.loads(request.body)
+        pin = data.get('pin')
+        if not pin:
+            return JsonResponse({'success': False, 'error': 'Введіть PIN-код'}, status=400)
             
-        file = request.FILES['file']
-        mime_type = file.content_type
+        patient = get_object_or_404(Patient, pk=pk)
         
-        # Визначення дозволених типів (зображення та PDF)
-        allowed_mime_types = [
-            'image/jpeg', 'image/png', 'image/webp', 'application/pdf'
-        ]
-        if mime_type not in allowed_mime_types:
-            ext = os.path.splitext(file.name)[1].lower()
-            if ext == '.pdf':
-                mime_type = 'application/pdf'
-            elif ext in ['.jpg', '.jpeg']:
-                mime_type = 'image/jpeg'
-            elif ext == '.png':
-                mime_type = 'image/png'
-            elif ext == '.webp':
-                mime_type = 'image/webp'
-            else:
-                return JsonResponse({'error': 'Підтримуються лише зображення та PDF файли'}, status=400)
-                
-        api_key = os.environ.get('GEMINI_API_KEY')
-        if not api_key:
-            return JsonResponse({'error': 'Ключ Gemini API не налаштовано в .env'}, status=500)
+        # Перевірка PIN-коду з брутфорс захистом
+        success, status_code = request.user.check_pin(pin)
+        if status_code == 'locked':
+            from django.utils import timezone
+            remaining = int((request.user.pin_lockout_until - timezone.now()).total_seconds())
+            mins = max(1, remaining // 60)
+            return JsonResponse({'success': False, 'error': f'Блокування. Спробуйте через {mins} хв.'}, status=403)
+        elif status_code == 'no_pin':
+            return JsonResponse({'success': False, 'error': 'PIN-код не встановлено. Встановіть його спочатку.'}, status=400)
+        elif status_code == 'invalid':
+            attempts_left = 3 - request.user.pin_failed_attempts
+            msg = f'Невірний PIN-код. Залишилось спроб: {attempts_left}' if attempts_left > 0 else 'Невірний PIN-код. Блокування на 15 хвилин!'
+            return JsonResponse({'success': False, 'error': msg}, status=403)
             
-        client = genai.Client(api_key=api_key)
+        decrypted = decrypt_notes(patient.encrypted_confidential_notes)
+        return JsonResponse({'success': True, 'notes': decrypted})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=400)
+
+@login_required
+@require_POST
+def encrypt_patient_notes(request, pk):
+    try:
+        data = json.loads(request.body)
+        pin = data.get('pin')
+        notes = data.get('notes', '')
+        if not pin:
+            return JsonResponse({'success': False, 'error': 'Введіть PIN-код'}, status=400)
+            
+        patient = get_object_or_404(Patient, pk=pk)
         
-        # Зчитування бази знань з oncology_protocol.txt
-        protocol_path = os.path.join(settings.BASE_DIR, 'ai_config', 'oncology_protocol.txt')
-        protocol_content = ""
-        if os.path.exists(protocol_path):
-            with open(protocol_path, 'r', encoding='utf-8') as f:
-                protocol_content = f.read()
+        # Перевірка PIN-коду з брутфорс захистом
+        success, status_code = request.user.check_pin(pin)
+        if status_code == 'locked':
+            from django.utils import timezone
+            remaining = int((request.user.pin_lockout_until - timezone.now()).total_seconds())
+            mins = max(1, remaining // 60)
+            return JsonResponse({'success': False, 'error': f'Блокування. Спробуйте через {mins} хв.'}, status=403)
+        elif status_code == 'no_pin':
+            return JsonResponse({'success': False, 'error': 'PIN-код не встановлено. Встановіть його спочатку.'}, status=400)
+        elif status_code == 'invalid':
+            attempts_left = 3 - request.user.pin_failed_attempts
+            msg = f'Невірний PIN-код. Залишилось спроб: {attempts_left}' if attempts_left > 0 else 'Невірний PIN-код. Блокування на 15 хвилин!'
+            return JsonResponse({'success': False, 'error': msg}, status=403)
+            
+        patient.encrypted_confidential_notes = encrypt_notes(notes)
+        patient.save()
+        return JsonResponse({'success': True})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=400)
+
+@login_required
+@require_POST
+def toggle_fraction_status(request, pk):
+    try:
+        fraction = get_object_or_404(FractionHistory, pk=pk)
+        old_status = fraction.status
+        if old_status == 'scheduled':
+            fraction.status = 'delivered'
+        elif old_status == 'delivered':
+            fraction.status = 'missed'
         else:
-            protocol_content = "Наказ МОЗ України № 473. Кодування: МКХ-10, морфологія МКХ-О, TNM стадія, Grade."
+            fraction.status = 'scheduled'
             
-        file_bytes = file.read()
-        from google.genai import types
-        part = types.Part.from_bytes(
-            data=file_bytes,
-            mime_type=mime_type,
-        )
+        fraction.save()
         
-        system_prompt = f"""Ти — лікар-онколог. Твоя мета — структурувати дані виключно за цим Протоколом.
-Якщо в документі немає даних для якогось пункту — постав null.
-Якщо випадок нестандартний (напр. лімфома або пухлина ЦНС) — встанови is_standard_tnm_applicable: false.
-
----
-ПРОТОКОЛ:
-{protocol_content}
-"""
+        from .services import shift_patient_schedule
+        shift_patient_schedule(fraction.patient)
+        fraction.patient.recalculate_received_dose()
         
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=[part, system_prompt],
-            config={
-                'response_mime_type': 'application/json',
-                'response_schema': OncologyAnalysisResult,
-                'temperature': 0.0,
-            },
-        )
+        from .services import get_patient_treatment_info
+        info = get_patient_treatment_info(fraction.patient)
         
-        data = json.loads(response.text)
-        return JsonResponse(data)
-        
+        return JsonResponse({
+            'success': True,
+            'status': fraction.status,
+            'received_dose': fraction.patient.received_dose,
+            'completed_fractions': info['completed_fractions'],
+            'total_fractions': info['total_fractions']
+        })
     except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+        return JsonResponse({'success': False, 'error': str(e)}, status=400)
+
+
+@login_required
+@require_POST
+def update_fraction_note_api(request, pk):
+    try:
+        data = json.loads(request.body)
+        note = data.get('note', '').strip()
+        fraction = get_object_or_404(FractionHistory, pk=pk)
+        fraction.note = note
+        fraction.save()
+        return JsonResponse({'success': True})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=400)
+
+
+@login_required
+@require_POST
+def add_patient_fraction_api(request, pk):
+    try:
+        patient = get_object_or_404(Patient, pk=pk)
+        
+        # Визначаємо дату для нової фракції
+        latest_fraction = patient.fractions.order_by('date').last()
+        if latest_fraction:
+            next_date = latest_fraction.date + timedelta(days=1)
+        else:
+            next_date = patient.treatment_start_date or date.today()
+            
+        # Пропускаємо вихідні
+        while next_date.weekday() >= 5:
+            next_date += timedelta(days=1)
+            
+        fraction = FractionHistory.objects.create(
+            patient=patient,
+            date=next_date,
+            dose=patient.dose_per_fraction or 2.0,
+            status='scheduled'
+        )
+        
+        # Оновлюємо загальну кількість фракцій пацієнта
+        patient.total_fractions = (patient.total_fractions or 0) + 1
+        patient.discharge_date = next_date
+        patient.save()
+        
+        return JsonResponse({'success': True})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=400)
 

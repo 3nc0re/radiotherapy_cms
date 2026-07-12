@@ -60,7 +60,7 @@ class PatientForm(forms.ModelForm):
             'treatment_type', 'histology_number', 'histology_date',
             'histology_description', 'ct_simulation_date', 'treatment_start_date',
             'total_fractions', 'dose_per_fraction', 'received_dose',
-            'discharge_date', 'treatment_phase',
+            'discharge_date', 'raw_diagnosis', 'has_radiomodification',
             'irradiation_zone', 'hospitalization_status', 'planned_admission_date',
             'bed_owner', 'ward_number', 'prior_radiation', 
             'last_blood_test_date', 'notes'
@@ -105,12 +105,8 @@ class PatientForm(forms.ModelForm):
                 ('лікування', 'Лікування'),
                 ('виписка', 'Виписка')
             ]),
-            'treatment_phase': forms.Select(attrs={'class': 'form-control'}, choices=[
-                ('', 'Виберіть фазу'),
-                ('перша', 'Перша фаза'),
-                ('друга', 'Друга фаза'),
-                ('третя', 'Третя фаза')
-            ]),
+            'has_radiomodification': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'raw_diagnosis': forms.HiddenInput(),
             'irradiation_zone': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Зона опромінення'}),
             'hospitalization_status': forms.Select(attrs={'class': 'form-control'}, choices=[
                 ('outpatient', 'Амбулаторно'),

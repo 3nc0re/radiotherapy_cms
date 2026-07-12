@@ -139,14 +139,19 @@
                             {% endif %}
                         </td>
                         <td>
-                            <a href="{% url 'fraction_edit' fraction.pk %}" class="btn-edit-small">
+                            <button type="button" class="btn-edit-small" onclick="editFractionNote({{ fraction.id }})" title="Редагувати примітку" style="background: none; border: none; color: var(--primary-color); cursor: pointer; padding: 4px;">
                                 <i class="fas fa-edit"></i>
-                            </a>
+                            </button>
                         </td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
+            <div style="margin-top: 15px; text-align: right;">
+                <button type="button" class="btn-outline" style="padding: 6px 12px; font-size: 0.85rem;" onclick="addExtraFraction({{ patient_data.patient.id }})">
+                    <i class="fas fa-plus"></i> Додати додаткову фракцію
+                </button>
+            </div>
         </div>
     </div>
     {% empty %}
@@ -641,6 +646,72 @@ function approveAllFractions(patientId) {
         console.error('Помилка:', error);
         alert('Помилка з\'єднання з сервером');
     });
+}
+
+function editFractionNote(fractionId) {
+    const row = document.querySelector(`#fraction-row-${fractionId}`);
+    const noteTextSpan = row ? row.querySelector('.fraction-note-text') : null;
+    const currentNote = noteTextSpan ? noteTextSpan.textContent.trim() : '';
+    const newNote = prompt("Редагувати примітку для фракції:", currentNote === '—' ? '' : currentNote);
+    
+    if (newNote !== null) {
+        fetch(`/api/fractions/${fractionId}/update-note/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({ note: newNote })
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Помилка при збереженні');
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                if (noteTextSpan) {
+                    noteTextSpan.textContent = newNote.trim() || '—';
+                }
+            } else {
+                alert('Помилка: ' + data.error);
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert('Не вдалося зберегти примітку');
+        });
+    }
+}
+
+function addExtraFraction(patientId) {
+    if (confirm('Ви впевнені, що хочете додати додаткову фракцію цьому пацієнту?')) {
+        fetch(`/api/patients/${patientId}/add-fraction/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            }
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Помилка при додаванні');
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Помилка: ' + data.error);
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert('Не вдалося додати фракцію');
+        });
+    }
 }
 </script>
 {% endblock %} 

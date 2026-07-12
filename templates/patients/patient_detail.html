@@ -32,6 +32,9 @@
         <p><strong>Дата народження:</strong> {{ patient.birth_date|date:"d.m.Y"|default:"—" }}</p>
         <p><strong>Стать:</strong> {{ patient.get_gender_display|default:"—" }}</p>
         <p><strong>Поточний етап:</strong> <span class="badge">{{ patient.display_stage|default:"—" }}</span></p>
+        {% if patient.has_radiomodification %}
+        <p><strong>Радіомодифікація:</strong> <span class="badge" style="background-color: #d9534f; color: white;">Так (щотижневий аналіз)</span></p>
+        {% endif %}
         <p><strong>Статус госпіталізації:</strong> {{ patient.get_hospitalization_status_display|default:"—" }}</p>
         {% if patient.hospitalization_status == 'queue' and patient.planned_admission_date %}
         <p><strong>Планова дата госпіталізації:</strong> {{ patient.planned_admission_date|date:"d.m.Y" }}</p>
@@ -52,13 +55,18 @@
         <p><strong>Стадія захворювання:</strong> {{ patient.disease_stage|default:"—" }}</p>
         <p><strong>Клінічна група:</strong> {{ patient.clinical_group|default:"—" }}</p>
         <p><strong>Попереднє опромінення:</strong> {{ patient.prior_radiation|default:"—" }}</p>
+        {% if patient.raw_diagnosis %}
+        <div style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border-color);">
+            <strong style="display: block; margin-bottom: 5px; font-size: 0.9em; color: var(--text-light-color);">Вставлений текст діагнозу:</strong>
+            <div class="raw-diagnosis-text" style="font-family: monospace; white-space: pre-wrap; font-size: 0.85em; padding: 8px; background-color: var(--hover-bg); border-radius: 4px; border: 1px solid var(--border-color); color: var(--text-color);">{{ patient.raw_diagnosis }}</div>
+        </div>
+        {% endif %}
     </div>
 
     <!-- Інформація про лікування -->
     <div class="card treatment-info">
         <h3><i class="fas fa-radiation"></i> Інформація про лікування</h3>
         <p><strong>Тип лікування:</strong> {{ patient.treatment_type|default:"—" }}</p>
-        <p><strong>Фаза лікування:</strong> {{ patient.treatment_phase|default:"—" }}</p>
         <p><strong>Зона опромінення:</strong> {{ patient.irradiation_zone|default:"—" }}</p>
         <p><strong>Загальна кількість фракцій:</strong> {{ patient.total_fractions|default:"—" }}</p>
         <p><strong>РОД (Гр):</strong> {{ patient.dose_per_fraction|default:"—" }}</p>
@@ -160,6 +168,38 @@
             <button onclick="saveNotes({{ patient.pk }})" id="saveNotesBtn" class="btn btn-primary copy-btn">
                 <i class="fas fa-save"></i> Зберегти нотатку
             </button>
+        </div>
+    </div>
+
+    <!-- Конфіденційні нотатки -->
+    <div class="card confidential-notes-info" style="border: 2px dashed #d9534f; background-color: rgba(217, 83, 79, 0.02); display: flex; flex-direction: column; justify-content: space-between;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <h3 style="margin: 0; color: #d9534f;"><i class="fas fa-lock" style="color: #d9534f;"></i> Конфіденційні нотатки</h3>
+            <button type="button" class="link-button" onclick="setupPinCode()" style="font-size: 0.85rem; color: #d9534f; cursor: pointer; background: none; border: none; text-decoration: underline;">
+                <i class="fas fa-cog"></i> Налаштувати PIN
+            </button>
+        </div>
+        
+        <!-- Стан 1: Заблоковано -->
+        <div id="confidential-locked-state" style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; gap: 15px; flex-grow: 1;">
+            <p style="margin: 0; color: var(--text-light-color); text-align: center;">🔒 Вміст захищено PIN-кодом.</p>
+            <button type="button" class="btn" style="background-color: #d9534f; color: white;" onclick="unlockConfidentialNotes()">
+                <i class="fas fa-key"></i> Розблокувати
+            </button>
+        </div>
+
+        <!-- Стан 2: Розблоковано -->
+        <div id="confidential-unlocked-state" style="display: none; flex-direction: column; gap: 10px; flex-grow: 1;">
+            <textarea id="confidentialNotesTextarea" class="diagnosis-text" placeholder="Введіть конфіденційні примітки про подяки..." style="border-color: #d9534f; font-family: monospace; min-height: 100px;"></textarea>
+            <div style="display: flex; gap: 10px; justify-content: space-between; align-items: center;">
+                <button type="button" class="btn btn-success" onclick="saveConfidentialNotes({{ patient.pk }})" style="background-color: #28a745; color: white;">
+                    <i class="fas fa-save"></i> Зберегти
+                </button>
+                <button type="button" class="btn" style="background-color: #6c757d; color: white;" onclick="lockConfidentialNotes()">
+                    <i class="fas fa-lock"></i> Заблокувати
+                </button>
+            </div>
+            <small class="text-muted" style="text-align: right; display: block; margin-top: 4px; font-size: 0.75rem;">⚠️ Блокується автоматично через 30 с бездії.</small>
         </div>
     </div>
 
@@ -511,6 +551,166 @@ function approveAllFractions(patientId) {
         alert('Помилка з\'єднання з сервером');
     });
 }
+
+let confidentialPin = null;
+let lockTimer = null;
+
+// Функція скидання таймера блокування при активності
+function resetLockTimer() {
+    if (lockTimer) clearTimeout(lockTimer);
+    lockTimer = setTimeout(() => {
+        lockConfidentialNotes();
+    }, 30000); // 30 секунд
+}
+
+function unlockConfidentialNotes() {
+    let pin = confidentialPin;
+    if (!pin) {
+        pin = prompt("Введіть 4-значний PIN-код для доступу:");
+        if (!pin) return;
+    }
+    
+    fetch(`/api/patients/{{ patient.pk }}/decrypt-notes/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({ pin: pin })
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(err => { throw new Error(err.error || 'Помилка доступу'); });
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            confidentialPin = pin;
+            
+            const lockedState = document.getElementById('confidential-locked-state');
+            const unlockedState = document.getElementById('confidential-unlocked-state');
+            const textarea = document.getElementById('confidentialNotesTextarea');
+            
+            if (lockedState) lockedState.style.display = 'none';
+            if (unlockedState) unlockedState.style.display = 'flex';
+            if (textarea) textarea.value = data.notes;
+            
+            // Запуск таймера автоблокування
+            resetLockTimer();
+            
+            // Слухаємо активність на сторінці для скидання таймера
+            document.addEventListener('mousemove', resetLockTimer);
+            document.addEventListener('keypress', resetLockTimer);
+            
+        } else {
+            alert('Помилка: ' + data.error);
+        }
+    })
+    .catch(err => {
+        alert(err.message);
+        confidentialPin = null;
+    });
+}
+
+function lockConfidentialNotes() {
+    confidentialPin = null;
+    if (lockTimer) clearTimeout(lockTimer);
+    
+    document.removeEventListener('mousemove', resetLockTimer);
+    document.removeEventListener('keypress', resetLockTimer);
+    
+    const lockedState = document.getElementById('confidential-locked-state');
+    const unlockedState = document.getElementById('confidential-unlocked-state');
+    const textarea = document.getElementById('confidentialNotesTextarea');
+    
+    if (lockedState) lockedState.style.display = 'flex';
+    if (unlockedState) unlockedState.style.display = 'none';
+    if (textarea) textarea.value = '';
+}
+
+function saveConfidentialNotes(patientId) {
+    if (!confidentialPin) {
+        alert('Помилка сесії PIN-коду. Будь ласка, розблокуйте нотатки знову.');
+        return;
+    }
+    const notes = document.getElementById('confidentialNotesTextarea').value;
+    
+    fetch(`/api/patients/${patientId}/encrypt-notes/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({ pin: confidentialPin, notes: notes })
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(err => { throw new Error(err.error || 'Помилка збереження'); });
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            alert('Конфіденційні нотатки успішно збережено!');
+            resetLockTimer();
+        } else {
+            alert('Помилка: ' + data.error);
+        }
+    })
+    .catch(err => {
+        alert(err.message);
+    });
+}
+
+function setupPinCode() {
+    const password = prompt("Введіть ваш пароль від акаунту для підтвердження особи:");
+    if (!password) return;
+    const pin = prompt("Введіть новий 4-значний PIN-код (тільки цифри):");
+    if (!pin) return;
+    if (pin.length !== 4 || isNaN(pin)) {
+        alert("Помилка: PIN-код має містити рівно 4 цифри!");
+        return;
+    }
+    const pinConfirm = prompt("Підтвердіть новий PIN-код:");
+    if (pin !== pinConfirm) {
+        alert("Помилка: PIN-коди не збігаються!");
+        return;
+    }
+    
+    fetch('/api/user/set-pin/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({ password: password, pin: pin })
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(err => { throw new Error(err.error || 'Помилка сервера'); });
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            alert("PIN-код успішно встановлено!");
+            confidentialPin = pin;
+        } else {
+            alert("Помилка: " + data.error);
+        }
+    })
+    .catch(err => {
+        alert(err.message);
+    });
+}
+
+// Блокуємо прихований блок, якщо користувач згортає чи перемикає вкладку
+document.addEventListener("visibilitychange", function() {
+    if (document.hidden) {
+        lockConfidentialNotes();
+    }
+});
 </script>
 
 <style>

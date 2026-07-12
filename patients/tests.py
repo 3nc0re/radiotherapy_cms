@@ -526,12 +526,26 @@ class PatientModelPropertiesTests(TestCase):
         next_date = self.patient.next_blood_test_due_date
         self.assertIsNotNone(next_date)
         self.assertGreaterEqual(next_date, date.today())
-        
         # Якщо пацієнт не в лікуванні, має повертати None
         self.patient.discharge_date = date.today() - timedelta(days=1)
         self.patient.save()
         self.assertIsNone(self.patient.next_blood_test_due_date)
-    
+        
+    def test_next_blood_test_due_date_radiomodification(self):
+        """Тест розрахунку дати аналізу крові для радіомодифікації (щотижнево, 7 днів)"""
+        patient_rm = Patient.objects.create(
+            last_name='Модифікований',
+            first_name='Пацієнт',
+            treatment_start_date=date.today() - timedelta(days=2),
+            last_blood_test_date=date.today() - timedelta(days=3),
+            has_radiomodification=True
+        )
+        expected_date = patient_rm.last_blood_test_date + timedelta(days=7)
+        if expected_date.weekday() >= 5:
+            expected_date += timedelta(days=7 - expected_date.weekday())
+            
+        self.assertEqual(patient_rm.next_blood_test_due_date, expected_date)
+     
     def test_is_in_treatment_property(self):
         """Тест властивості is_in_treatment"""
         # Пацієнт в лікуванні
@@ -690,6 +704,7 @@ class ServicesTests(TestCase):
             f2 = FractionHistory.objects.create(patient=self.patient, date=start_date + timedelta(days=1), dose=2.0, status='scheduled')
             f3 = FractionHistory.objects.create(patient=self.patient, date=start_date + timedelta(days=2), dose=2.0, status='scheduled')
             
+            self.patient.treatment_start_date = start_date
             self.patient.discharge_date = f3.date
             self.patient.save()
             
@@ -1106,9 +1121,9 @@ class MVTNNotificationTests(TestCase):
             
             # Перевіряємо, що в HTML є правильний текст попередження
             self.assertContains(response, 'Петренко Іван Петрович')
-            self.assertContains(response, 'МВТН НЕ покриває курс лікування або збігає')
-            self.assertContains(response, 'Діє до: 29.05.2026')
-            self.assertContains(response, 'Реальне завершення лікування: 01.06.2026')
+            self.assertContains(response, 'МВТН закінчується або не покриває лікування')
+            self.assertContains(response, '29.05.2026')
+            self.assertContains(response, '01.06.2026')
 
     def test_mvtn_expiring_soon_alert(self):
         """
@@ -1151,7 +1166,7 @@ class MVTNNotificationTests(TestCase):
             self.assertEqual(len(incapacity_alerts), 1)
             
             self.assertContains(response, 'Коваленко Ольга Миколаївна')
-            self.assertContains(response, 'Діє до: 26.05.2026')
+            self.assertContains(response, '26.05.2026')
 
 
 class InpatientModuleTests(TestCase):
@@ -1345,55 +1360,144 @@ class OncologyCodingTests(TestCase):
         self.assertEqual(len(warning_messages), 1)
         self.assertEqual(warning_messages[0], "Діагноз неповний згідно з Наказом № 473")
 
-    def test_parse_medical_document_api_lymphoma(self):
-        """Тест парсингу нестандартного випадку (лімфома) через API"""
-        from unittest.mock import patch, MagicMock
-        import json
-        import io
 
-        with patch('google.genai.Client') as mock_client_class:
-            # Налаштовуємо мок клієнта
-            mock_client = MagicMock()
-            mock_client_class.return_value = mock_client
-            
-            # Налаштовуємо мок відповіді
-            mock_response = MagicMock()
-            mock_response.text = json.dumps({
-                "doctor_summary": "Дифузна B-крупноклітинна лімфома. Стандартний TNM не застосовний.",
-                "icd_code": "C83.3",
-                "diagnosis_name": "Дифузна B-крупноклітинна лімфома",
-                "morphology_code": "9680/3",
-                "tnm_stage": None,
-                "disease_stage": "IIE",
-                "clinical_group": "II",
-                "ihc_markers": "CD20+, CD5-, CD10+",
-                "surgery_status": "біопсія лімфатичного вузла від 10.05.2026",
-                "grade": "G3",
-                "histology_date": "20.05.2026",
-                "histology_number": "9845/26",
-                "histology_text": "Плоскоклітинний характер не виявлено, картина відповідає крупноклітинній лімфомі.",
-                "is_standard_tnm_applicable": False,
-                "requires_review": False,
-                "review_reasons": []
-            })
-            mock_client.models.generate_content.return_value = mock_response
+import json
 
-            self.client.login(username='doctor_oncologist', password='testpass123')
-            
-            # Робимо POST-запит з файлом-пустушкою
-            dummy_file = io.BytesIO(b"dummy pdf content")
-            dummy_file.name = "test_document.pdf"
-            
-            response = self.client.post(
-                reverse('parse_medical_document_api'),
-                data={'file': dummy_file}
-            )
-            self.assertEqual(response.status_code, 200)
-            
-            data = response.json()
-            self.assertEqual(data['icd_code'], 'C83.3')
-            self.assertEqual(data['morphology_code'], '9680/3')
-            self.assertFalse(data['is_standard_tnm_applicable'])
+class PINAndConfidentialNotesTests(TestCase):
+    """Тести для PIN-кодів, шифрування нотаток та інтерактивних фракцій"""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='doctor_test', password='password123', role='doctor', approved=True)
+        self.client = Client()
+        self.client.login(username='doctor_test', password='password123')
+        
+        self.patient = Patient.objects.create(
+            last_name='Тестовий',
+            first_name='Пацієнт',
+            treatment_start_date=date.today(),
+            total_fractions=5,
+            dose_per_fraction=2.0
+        )
+        # Створюємо фракцію
+        self.fraction = FractionHistory.objects.create(
+            patient=self.patient,
+            date=date.today(),
+            dose=2.0,
+            status='scheduled'
+        )
+
+    def test_user_pin_set_and_check(self):
+        """Тест встановлення та перевірки PIN-коду з брутфорс захистом"""
+        user = self.user
+        
+        # 1. PIN не встановлено
+        success, status = user.check_pin('1234')
+        self.assertFalse(success)
+        self.assertEqual(status, 'no_pin')
+        
+        # 2. Встановлюємо PIN
+        user.set_pin('1234')
+        user.save()
+        
+        # 3. Перевіряємо правильний PIN
+        success, status = user.check_pin('1234')
+        self.assertTrue(success)
+        self.assertEqual(status, 'success')
+        self.assertEqual(user.pin_failed_attempts, 0)
+        
+        # 4. Перевіряємо неправильний PIN (спроба 1)
+        success, status = user.check_pin('1111')
+        self.assertFalse(success)
+        self.assertEqual(status, 'invalid')
+        self.assertEqual(user.pin_failed_attempts, 1)
+        
+        # 5. Спроба 2
+        success, status = user.check_pin('2222')
+        self.assertFalse(success)
+        self.assertEqual(user.pin_failed_attempts, 2)
+        
+        # 6. Спроба 3 -> має викликати блокування
+        success, status = user.check_pin('3333')
+        self.assertFalse(success)
+        self.assertEqual(status, 'invalid') # в цей момент отримали 3 спроби і встановили блокування
+        self.assertEqual(user.pin_failed_attempts, 3)
+        self.assertIsNotNone(user.pin_lockout_until)
+        
+        # 7. Наступна перевірка має повернути 'locked'
+        success, status = user.check_pin('1234')
+        self.assertFalse(success)
+        self.assertEqual(status, 'locked')
+
+    def test_encrypt_decrypt_services(self):
+        """Тест шифрування та дешифрування приміток"""
+        from .services import encrypt_notes, decrypt_notes
+        original_text = "Сума подяки: 10000 грн"
+        
+        encrypted = encrypt_notes(original_text)
+        self.assertNotEqual(encrypted, original_text)
+        self.assertIn("gAAAAA", encrypted) # Fernet токени починаються з gAAAAA
+        
+        decrypted = decrypt_notes(encrypted)
+        self.assertEqual(decrypted, original_text)
+
+    def test_api_endpoints_pin_and_notes(self):
+        """Тест API ендпоінтів для PIN-коду та нотаток"""
+        # Встановлюємо PIN
+        response = self.client.post(
+            reverse('set_user_pin'),
+            data=json.dumps({'password': 'password123', 'pin': '9999'}),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        
+        # Перевіряємо, що PIN зберігся
+        self.user.refresh_from_db()
+        success, status = self.user.check_pin('9999')
+        self.assertTrue(success)
+        
+        # Зберігаємо конфіденційні нотатки
+        response = self.client.post(
+            reverse('encrypt_patient_notes', kwargs={'pk': self.patient.pk}),
+            data=json.dumps({'pin': '9999', 'notes': 'Секретні нотатки 500'}),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        
+        # Дешифруємо нотатки через API з правильним PIN-кодом
+        response = self.client.post(
+            reverse('decrypt_patient_notes', kwargs={'pk': self.patient.pk}),
+            data=json.dumps({'pin': '9999'}),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data['success'])
+        self.assertEqual(data['notes'], 'Секретні нотатки 500')
+        
+        # Спроба дешифрувати з неправильним PIN-кодом
+        response = self.client.post(
+            reverse('decrypt_patient_notes', kwargs={'pk': self.patient.pk}),
+            data=json.dumps({'pin': '1111'}),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_toggle_fraction_status_api(self):
+        """Тест швидкого AJAX-ендпоінту перемикання статусу фракцій"""
+        self.assertEqual(self.fraction.status, 'scheduled')
+        
+        # Перемикаємо: scheduled -> delivered
+        response = self.client.post(
+            reverse('toggle_fraction_status', kwargs={'pk': self.fraction.pk})
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data['success'])
+        self.assertEqual(data['status'], 'delivered')
+        
+        self.fraction.refresh_from_db()
+        self.assertEqual(self.fraction.status, 'delivered')
+
 
 
 

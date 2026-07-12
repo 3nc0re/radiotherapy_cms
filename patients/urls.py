@@ -31,6 +31,7 @@ urlpatterns = [
     path('api/update-fraction-status/', views.update_fraction_status_api, name='update_fraction_status_api'),
     path('fractions/confirm/doctor/', views.confirm_fractions_doctor, name='confirm_fractions_doctor'),
     path('fractions/confirm/nurse/', views.confirm_fractions_nurse, name='confirm_fractions_nurse'),
+    path('fractions/auto-confirm/', views.auto_confirm_fractions, name='auto_confirm_fractions'),
 
     # Medical Incapacity
     path('patients/<int:patient_pk>/medical_incapacity/create/', views.medical_incapacity_create, name='medical_incapacity_create'),
@@ -46,6 +47,12 @@ urlpatterns = [
     # Misc
     path('confirm_blood_test/<int:patient_id>/', views.confirm_blood_test, name='confirm_blood_test'),
     path('update_all_discharge_dates/', views.update_all_discharge_dates, name='update_all_discharge_dates'),
-    path('api/parse-document/', views.parse_medical_document, name='parse_medical_document'),
-    path('api/parse-medical-document/', views.parse_medical_document_api, name='parse_medical_document_api'),
+    
+    # API endpoints for PIN & Confidential Notes
+    path('api/user/set-pin/', views.set_user_pin, name='set_user_pin'),
+    path('api/patients/<int:pk>/decrypt-notes/', views.decrypt_patient_notes, name='decrypt_patient_notes'),
+    path('api/patients/<int:pk>/encrypt-notes/', views.encrypt_patient_notes, name='encrypt_patient_notes'),
+    path('api/fractions/<int:pk>/toggle-status/', views.toggle_fraction_status, name='toggle_fraction_status'),
+    path('api/fractions/<int:pk>/update-note/', views.update_fraction_note_api, name='update_fraction_note_api'),
+    path('api/patients/<int:pk>/add-fraction/', views.add_patient_fraction_api, name='add_patient_fraction_api'),
 ] 

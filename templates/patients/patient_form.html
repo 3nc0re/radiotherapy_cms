@@ -3,20 +3,25 @@
 <div class="form-container card">
     <h2>{% if form.instance.pk %}Редагувати пацієнта{% else %}Додати пацієнта{% endif %}</h2>
     
-    <div id="drop-zone" class="drop-zone">
-        <p>Перетягніть медичну виписку сюди або <label for="file-upload" class="upload-link">виберіть файл</label> для автозаповнення ШІ</p>
-        <input type="file" id="file-upload" accept="image/jpeg, image/png, image/webp, application/pdf" style="display: none;">
-        <div id="loading-indicator" class="loading-indicator" style="display: none;">
-            <div class="spinner"></div>
-            <p>Обробка документа за допомогою ШІ...</p>
+    <!-- Панель вставки повного діагнозу для розпаршування -->
+    <div class="diagnosis-paste-zone" style="padding: 20px; margin-bottom: 25px; background-color: var(--hover-bg); border: 1px solid var(--border-color); border-radius: 8px; box-shadow: var(--shadow);">
+        <h3 style="color: var(--primary-color); margin-top: 0; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+            ⚡ Розумне автозаповнення діагнозу
+        </h3>
+        <p style="margin-top: 0; margin-bottom: 15px; font-size: 0.95rem; color: var(--text-light-color);">
+            Вставте повний текст медичного висновку або діагнозу в поле нижче та натисніть "Розпарсити", щоб автоматично заповнити коди та медичні деталі:
+        </p>
+        <div class="form-group" style="margin-bottom: 15px;">
+            <textarea id="raw-diagnosis-input" class="form-control" rows="4" placeholder="Наприклад: C50.9 Рак лівої молочної залози T2N1M0, стадія IIB, кл. гр. 2. ПГЗ № 4567/23 від 10.05.2023 - інфільтруюча карцинома." style="min-height: 80px; width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 5px; background-color: var(--input-bg); color: var(--text-color); font-size: 0.95rem;"></textarea>
         </div>
+        <button type="button" id="btn-parse-diagnosis" class="btn btn-primary" style="background-color: var(--primary-color); border: none; cursor: pointer; padding: 10px 20px; border-radius: 5px; color: white; font-weight: 500; font-size: 0.95rem; display: inline-flex; align-items: center; gap: 6px;">
+            Розпарсити та заповнити поля
+        </button>
     </div>
-    
-    <!-- Секція для висновку ШІ-онколога (Наказ № 473) -->
-    <div id="doctor-summary-box" class="doctor-summary-box" style="display: none;"></div>
 
     <form method="post">
         {% csrf_token %}
+        {{ form.raw_diagnosis }}
         
         <!-- Особисті дані -->
         <div class="form-section">
@@ -111,6 +116,20 @@
         <!-- Лікування -->
         <div class="form-section">
             <h3>Лікування</h3>
+            
+            <div class="form-group" style="margin-bottom: 20px;">
+                <label for="id_fraction_template">Швидкий вибір схеми лікування</label>
+                <select id="id_fraction_template" style="width: 100%; max-width: 400px; padding: 8px; border-radius: 4px; border: 1px solid var(--border-color); background-color: var(--input-bg); color: var(--text-color);">
+                    <option value="">-- Оберіть шаблон (опціонально) --</option>
+                    <option value="radical_50">Радикальний курс (25 фр. по 2.0 Гр = 50.0 Гр)</option>
+                    <option value="radical_60">Радикальний курс (30 фр. по 2.0 Гр = 60.0 Гр)</option>
+                    <option value="radical_70">Радикальний курс (35 фр. по 2.0 Гр = 70.0 Гр)</option>
+                    <option value="palliative_20">Паліативний курс (5 фр. по 4.0 Гр = 20.0 Гр)</option>
+                    <option value="palliative_30">Паліативний курс (10 фр. по 3.0 Гр = 30.0 Гр)</option>
+                </select>
+                <span class="form-text text-muted" style="margin-top: 4px; font-size: 0.85rem;">При виборі значення поля кількості фракцій та РОД заповняться автоматично. Ручний ввід залишається доступним.</span>
+            </div>
+
             <div class="form-grid">
                 <div class="form-group">
                     <label for="{{ form.ct_simulation_date.id_for_label }}">Дата КТ-симуляції</label>
@@ -144,10 +163,6 @@
             <h3>Додаткова інформація</h3>
             <div class="form-grid">
                 <div class="form-group">
-                    <label for="{{ form.treatment_phase.id_for_label }}">Фаза лікування</label>
-                    {{ form.treatment_phase }}
-                </div>
-                <div class="form-group">
                     <label for="{{ form.irradiation_zone.id_for_label }}">Зона опромінення</label>
                     {{ form.irradiation_zone }}
                 </div>
@@ -172,7 +187,7 @@
                         <div class="error">{{ form.bed_owner.errors.0 }}</div>
                     {% endif %}
                 </div>
-                <div class="form-group">
+                <div class="form-group" id="group_ward_number" style="display: none;">
                     <label for="{{ form.ward_number.id_for_label }}">Номер палати</label>
                     {{ form.ward_number }}
                 </div>
@@ -183,6 +198,14 @@
                 <div class="form-group">
                     <label for="{{ form.last_blood_test_date.id_for_label }}">Дата останнього аналізу крові</label>
                     {{ form.last_blood_test_date }}
+                </div>
+                <div class="form-group" style="display: flex; flex-direction: row; align-items: center; gap: 8px; margin-top: auto; padding-bottom: 8px;">
+                    <div style="display: flex; align-items: center; height: 100%;">
+                        {{ form.has_radiomodification }}
+                    </div>
+                    <label for="{{ form.has_radiomodification.id_for_label }}" style="margin-bottom: 0; cursor: pointer; font-weight: 600; color: #d9534f; display: flex; align-items: center; gap: 4px;">
+                        ⚠️ Радіомодифікація (щотижневий аналіз)
+                    </label>
                 </div>
                 <div class="form-group full-width">
                     <label for="{{ form.notes.id_for_label }}">Примітки</label>
@@ -204,19 +227,23 @@ document.addEventListener('DOMContentLoaded', function() {
     const statusSelect = document.getElementById('id_hospitalization_status');
     const groupPlannedAdmission = document.getElementById('group_planned_admission_date');
     const groupBedOwner = document.getElementById('group_bed_owner');
+    const groupWardNumber = document.getElementById('group_ward_number');
 
     function toggleHospitalizationFields() {
         if (!statusSelect) return;
         const val = statusSelect.value;
         if (val === 'queue') {
-            groupPlannedAdmission.style.display = 'flex';
-            groupBedOwner.style.display = 'none';
+            if (groupPlannedAdmission) groupPlannedAdmission.style.display = 'flex';
+            if (groupBedOwner) groupBedOwner.style.display = 'none';
+            if (groupWardNumber) groupWardNumber.style.display = 'none';
         } else if (val === 'inpatient') {
-            groupPlannedAdmission.style.display = 'none';
-            groupBedOwner.style.display = 'flex';
+            if (groupPlannedAdmission) groupPlannedAdmission.style.display = 'none';
+            if (groupBedOwner) groupBedOwner.style.display = 'flex';
+            if (groupWardNumber) groupWardNumber.style.display = 'flex';
         } else {
-            groupPlannedAdmission.style.display = 'none';
-            groupBedOwner.style.display = 'none';
+            if (groupPlannedAdmission) groupPlannedAdmission.style.display = 'none';
+            if (groupBedOwner) groupBedOwner.style.display = 'none';
+            if (groupWardNumber) groupWardNumber.style.display = 'none';
         }
     }
 
@@ -225,267 +252,216 @@ document.addEventListener('DOMContentLoaded', function() {
         toggleHospitalizationFields(); // Run on startup
     }
 
-    const dropZone = document.getElementById('drop-zone');
-    const fileUpload = document.getElementById('file-upload');
-    const loadingIndicator = document.getElementById('loading-indicator');
+    // Розумне розпаршування діагнозу за допомогою регулярних виразів
+    const parseBtn = document.getElementById('btn-parse-diagnosis');
+    const rawInput = document.getElementById('raw-diagnosis-input');
 
-    if (!dropZone) return;
-
-    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-        dropZone.addEventListener(eventName, preventDefaults, false);
-    });
-
-    function preventDefaults(e) {
-        e.preventDefault();
-        e.stopPropagation();
-    }
-
-    ['dragenter', 'dragover'].forEach(eventName => {
-        dropZone.addEventListener(eventName, highlight, false);
-    });
-
-    ['dragleave', 'drop'].forEach(eventName => {
-        dropZone.addEventListener(eventName, unhighlight, false);
-    });
-
-    // Auto-calculate received dose
-    const totalFractionsInput = document.getElementById('id_total_fractions');
-    const dosePerFractionInput = document.getElementById('id_dose_per_fraction');
-    const receivedDoseInput = document.getElementById('id_received_dose');
-
-    function calculateDose() {
-        const fractions = parseFloat(totalFractionsInput.value);
-        const dose = parseFloat(dosePerFractionInput.value);
-        if (!isNaN(fractions) && !isNaN(dose)) {
-            receivedDoseInput.value = (fractions * dose).toFixed(2);
-        }
-    }
-
-    if (totalFractionsInput && dosePerFractionInput && receivedDoseInput) {
-        totalFractionsInput.addEventListener('input', calculateDose);
-        dosePerFractionInput.addEventListener('input', calculateDose);
-    }
-
-    function highlight(e) {
-        dropZone.classList.add('highlight');
-    }
-
-    function unhighlight(e) {
-        dropZone.classList.remove('highlight');
-    }
-
-    dropZone.addEventListener('drop', handleDrop, false);
-    fileUpload.addEventListener('change', function(e) {
-        handleFiles(this.files);
-    });
-
-    function handleDrop(e) {
-        let dt = e.dataTransfer;
-        let files = dt.files;
-        handleFiles(files);
-    }
-
-    function handleFiles(files) {
-        if (files.length > 0) {
-            uploadFile(files[0]);
-        }
-    }
-
-    function uploadFile(file) {
-        loadingIndicator.style.display = 'block';
-        
-        let formData = new FormData();
-        formData.append('file', file);
-
-        fetch('/api/parse-medical-document/', {
-            method: 'POST',
-            body: formData,
-            headers: {
-                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            loadingIndicator.style.display = 'none';
-            if (data.error) {
-                alert('Помилка: ' + data.error);
+    if (parseBtn && rawInput) {
+        parseBtn.addEventListener('click', function() {
+            const text = rawInput.value.trim();
+            if (!text) {
+                alert('Будь ласка, введіть текст діагнозу.');
                 return;
             }
-            fillForm(data);
-        })
-        .catch(error => {
-            loadingIndicator.style.display = 'none';
-            console.error('Error:', error);
-            alert('Виникла помилка під час обробки документа.');
-        });
-    }
 
-    const isValid = (val) => {
-        if (!val) return false;
-        const s = String(val).trim();
-        if (!s) return false;
-        const low = s.toLowerCase();
-        return low !== "null" && low !== "n/a" && low !== "не вказано";
-    };
+            // Зберігаємо повний оригінальний текст в приховане поле форми
+            const rawDiagField = document.getElementById('id_raw_diagnosis');
+            if (rawDiagField) {
+                rawDiagField.value = text;
+            }
 
-    function buildDiagnosisString(data) {
-        let diag = "";
-        
-        // Збираємо основну частину
-        if (isValid(data.icd_code)) {
-            diag += data.icd_code;
-        }
-        if (isValid(data.diagnosis_name)) {
-            diag += (diag ? " " : "") + data.diagnosis_name;
-        }
-        if (isValid(data.morphology_code)) {
-            diag += (diag ? " (" : "(") + data.morphology_code + ")";
-        }
-        
-        if (isValid(data.tnm_stage)) {
-            diag += (diag ? ", " : "") + data.tnm_stage;
-        }
-        if (isValid(data.grade)) {
-            diag += (diag ? ", " : "") + data.grade;
-        }
-        if (isValid(data.ihc_markers)) {
-            diag += (diag ? ", " : "") + data.ihc_markers;
-        }
-        if (isValid(data.disease_stage)) {
-            diag += (diag ? ", стадія " : "стадія ") + data.disease_stage;
-        }
-        if (isValid(data.clinical_group)) {
-            diag += (diag ? ", клінічна група " : "клінічна група ") + data.clinical_group;
-        }
-        
-        // Гістологічне підтвердження
-        let histPart = "";
-        if (isValid(data.histology_date)) {
-            histPart += "морфологічно підтверджено " + data.histology_date;
-        }
-        if (isValid(data.histology_number)) {
-            histPart += (histPart ? " (ПГЗ №" : "ПГЗ №") + data.histology_number + ")";
-        }
-        
-        if (histPart) {
-            diag += (diag ? ", " : "") + histPart + ".";
-        } else if (diag) {
-            diag += ".";
-        }
-        
-        // Хірургічне лікування
-        if (isValid(data.surgery_status)) {
-            diag += " Стан після хірургічного лікування (" + data.surgery_status + ").";
-        }
+            // 1. Пошук коду МКХ-10 (наприклад: C61, C50.9, D05)
+            const icdRegex = /\b([A-Z][0-9]{2}(?:\.[0-9])?)\b/i;
+            const icdMatch = text.match(icdRegex);
+            let icdCode = '';
+            if (icdMatch) {
+                icdCode = icdMatch[1].toUpperCase();
+            }
 
-        // Блок ПГЗ
-        let histText = isValid(data.histology_text) ? data.histology_text : "";
-        let histNumber = isValid(data.histology_number) ? data.histology_number : "";
-        let histDate = isValid(data.histology_date) ? data.histology_date : "";
-        
-        let hist = `ПГЗ № ${histNumber} від ${histDate}`;
-        if (histText) {
-            hist += `: ${histText}`;
-        }
+            // 2. Спроба сформувати опис діагнозу (вирізаємо частину з кодом до початку TNM чи інших ключових слів)
+            let diagnosisDesc = '';
+            if (icdCode) {
+                const icdIdx = text.toUpperCase().indexOf(icdCode);
+                let textAfterIcd = text.substring(icdIdx);
+                // зупиняємось перед TNM (з можливими префіксами c, p, yc, yp), стадія, кл. гр., ПГЗ
+                const endIdx = textAfterIcd.search(/(?:(?:[cp]|yc|yp)?[TТ][0-4a-dхxіІ]|(?:[cp]|yc|yp)?[NН][0-3]|(?:[cp]|yc|yp)?[MМ][0-1]|стадія|ст\.|кл\.\s*гр\.|ПГЗ|гістологія|\n\n)/i);
+                if (endIdx > 0) {
+                    diagnosisDesc = textAfterIcd.substring(0, endIdx).trim();
+                } else {
+                    diagnosisDesc = textAfterIcd.trim();
+                }
+            } else {
+                // якщо коду немає, беремо перше речення
+                const sentences = text.split(/[.\n]/);
+                diagnosisDesc = sentences[0] ? sentences[0].trim() : text;
+            }
+            // Очищення від зайвих розділових знаків у кінці
+            diagnosisDesc = diagnosisDesc.replace(/^[,\s\.\-]+|[,\s\.\-]+$/g, '').trim();
+            if (diagnosisDesc) {
+                document.getElementById('id_diagnosis').value = diagnosisDesc;
+            }
 
-        return `Сформований онкологічний діагноз\n${diag}\n\nГістологічний висновок (для копіювання)\n${hist}`;
-    }
-
-    function fillForm(data) {
-        // Скидаємо попередні червоні підсвічування
-        const fields = ['id_diagnosis', 'id_tnm_staging', 'id_disease_stage', 'id_clinical_group', 'id_histology_date', 'id_histology_number', 'id_histology_description'];
-        fields.forEach(id => {
-            const el = document.getElementById(id);
-            if (el) {
-                el.classList.remove('invalid-field');
-                // Також скидаємо стиль для кастомного дейтпікера
-                const container = el.nextSibling;
-                if (container && container.classList && container.classList.contains('date-input-container')) {
-                    container.classList.remove('invalid-field');
-                    container.querySelectorAll('.date-part').forEach(part => part.classList.remove('invalid-field'));
+            // 3. Пошук TNM з префіксами c, p, yc, yp (підтримує як латинські, так і кириличні літери)
+            const tnmRegex = /\b((?:[cp]|yc|yp)?[TТtт][0-4a-dхxіІ]*)\s*((?:[cp]|yc|yp)?[NНnн][0-3a-cхxіІ]*)\s*((?:[cp]|yc|yp)?[MМmм][0-1a-cхxіІ]*)\b/i;
+            const tnmMatch = text.match(tnmRegex);
+            if (tnmMatch) {
+                let tnm = tnmMatch[0]
+                    .replace(/[Тт]/g, 'T')
+                    .replace(/[Нн]/g, 'N')
+                    .replace(/[Мм]/g, 'M');
+                
+                // Нормалізуємо регістр: T, N, M та індекси стають великими ліми, а c, p, yc, yp залишаються малими
+                let prefix = '';
+                let remainder = tnm;
+                const prefixMatch = tnm.match(/^(yc|yp|c|p)/i);
+                if (prefixMatch) {
+                    prefix = prefixMatch[0].toLowerCase();
+                    remainder = tnm.substring(prefix.length);
+                }
+                tnm = prefix + remainder.toUpperCase();
+                document.getElementById('id_tnm_staging').value = tnm;
+            } else {
+                // Спрощений пошук без M
+                const partialTnmRegex = /\b((?:[cp]|yc|yp)?[TТtт][0-4a-dхxіІ]*)\s*((?:[cp]|yc|yp)?[NНnн][0-3a-cхxіІ]*)\b/i;
+                const partialMatch = text.match(partialTnmRegex);
+                if (partialMatch) {
+                    let tnm = partialMatch[0]
+                        .replace(/[Тт]/g, 'T')
+                        .replace(/[Нн]/g, 'N');
+                    let prefix = '';
+                    let remainder = tnm;
+                    const prefixMatch = tnm.match(/^(yc|yp|c|p)/i);
+                    if (prefixMatch) {
+                        prefix = prefixMatch[0].toLowerCase();
+                        remainder = tnm.substring(prefix.length);
+                    }
+                    tnm = prefix + remainder.toUpperCase();
+                    document.getElementById('id_tnm_staging').value = tnm;
                 }
             }
-        });
 
-        // Заповнення полів форми
-        document.getElementById('id_diagnosis').value = buildDiagnosisString(data);
-        
-        if (data.tnm_stage) {
-            document.getElementById('id_tnm_staging').value = data.tnm_stage;
-        }
-        if (data.disease_stage) {
-            document.getElementById('id_disease_stage').value = data.disease_stage;
-        }
-        if (data.clinical_group) {
-            document.getElementById('id_clinical_group').value = data.clinical_group;
-        }
-        if (data.histology_date) {
-            document.getElementById('id_histology_date').value = data.histology_date;
-            // Оновлюємо значення кастомного дейтпікера
-            const dateParts = data.histology_date.split('.');
-            if (dateParts.length === 3) {
+            // 4. Пошук стадії захворювання (римські цифри або арабські після слів стадія/ст/stage)
+            const stageRegex = /(?:стадія|ст\.?|stage)\s*([IVX1-4]{1,4}[A-CА-Сa-cа-с]?)\b/i;
+            const stageMatch = text.match(stageRegex);
+            if (stageMatch) {
+                let stage = stageMatch[1].toUpperCase()
+                    .replace(/[Аа]/g, 'A')
+                    .replace(/[Вв]/g, 'B')
+                    .replace(/[Сс]/g, 'C');
+                document.getElementById('id_disease_stage').value = stage;
+            }
+
+            // 5. Пошук клінічної групи
+            const clGroupRegex = /(?:кл\.?\s*гр\.?|клінічна\s+група|клгр)\s*([IVX1-4]{1,4}|\d+)/i;
+            const clGroupMatch = text.match(clGroupRegex);
+            if (clGroupMatch) {
+                let clGroup = clGroupMatch[1].toUpperCase();
+                // Нормалізуємо арабські цифри в римські, якщо потрібно (наприклад 2 -> II)
+                if (clGroup === '1') clGroup = 'I';
+                else if (clGroup === '2') clGroup = 'II';
+                else if (clGroup === '3') clGroup = 'III';
+                else if (clGroup === '4') clGroup = 'IV';
+                document.getElementById('id_clinical_group').value = clGroup;
+            }
+
+            // 6. Пошук номера гістології (ПГЗ), включаючи формати 111/111 або 12345-67
+            const histNumRegex = /(?:ПГЗ|гістологія|гіст\.?|гістологічне\s+дослідження)\s*(?:№|номер)?\s*([0-9\-\/\\іІa-zA-Zа-яА-Я]+)/i;
+            const histNumMatch = text.match(histNumRegex);
+            if (histNumMatch) {
+                document.getElementById('id_histology_number').value = histNumMatch[1];
+            }
+
+            // 7. Пошук дати гістології (шукаємо будь-яку першу знайдену дату DD.MM.YYYY в усьому тексті)
+            const dateRegex = /\b(\d{1,2})\.(\d{1,2})\.(\d{2,4})\b/;
+            const dateMatch = text.match(dateRegex);
+            if (dateMatch) {
+                let day = dateMatch[1].padStart(2, '0');
+                let month = dateMatch[2].padStart(2, '0');
+                let year = dateMatch[3];
+                if (year.length === 2) year = '20' + year;
+                let formattedDate = `${day}.${month}.${year}`;
+                document.getElementById('id_histology_date').value = formattedDate;
+                
+                // Оновлення кастомного дейтпікера, якщо він є в DOM
                 const container = document.getElementById('id_histology_date').nextSibling;
                 if (container && container.classList && container.classList.contains('date-input-container')) {
-                    container.querySelector('.date-day').value = dateParts[0];
-                    container.querySelector('.date-month').value = dateParts[1];
-                    container.querySelector('.date-year').value = dateParts[2];
+                    const dayPart = container.querySelector('.date-day');
+                    const monthPart = container.querySelector('.date-month');
+                    const yearPart = container.querySelector('.date-year');
+                    if (dayPart) dayPart.value = day;
+                    if (monthPart) monthPart.value = month;
+                    if (yearPart) yearPart.value = year;
                 }
             }
-        }
-        if (data.histology_number) {
-            document.getElementById('id_histology_number').value = data.histology_number;
-        }
-        if (data.histology_text) {
-            document.getElementById('id_histology_description').value = data.histology_text;
-        } else if (data.grade) {
-            document.getElementById('id_histology_description').value = 'Grade: ' + data.grade;
-        }
 
-        // Відображення текстового висновку та причин перегляду
-        const summaryBox = document.getElementById('doctor-summary-box');
-        if (summaryBox) {
-            summaryBox.style.display = 'block';
-            summaryBox.className = 'doctor-summary-box';
-            
-            let htmlContent = `<h3>📋 Аналіз онкологічного діагнозу (Наказ МОЗ № 473)</h3>`;
-            htmlContent += `<p><strong>Висновок лікаря-кодувальника:</strong> ${data.doctor_summary || 'Висновок відсутній.'}</p>`;
-            
-            if (data.requires_review) {
-                summaryBox.classList.add('requires-review');
-                htmlContent += `
-                <div class="warning-section">
-                    <strong>⚠️ Потребує додаткової перевірки лікарем:</strong>
-                    <ul style="margin: 5px 0 0 20px; padding: 0;">
-                `;
-                data.review_reasons.forEach(reason => {
-                    htmlContent += `<li>${reason}</li>`;
-                });
-                htmlContent += `
-                    </ul>
-                </div>
-                `;
-                
-                // Підсвічуємо червоним поля, що потребують уваги
-                fields.forEach(id => {
-                    const el = document.getElementById(id);
-                    if (el) {
-                        el.classList.add('invalid-field');
-                        const container = el.nextSibling;
-                        if (container && container.classList && container.classList.contains('date-input-container')) {
-                            container.classList.add('invalid-field');
-                            container.querySelectorAll('.date-part').forEach(part => part.classList.add('invalid-field'));
-                        }
-                    }
-                });
+            // 8. Опис гістології (усе після дати/номера гістології та дефіса з пробілами)
+            const histDescRegex = /(?:ПГЗ|гістологія|гіст\.?)\s*(?:№\s*[^\s]+)?\s*(?:від\s*\d{1,2}\.\d{1,2}\.\d{2,4})?\s+[-\—\–:]\s+([^.\n]+)/i;
+            const histDescMatch = text.match(histDescRegex);
+            if (histDescMatch) {
+                document.getElementById('id_histology_description').value = histDescMatch[1].trim();
             } else {
-                htmlContent += `
-                <div class="success-section">
-                    ✅ <strong>Діагноз відповідає стандартам кодування Наказу № 473.</strong>
-                </div>
-                `;
+                // Очищаємо, якщо нічого не знайдено (уникаємо помилкового зчитування дефіса з номерів)
+                document.getElementById('id_histology_description').value = '';
             }
-            summaryBox.innerHTML = htmlContent;
-        }
+
+            // Анімація успіху на полях форми
+            const animatedFields = ['id_diagnosis', 'id_tnm_staging', 'id_disease_stage', 'id_clinical_group', 'id_histology_number', 'id_histology_date', 'id_histology_description'];
+            animatedFields.forEach(id => {
+                const el = document.getElementById(id);
+                if (el && el.value) {
+                    el.style.transition = 'background-color 0.5s ease';
+                    el.style.backgroundColor = 'rgba(40, 167, 69, 0.15)';
+                    setTimeout(() => {
+                        el.style.backgroundColor = 'var(--input-bg)';
+                    }, 1000);
+                }
+            });
+        });
+    }
+
+    // Схеми фракціонування - автозаповнення доз
+    const templateSelect = document.getElementById('id_fraction_template');
+    if (templateSelect) {
+        templateSelect.addEventListener('change', function() {
+            const val = this.value;
+            const totalFractionsInput = document.getElementById('id_total_fractions');
+            const doseInput = document.getElementById('id_dose_per_fraction');
+            const receivedDoseInput = document.getElementById('id_received_dose');
+            
+            if (val === 'radical_50') {
+                if (totalFractionsInput) totalFractionsInput.value = 25;
+                if (doseInput) doseInput.value = '2.0';
+                if (receivedDoseInput) receivedDoseInput.value = '50.0';
+            } else if (val === 'radical_60') {
+                if (totalFractionsInput) totalFractionsInput.value = 30;
+                if (doseInput) doseInput.value = '2.0';
+                if (receivedDoseInput) receivedDoseInput.value = '60.0';
+            } else if (val === 'radical_70') {
+                if (totalFractionsInput) totalFractionsInput.value = 35;
+                if (doseInput) doseInput.value = '2.0';
+                if (receivedDoseInput) receivedDoseInput.value = '70.0';
+            } else if (val === 'palliative_20') {
+                if (totalFractionsInput) totalFractionsInput.value = 5;
+                if (doseInput) doseInput.value = '4.0';
+                if (receivedDoseInput) receivedDoseInput.value = '20.0';
+            } else if (val === 'palliative_30') {
+                if (totalFractionsInput) totalFractionsInput.value = 10;
+                if (doseInput) doseInput.value = '3.0';
+                if (receivedDoseInput) receivedDoseInput.value = '30.0';
+            }
+            
+            // Анімація успіху на полях
+            const fields = [totalFractionsInput, doseInput, receivedDoseInput];
+            fields.forEach(el => {
+                if (el && el.value) {
+                    el.style.transition = 'background-color 0.5s ease';
+                    el.style.backgroundColor = 'rgba(40, 167, 69, 0.15)';
+                    setTimeout(() => {
+                        el.style.backgroundColor = 'var(--input-bg)';
+                    }, 1000);
+                }
+            });
+        });
     }
 });
 </script>
@@ -590,90 +566,6 @@ document.addEventListener('DOMContentLoaded', function() {
 .form-group .date-input-container {
     width: 100%;
 }
-.drop-zone {
-    border: 2px dashed var(--primary-color);
-    border-radius: 8px;
-    padding: 30px;
-    text-align: center;
-    margin-bottom: 20px;
-    background-color: var(--hover-bg);
-    transition: all 0.3s ease;
-}
-.drop-zone.highlight {
-    background-color: rgba(0, 123, 255, 0.1);
-    border-color: #0056b3;
-}
-.upload-link {
-    color: var(--primary-color);
-    text-decoration: underline;
-    cursor: pointer;
-    font-weight: bold;
-}
-.loading-indicator {
-    margin-top: 15px;
-}
-.spinner {
-    border: 4px solid rgba(0, 0, 0, 0.1);
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    border-left-color: var(--primary-color);
-    animation: spin 1s linear infinite;
-    margin: 0 auto 10px;
-}
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
-.invalid-field {
-    border: 2px solid #dc3545 !important;
-    background-color: rgba(220, 53, 69, 0.08) !important;
-}
-.date-input-container.invalid-field {
-    border-color: #dc3545 !important;
-    background-color: rgba(220, 53, 69, 0.08) !important;
-}
-.date-input-container.invalid-field .date-part {
-    background-color: transparent !important;
-}
-.doctor-summary-box {
-    padding: 20px;
-    margin-bottom: 25px;
-    border-radius: 8px;
-    background-color: var(--hover-bg);
-    border-left: 5px solid var(--primary-color);
-    box-shadow: var(--shadow);
-    color: var(--text-color);
-}
-.doctor-summary-box.requires-review {
-    border-left-color: #dc3545;
-    background-color: rgba(220, 53, 69, 0.06);
-    border: 1px solid rgba(220, 53, 69, 0.15);
-    border-left-width: 5px;
-}
-.doctor-summary-box h3 {
-    margin-top: 0;
-    margin-bottom: 12px;
-    color: var(--primary-color);
-}
-.doctor-summary-box.requires-review h3 {
-    color: #dc3545;
-}
-.warning-section {
-    margin-top: 15px;
-    padding: 15px;
-    background-color: rgba(255, 193, 7, 0.12);
-    border: 1px solid rgba(255, 193, 7, 0.25);
-    border-radius: 5px;
-    color: var(--text-color);
-}
-.success-section {
-    margin-top: 15px;
-    padding: 12px;
-    background-color: rgba(40, 167, 69, 0.12);
-    border: 1px solid rgba(40, 167, 69, 0.25);
-    border-radius: 5px;
-    color: var(--text-color);
-}
+
 </style>
 {% endblock %} 

@@ -199,3 +199,36 @@ def shift_patient_schedule(patient, from_date=None):
         patient.fractions.filter(id__in=ids_to_delete).delete()
         
     recalculate_discharge_date(patient)
+
+
+def encrypt_notes(text: str) -> str:
+    """Шифрує текст нотаток за допомогою Fernet та SECRET_KEY сервера"""
+    if not text:
+        return ""
+    import base64
+    import hashlib
+    from django.conf import settings
+    from cryptography.fernet import Fernet
+    
+    key_hash = hashlib.sha256(settings.SECRET_KEY.encode()).digest()
+    key = base64.urlsafe_b64encode(key_hash)
+    f = Fernet(key)
+    return f.encrypt(text.encode()).decode()
+
+
+def decrypt_notes(encrypted_text: str) -> str:
+    """Розшифровує текст нотаток за допомогою Fernet та SECRET_KEY сервера"""
+    if not encrypted_text:
+        return ""
+    import base64
+    import hashlib
+    from django.conf import settings
+    from cryptography.fernet import Fernet
+    
+    key_hash = hashlib.sha256(settings.SECRET_KEY.encode()).digest()
+    key = base64.urlsafe_b64encode(key_hash)
+    f = Fernet(key)
+    try:
+        return f.decrypt(encrypted_text.encode()).decode()
+    except Exception:
+        return "[Помилка дешифрування]"
