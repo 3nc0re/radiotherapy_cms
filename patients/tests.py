@@ -1283,6 +1283,40 @@ class InpatientModuleTests(TestCase):
         first_fraction = patient.fractions.order_by('date').first()
         self.assertEqual(first_fraction.status, 'scheduled')
 
+    def test_auto_deactivate_past_discharge_date(self):
+        """
+        Тест автоматичного звільнення ліжка / деактивації пацієнта,
+        у якого дата виписки у минулому (discharge_date < today)
+        """
+        # Створюємо пацієнта, у якого дата виписки вчора, але is_active=True в базі
+        yesterday = date.today() - timedelta(days=1)
+        patient = Patient.objects.create(
+            last_name='Виписаний',
+            first_name='Пацієнт',
+            gender='M',
+            hospitalization_status='inpatient',
+            bed_owner='Олег',
+            discharge_date=yesterday,
+            is_active=True
+        )
+
+        self.client.login(username='doctor_inpatient', password='testpass123')
+        
+        # Перевіряємо, що після запиту inpatient_list пацієнт автоматично деактивується і зникає зі списку
+        response = self.client.get(reverse('inpatient_list'))
+        self.assertEqual(response.status_code, 200)
+
+        # Пацієнт більше не є активним у базі даних
+        patient.refresh_from_db()
+        self.assertFalse(patient.is_active)
+
+        # Ліжко має бути вільним
+        own_male_beds = response.context['own_male_beds']
+        self.assertFalse(own_male_beds[0]['occupied'])
+        self.assertFalse(own_male_beds[1]['occupied'])
+
+
+
 
 class OncologyCodingTests(TestCase):
     """Тести для модуля автоматизації онкологічного кодування та Наказу № 473"""

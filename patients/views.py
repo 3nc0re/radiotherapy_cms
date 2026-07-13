@@ -30,6 +30,9 @@ def splash(request):
 @login_required
 def dashboard(request):
     today = timezone.now().date()
+    # Автоматично деактивуємо пацієнтів, у яких завершилося лікування (звільнення ліжок)
+    Patient.objects.filter(is_active=True, discharge_date__lt=today).update(is_active=False)
+    
     tomorrow = today + timedelta(days=1)
     
     ct_today_count = Patient.objects.filter(ct_simulation_date=today).count()
@@ -610,6 +613,10 @@ def search_patients(request):
 @login_required
 def inpatient_list(request):
     """Список стаціонарних пацієнтів та ліжкового фонду"""
+    today = timezone.now().date()
+    # Автоматично деактивуємо пацієнтів, у яких завершилося лікування (звільнення ліжок)
+    Patient.objects.filter(is_active=True, discharge_date__lt=today).update(is_active=False)
+    
     # Фільтруємо пацієнтів ВИКЛЮЧНО за статусом inpatient та is_active=True
     current_inpatients = Patient.objects.filter(
         hospitalization_status='inpatient',
