@@ -1,5 +1,6 @@
 from datetime import date, timedelta
 from django.db.models import Q
+from django.utils import timezone
 from .models import Patient, FractionHistory
 
 def generate_fractions_for_patient(patient, start_date=None, total_fractions=None, dose_per_fraction=None):
@@ -47,7 +48,7 @@ def generate_fractions_for_patient(patient, start_date=None, total_fractions=Non
 
 def auto_confirm_today_fractions():
     """Автоматично підтверджує фракції за сьогодні"""
-    today = date.today()
+    today = timezone.localdate()
     active_patients_q = Q(discharge_date__isnull=True) | Q(discharge_date__gte=today)
     active_patients = Patient.objects.filter(active_patients_q)
     
@@ -59,8 +60,12 @@ def auto_confirm_today_fractions():
     
     count = today_fractions.count()
     if count > 0:
+        patient_ids = list(today_fractions.values_list('patient_id', flat=True).distinct())
         today_fractions.update(status='delivered')
-        for patient in active_patients:
+        
+        # Перераховуємо дозу тільки для пацієнтів, які сьогодні пройшли сеанс
+        patients_to_update = Patient.objects.filter(id__in=patient_ids)
+        for patient in patients_to_update:
             patient.recalculate_received_dose()
             
     return count

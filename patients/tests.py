@@ -506,15 +506,17 @@ class PatientModelPropertiesTests(TestCase):
                 dose=2.0,
                 status='delivered'
             )
+        # Створюємо кілька пропущених фракцій
+        for i in range(5, 8):
+            FractionHistory.objects.create(
+                patient=self.patient,
+                date=self.patient.treatment_start_date + timedelta(days=i),
+                dose=2.0,
+                status='missed'
+            )
         
-        # За 10 робочих днів має бути 5 виконаних, отже 5 пропущених
-        missed = self.patient.missed_days
-        self.assertGreaterEqual(missed, 0)
-        
-        # Якщо пацієнт не в лікуванні, має повертати 0
-        self.patient.discharge_date = date.today() - timedelta(days=5)
-        self.patient.save()
-        self.assertEqual(self.patient.missed_days, 0)
+        # Кількість пропущених днів має бути 3
+        self.assertEqual(self.patient.missed_days, 3)
     
     def test_next_blood_test_due_date_property(self):
         """Тест властивості next_blood_test_due_date для звичайних пацієнтів"""

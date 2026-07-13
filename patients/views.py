@@ -29,7 +29,7 @@ def splash(request):
 
 @login_required
 def dashboard(request):
-    today = timezone.now().date()
+    today = timezone.localdate()
     # Автоматично деактивуємо пацієнтів, у яких завершилося лікування (звільнення ліжок)
     Patient.objects.filter(is_active=True, discharge_date__lt=today).update(is_active=False)
     
@@ -115,7 +115,7 @@ def dashboard(request):
 
 @login_required
 def patient_list(request, filter_type=None):
-    today = date.today()
+    today = timezone.localdate()
     # Активні: discharge_date немає або у майбутньому
     base_query = Patient.objects.filter(
         models.Q(discharge_date__isnull=True) | models.Q(discharge_date__gte=today)
@@ -248,7 +248,7 @@ def archive_patient(request, pk):
     """Примусово переводить пацієнта в архів, встановлюючи дату виписки на вчорашній день"""
     patient = get_object_or_404(Patient, pk=pk)
     # Встановлюємо дату виписки в минулому, щоб пацієнт одразу потрапив у статус "Архів"
-    yesterday = date.today() - timedelta(days=1)
+    yesterday = timezone.localdate() - timedelta(days=1)
     patient.discharge_date = yesterday
     patient.save()
     messages.success(request, f'Пацієнта {patient.full_name} успішно переведено в архів.')
@@ -321,7 +321,7 @@ def update_patient_notes(request, pk):
 
 @login_required
 def fraction_list(request):
-    today = date.today()
+    today = timezone.localdate()
     active_patients_q = Q(discharge_date__isnull=True) | Q(discharge_date__gte=today)
     
     # АВТОМАТИКА: Пропущені фракції за минулі дні
@@ -462,7 +462,7 @@ def patient_detail(request, pk):
     patient = get_object_or_404(Patient, pk=pk)
     
     # АВТОМАТИКА: Пропущені фракції за минулі дні для цього конкретного пацієнта
-    today = date.today()
+    today = timezone.localdate()
     is_active = patient.discharge_date is None or patient.discharge_date >= today
     if is_active:
         overdue_fractions = patient.fractions.filter(date__lt=today, status='scheduled').order_by('date')
@@ -550,11 +550,10 @@ def admin_approve_user(request, user_id):
 
 @login_required
 def confirm_blood_test(request, patient_id):
-    if request.method == 'POST':
-        patient = get_object_or_404(Patient, pk=patient_id)
-        patient.last_blood_test_date = date.today()
-        patient.save()
-        messages.success(request, f'Аналіз крові підтверджено для {patient.full_name}')
+    patient = get_object_or_404(Patient, id=patient_id)
+    patient.last_blood_test_date = timezone.localdate()
+    patient.save()
+    messages.success(request, f'Аналіз крові підтверджено для {patient.full_name}')
     return redirect('dashboard')
 
 @login_required
@@ -611,7 +610,7 @@ def search_patients(request):
 @login_required
 def inpatient_list(request):
     """Список стаціонарних пацієнтів та ліжкового фонду"""
-    today = timezone.now().date()
+    today = timezone.localdate()
     # Автоматично деактивуємо пацієнтів, у яких завершилося лікування (звільнення ліжок)
     Patient.objects.filter(is_active=True, discharge_date__lt=today).update(is_active=False)
     
@@ -682,7 +681,7 @@ def admit_patient(request, pk):
         bed_owner = 'Олег'
         
     patient.hospitalization_status = 'inpatient'
-    patient.treatment_start_date = date.today()
+    patient.treatment_start_date = timezone.localdate()
     patient.bed_owner = bed_owner
     patient.save()
     
@@ -696,7 +695,7 @@ def admit_patient(request, pk):
 @login_required
 def patient_archive(request):
     """Список пацієнтів в архіві"""
-    today = date.today()
+    today = timezone.localdate()
     archived_patients = Patient.objects.filter(
         discharge_date__isnull=False,
         discharge_date__lt=today  # Тільки виписані пацієнти (дата виписки в минулому)
@@ -722,7 +721,7 @@ def approve_user(request, pk):
 @require_POST
 def save_today_fractions(request):
     """Зберігає фракції за сьогодні - відмічені як виконані, невідмічені як пропущені"""
-    today = date.today()
+    today = timezone.localdate()
     
     # Отримуємо ID відмічених фракцій
     delivered_ids = request.POST.getlist('delivered_fractions')
@@ -824,7 +823,7 @@ def update_all_discharge_dates(request):
 @require_POST
 def approve_all_fractions(request, pk):
     patient = get_object_or_404(Patient, pk=pk)
-    today = date.today()
+    today = timezone.localdate()
     is_active = patient.discharge_date is None or patient.discharge_date >= today
     
     success = False
@@ -1018,7 +1017,7 @@ def add_patient_fraction_api(request, pk):
         if latest_fraction:
             next_date = latest_fraction.date + timedelta(days=1)
         else:
-            next_date = patient.treatment_start_date or date.today()
+            next_date = patient.treatment_start_date or timezone.localdate()
             
         # Пропускаємо вихідні
         while next_date.weekday() >= 5:

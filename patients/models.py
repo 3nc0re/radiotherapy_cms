@@ -232,24 +232,7 @@ class Patient(models.Model):
     @property
     def missed_days(self):
         """Динамічно розраховує кількість пропущених робочих днів лікування."""
-        if not self.treatment_start_date or not self.is_in_treatment:
-            return 0
-        
-        today = date.today()
-        end_date = self.discharge_date if self.discharge_date and self.discharge_date < today else today
-        
-        # Розраховуємо загальну кількість робочих днів з початку лікування
-        total_weekdays = 0
-        current_date = self.treatment_start_date
-        while current_date <= end_date:
-            if current_date.weekday() < 5: # 0-4 corresponds to Mon-Fri
-                total_weekdays += 1
-            current_date += timedelta(days=1)
-            
-        # Кількість пропущених днів = очікувані фракції - фактичні фракції
-        delivered_fractions = self.fractions.filter(status='delivered').count()
-        missed = total_weekdays - delivered_fractions
-        return max(0, missed)
+        return self.fractions.filter(status='missed').count()
 
     @property
     def next_blood_test_due_date(self):
@@ -282,7 +265,7 @@ class Patient(models.Model):
     @property
     def is_in_treatment(self):
         """Перевіряє, чи пацієнт наразі проходить лікування."""
-        today = date.today()
+        today = timezone.localdate()
         if self.treatment_start_date and self.treatment_start_date <= today:
             if not self.discharge_date or self.discharge_date >= today:
                 return True
@@ -414,8 +397,8 @@ class Patient(models.Model):
     
     def save(self, *args, **kwargs):
         """Перевизначений save для виклику clean та автоматичного оновлення статусу активності"""
-        from datetime import date
-        if self.discharge_date and self.discharge_date < date.today():
+        today = timezone.localdate()
+        if self.discharge_date and self.discharge_date < today:
             self.is_active = False
         else:
             self.is_active = True
@@ -430,7 +413,7 @@ class Patient(models.Model):
         db_table = 'patients'
 
 class FractionHistory(models.Model):
-    patient = models.ForeignKey('Patient', models.DO_NOTHING, related_name='fractions')
+    patient = models.ForeignKey('Patient', models.CASCADE, related_name='fractions')
     date = models.DateField()
     dose = models.FloatField()
     note = models.TextField(blank=True, null=True)
@@ -453,7 +436,7 @@ class FractionHistory(models.Model):
         db_table = 'fraction_history'
 
 class MedicalIncapacity(models.Model):
-    patient = models.ForeignKey('Patient', models.DO_NOTHING, related_name='medical_incapacities')
+    patient = models.ForeignKey('Patient', models.CASCADE, related_name='medical_incapacities')
     mvt_number = models.CharField(max_length=19, blank=True, null=True)
     start_date = models.DateField(blank=True, null=True)
     end_date = models.DateField(blank=True, null=True)
