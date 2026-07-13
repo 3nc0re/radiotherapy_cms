@@ -1619,6 +1619,139 @@ class PINAndConfidentialNotesTests(TestCase):
         self.assertEqual(self.fraction.status, 'delivered')
 
 
+from unittest.mock import patch, MagicMock
+from django.utils import timezone
+from .models import PatientAIDocumentation, PatientAIDiary
+
+class AIAssistantTests(TestCase):
+    def setUp(self):
+        # Очищуємо та створюємо тестового користувача
+        self.user = User.objects.create_user(username='testdoctor', password='password123', role='doctor', approved=True)
+        self.client.login(username='testdoctor', password='password123')
+        
+        # Створюємо тестового пацієнта
+        self.patient = Patient.objects.create(
+            last_name='Тестовий',
+            first_name='Пацієнт',
+            gender='M',
+            diagnosis='C34.9',
+            treatment_start_date=timezone.localdate(),
+            total_fractions=10,
+            dose_per_fraction=2.0,
+            is_active=True
+        )
+
+    def test_ai_notes_save(self):
+        """Тест збереження клінічних нотаток стану для ШІ"""
+        url = reverse('save_ai_notes', kwargs={'pk': self.patient.pk})
+        response = self.client.post(url, {
+            'clinical_state_notes': 'Пацієнт скаржиться на легкий кашель, ECOG 1'
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['success'])
+        
+        # Перевіряємо збереження в БД
+        ai_doc = PatientAIDocumentation.objects.get(patient=self.patient)
+        self.assertEqual(ai_doc.clinical_state_notes, 'Пацієнт скаржиться на легкий кашель, ECOG 1')
+
+    def test_ai_doc_text_save(self):
+        """Тест збереження редагованого тексту первинного огляду та виписки"""
+        url = reverse('save_ai_doc_text', kwargs={'pk': self.patient.pk})
+        response = self.client.post(url, {
+            'initial_assessment': 'Текст первинного огляду',
+            'discharge_summary': 'Текст виписки'
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['success'])
+        
+        # Перевіряємо в БД
+        ai_doc = PatientAIDocumentation.objects.get(patient=self.patient)
+        self.assertEqual(ai_doc.initial_assessment, 'Текст первинного огляду')
+        self.assertEqual(ai_doc.discharge_summary, 'Текст виписки')
+
+    def test_ai_diary_save_and_delete(self):
+        """Тест редагування та видалення щоденникових записів"""
+        # Створюємо щоденник у БД
+        diary = PatientAIDiary.objects.create(
+            patient=self.patient,
+            date=timezone.localdate(),
+            fraction_number=1,
+            ecog_status=1,
+            ctcae_grade=1,
+            clinical_state_notes='Помірна сухість шкіри',
+            generated_text='Згенерований щоденник фракції 1'
+        )
+        
+        # 1. Редагуємо текст щоденника через POST
+        save_url = reverse('save_ai_diary', kwargs={'pk': self.patient.pk, 'diary_id': diary.pk})
+        response = self.client.post(save_url, {
+            'generated_text': 'Оновлений текст щоденника'
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['success'])
+        
+        diary.refresh_from_db()
+        self.assertEqual(diary.generated_text, 'Оновлений текст щоденника')
+        
+        # 2. Видаляємо щоденник через POST
+        delete_url = reverse('delete_ai_diary', kwargs={'pk': self.patient.pk, 'diary_id': diary.pk})
+        response = self.client.post(delete_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['success'])
+        
+        # Перевіряємо видалення з БД
+        self.assertFalse(PatientAIDiary.objects.filter(pk=diary.pk).exists())
+
+    @patch('patients.ai_service.generate_initial_assessment')
+    def test_generate_ai_doc_initial(self, mock_generate):
+        """Тест виклику генерації первинного огляду"""
+        # Налаштовуємо мок
+        mock_generate.return_value = 'Mocked Initial Assessment Content'
+        
+        # Створюємо нотатки стану спочатку
+        ai_doc = PatientAIDocumentation.objects.create(
+            patient=self.patient,
+            clinical_state_notes='Тестові нотатки'
+        )
+        
+        url = reverse('generate_ai_doc', kwargs={'pk': self.patient.pk, 'doc_type': 'initial'})
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data['success'])
+        self.assertEqual(data['text'], 'Mocked Initial Assessment Content')
+        
+        # Перевіряємо збереження в БД
+        ai_doc.refresh_from_db()
+        self.assertEqual(ai_doc.initial_assessment, 'Mocked Initial Assessment Content')
+
+    @patch('patients.ai_service.generate_diary_entry')
+    def test_generate_ai_diary(self, mock_generate):
+        """Тест генерації нового щоденника фракції через ендпоінт"""
+        mock_generate.return_value = 'Mocked Diary Content'
+        
+        url = reverse('generate_ai_diary', kwargs={'pk': self.patient.pk})
+        response = self.client.post(url, {
+            'date': timezone.localdate().strftime('%Y-%m-%d'),
+            'fraction_number': '2',
+            'ecog_status': '1',
+            'ctcae_grade': '1',
+            'clinical_state_notes': 'Скарги на еритему'
+        })
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data['success'])
+        self.assertEqual(data['text'], 'Mocked Diary Content')
+        self.assertEqual(data['fraction_number'], 2)
+        
+        # Перевіряємо створення щоденника в БД
+        diary = PatientAIDiary.objects.get(id=data['diary_id'])
+        self.assertEqual(diary.generated_text, 'Mocked Diary Content')
+        self.assertEqual(diary.ecog_status, 1)
+        self.assertEqual(diary.ctcae_grade, 1)
+        self.assertEqual(diary.clinical_state_notes, 'Скарги на еритему')
+
+
 
 
 

@@ -55,4 +55,12 @@ urlpatterns = [
     path('api/fractions/<int:pk>/toggle-status/', views.toggle_fraction_status, name='toggle_fraction_status'),
     path('api/fractions/<int:pk>/update-note/', views.update_fraction_note_api, name='update_fraction_note_api'),
     path('api/patients/<int:pk>/add-fraction/', views.add_patient_fraction_api, name='add_patient_fraction_api'),
+    
+    # AI Assistant endpoints
+    path('patients/<int:pk>/ai/save_notes/', views.save_ai_notes, name='save_ai_notes'),
+    path('patients/<int:pk>/ai/generate_doc/<str:doc_type>/', views.generate_ai_doc, name='generate_ai_doc'),
+    path('patients/<int:pk>/ai/save_doc_text/', views.save_ai_doc_text, name='save_ai_doc_text'),
+    path('patients/<int:pk>/ai/generate_diary/', views.generate_ai_diary, name='generate_ai_diary'),
+    path('patients/<int:pk>/ai/save_diary/<int:diary_id>/', views.save_ai_diary, name='save_ai_diary'),
+    path('patients/<int:pk>/ai/delete_diary/<int:diary_id>/', views.delete_ai_diary, name='delete_ai_diary'),
 ] 

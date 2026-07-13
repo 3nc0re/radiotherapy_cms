@@ -203,6 +203,179 @@
         </div>
     </div>
 
+    <!-- ШІ-Помічник -->
+    <div class="card full-width">
+        <h3><i class="fas fa-brain" style="color: #6f42c1;"></i> ШІ-Помічник документації</h3>
+        <p style="margin: 0 0 15px 0; color: var(--text-light-color); font-size: 0.9rem;">
+            Генерація первинного огляду, щоденників лікування та виписок. Дані пацієнта (ім'я, дата народження, картка) повністю анонімізовані.
+        </p>
+
+        <!-- Вкладки ШІ -->
+        <div class="ai-tabs-container">
+            <div class="ai-tabs-header">
+                <button class="ai-tab-btn active" onclick="switchAITab(event, 'ai-tab-assessment')">
+                    <i class="fas fa-file-medical"></i> Первинний огляд
+                </button>
+                <button class="ai-tab-btn" onclick="switchAITab(event, 'ai-tab-diaries')">
+                    <i class="fas fa-book-medical"></i> Щоденники лікування
+                </button>
+                <button class="ai-tab-btn" onclick="switchAITab(event, 'ai-tab-discharge')">
+                    <i class="fas fa-file-prescription"></i> Виписний епікриз
+                </button>
+            </div>
+
+            <!-- Вкладка 1: Первинний огляд -->
+            <div id="ai-tab-assessment" class="ai-tab-content active">
+                <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 20px; align-items: start;">
+                    <div style="display: flex; flex-direction: column; gap: 15px;">
+                        <div>
+                            <label style="font-weight: 600; display: block; margin-bottom: 5px;">Нотатки стану пацієнта (скарги, симптоми, огляд):</label>
+                            <textarea id="aiClinicalNotes" class="diagnosis-text" style="min-height: 120px; font-size: 0.9rem;" placeholder="Наприклад: Стан відносно задовільний. Скаржиться на помірну загальну слабкість, незначний кашель. Тони серця ритмічні, ЧСС 76/хв. В легенях везикулярне дихання. Живіт м'який, безболісний. Status localis: шкіра без патологічних змін. ECOG 1.">{{ ai_doc.clinical_state_notes|default:'' }}</textarea>
+                        </div>
+                        <button onclick="saveAINotes()" class="btn btn-primary" style="width: 100%;">
+                            <i class="fas fa-save"></i> Зберегти нотатки
+                        </button>
+                        <button onclick="generateAIDoc('initial')" id="btnGenInitial" class="btn btn-success" style="width: 100%; background-color: #6f42c1; color: white;">
+                            <i class="fas fa-cogs"></i> Згенерувати первинний огляд
+                        </button>
+                    </div>
+                    <div>
+                        <label style="font-weight: 600; display: block; margin-bottom: 5px;">Згенерований первинний огляд:</label>
+                        <textarea id="aiInitialText" class="diagnosis-text" style="min-height: 250px; font-family: monospace; font-size: 0.9rem;" placeholder="Тут з'явиться згенерований первинний огляд...">{{ ai_doc.initial_assessment|default:'' }}</textarea>
+                        <div style="display: flex; gap: 10px; margin-top: 10px;">
+                            <button onclick="saveAIDocText()" class="btn btn-success" style="flex: 1;">
+                                <i class="fas fa-save"></i> Зберегти чернетку
+                            </button>
+                            <button onclick="copyToClipboard('aiInitialText')" class="btn btn-info" style="flex: 1;">
+                                <i class="fas fa-copy"></i> Копіювати
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Вкладка 2: Щоденники -->
+            <div id="ai-tab-diaries" class="ai-tab-content">
+                <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 20px; align-items: start;">
+                    <!-- Форма генерації щоденника -->
+                    <div style="display: flex; flex-direction: column; gap: 12px; background-color: var(--card-bg); border: 1px solid var(--border-color); padding: 15px; border-radius: 8px;">
+                        <h4 style="margin: 0 0 10px 0; border-bottom: 1px solid var(--border-color); padding-bottom: 5px;">Створити новий щоденник</h4>
+                        
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                            <div>
+                                <label style="font-size: 0.85rem; font-weight: 600; display: block; margin-bottom: 4px;">Дата:</label>
+                                <input type="date" id="diaryDate" class="form-control" style="font-size: 0.9rem;" value="{% now 'Y-m-d' %}">
+                            </div>
+                            <div>
+                                <label style="font-size: 0.85rem; font-weight: 600; display: block; margin-bottom: 4px;">Сеанс (фракція):</label>
+                                <input type="number" id="diaryFraction" class="form-control" style="font-size: 0.9rem;" placeholder="напр. 5" value="{{ patient.current_fraction|add:1 }}">
+                            </div>
+                        </div>
+
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                            <div>
+                                <label style="font-size: 0.85rem; font-weight: 600; display: block; margin-bottom: 4px;">Статус ECOG:</label>
+                                <select id="diaryEcog" class="form-control" style="font-size: 0.9rem;">
+                                    <option value="0">0 - Активний</option>
+                                    <option value="1" selected>1 - Легке обмеження</option>
+                                    <option value="2">2 - Самообслуговування</option>
+                                    <option value="3">3 - Обмежений рух</option>
+                                    <option value="4">4 - Неактивний</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="font-size: 0.85rem; font-weight: 600; display: block; margin-bottom: 4px;">Токсичність CTCAE v5.0:</label>
+                                <select id="diaryCtcae" class="form-control" style="font-size: 0.9rem;">
+                                    <option value="0">Grade 0 - Немає</option>
+                                    <option value="1" selected>Grade 1 - Легка</option>
+                                    <option value="2">Grade 2 - Помірна</option>
+                                    <option value="3">Grade 3 - Тяжка</option>
+                                    <option value="4">Grade 4 - Загрозлива</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label style="font-size: 0.85rem; font-weight: 600; display: block; margin-bottom: 4px;">Скарги та статус на цю дату:</label>
+                            <textarea id="diaryNotes" class="diagnosis-text" style="min-height: 80px; font-size: 0.9rem;" placeholder="Скарги на помірну еритему в зоні опромінення, сухість шкіри..."></textarea>
+                        </div>
+
+                        <button onclick="generateAIDiary()" id="btnGenDiary" class="btn btn-success" style="width: 100%; background-color: #6f42c1; color: white;">
+                            <i class="fas fa-plus-circle"></i> Згенерувати щоденниковий запис
+                        </button>
+                    </div>
+
+                    <!-- Список щоденників -->
+                    <div style="display: flex; flex-direction: column; gap: 15px;">
+                        <h4 style="margin: 0 0 5px 0;">Історія записів щоденника</h4>
+                        <div id="aiDiariesList" style="max-height: 380px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; padding-right: 5px;">
+                            {% if ai_diaries %}
+                                {% for diary in ai_diaries %}
+                                    <div class="ai-diary-card" id="diary-card-{{ diary.id }}">
+                                        <div class="ai-diary-card-header">
+                                            <span>
+                                                <strong>Фракція {{ diary.fraction_number|default:"—" }}</strong> ({{ diary.date|date:"d.m.Y" }})
+                                                <span class="badge" style="background-color: #6c757d; margin-left: 5px;">ECOG {{ diary.ecog_status }}</span>
+                                                <span class="badge" style="background-color: #ffc107; color: black; margin-left: 2px;">CTCAE Grade {{ diary.ctcae_grade }}</span>
+                                            </span>
+                                            <button onclick="deleteDiary({{ diary.id }})" class="btn-delete-icon" title="Видалити запис">
+                                                <i class="fas fa-trash-alt"></i>
+                                            </button>
+                                        </div>
+                                        <div class="ai-diary-card-body">
+                                            <small style="display:block; margin-bottom:5px; color: var(--text-light-color);">
+                                                <strong>Нотатки лікаря:</strong> {{ diary.clinical_state_notes|default:"немає" }}
+                                            </small>
+                                            <textarea id="diaryText-{{ diary.id }}" class="diagnosis-text" style="min-height: 110px; font-family: monospace; font-size: 0.85rem;">{{ diary.generated_text }}</textarea>
+                                            <div style="display: flex; gap: 10px; margin-top: 8px;">
+                                                <button onclick="saveDiary({{ diary.id }})" class="btn btn-success" style="padding: 4px 10px; font-size: 0.8rem; width: auto; flex: none;">
+                                                    <i class="fas fa-save"></i> Зберегти зміни
+                                                </button>
+                                                <button onclick="copyToClipboard('diaryText-{{ diary.id }}')" class="btn btn-info" style="padding: 4px 10px; font-size: 0.8rem; width: auto; flex: none;">
+                                                    <i class="fas fa-copy"></i> Копіювати
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                            {% else %}
+                                <p id="noDiariesMsg" style="margin: 20px 0; text-align: center; color: var(--text-light-color);">Щоденникових записів поки немає.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Вкладка 3: Виписний епікриз -->
+            <div id="ai-tab-discharge" class="ai-tab-content">
+                <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 20px; align-items: start;">
+                    <div style="display: flex; flex-direction: column; gap: 15px;">
+                        <div>
+                            <p style="font-size: 0.85rem; line-height: 1.4; margin-bottom: 10px; background-color: rgba(111, 66, 193, 0.05); padding: 10px; border-radius: 6px; border-left: 3px solid #6f42c1;">
+                                ℹ️ Буде згенеровано виписні дані на основі поточного діагнозу та лікувального курсу (загальна кількість сеансів: {{ patient.total_fractions|default:"не вказано" }}, отримана доза: {{ patient.received_dose|default:"0" }} Гр).
+                            </p>
+                        </div>
+                        <button onclick="generateAIDoc('discharge')" id="btnGenDischarge" class="btn btn-success" style="width: 100%; background-color: #6f42c1; color: white;">
+                            <i class="fas fa-cogs"></i> Згенерувати виписний епікриз
+                        </button>
+                    </div>
+                    <div>
+                        <label style="font-weight: 600; display: block; margin-bottom: 5px;">Згенеровані виписні дані:</label>
+                        <textarea id="aiDischargeText" class="diagnosis-text" style="min-height: 250px; font-family: monospace; font-size: 0.9rem;" placeholder="Тут з'явиться згенерований виписний епікриз...">{{ ai_doc.discharge_summary|default:'' }}</textarea>
+                        <div style="display: flex; gap: 10px; margin-top: 10px;">
+                            <button onclick="saveAIDocText()" class="btn btn-success" style="flex: 1;">
+                                <i class="fas fa-save"></i> Зберегти чернетку
+                            </button>
+                            <button onclick="copyToClipboard('aiDischargeText')" class="btn btn-info" style="flex: 1;">
+                                <i class="fas fa-copy"></i> Копіювати
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Історія фракцій -->
     <div class="card full-width">
         <h3><i class="fas fa-history"></i> Історія фракцій</h3>
@@ -711,6 +884,287 @@ document.addEventListener("visibilitychange", function() {
         lockConfidentialNotes();
     }
 });
+
+// AI Assistant Tab Switcher
+function switchAITab(event, tabId) {
+    const container = event.target.closest('.ai-tabs-container');
+    
+    // Deactivate all tab buttons in this container
+    container.querySelectorAll('.ai-tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    // Deactivate all tab content blocks in this container
+    container.querySelectorAll('.ai-tab-content').forEach(content => {
+        content.classList.remove('active');
+    });
+    
+    // Activate clicked button and target tab content
+    event.currentTarget.classList.add('active');
+    document.getElementById(tabId).classList.add('active');
+}
+
+// Copy content from a textarea to clipboard
+function copyToClipboard(textareaId) {
+    const text = document.getElementById(textareaId);
+    if (!text) return;
+    
+    text.select();
+    text.setSelectionRange(0, 99999);
+    
+    try {
+        document.execCommand('copy');
+        alert("Текст скопійовано в буфер обміну!");
+    } catch (err) {
+        console.error('Помилка копіювання: ', err);
+    }
+}
+
+// Save AI Clinical Notes
+function saveAINotes() {
+    const notes = document.getElementById('aiClinicalNotes').value;
+    const formData = new FormData();
+    formData.append('clinical_state_notes', notes);
+    formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+    
+    fetch("{% url 'save_ai_notes' patient.pk %}", {
+        method: 'POST',
+        body: formData
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            alert("Нотатки успішно збережено!");
+        } else {
+            alert("Помилка при збереженні: " + data.error);
+        }
+    })
+    .catch(err => alert("Помилка підключення: " + err.message));
+}
+
+// Generate Initial Assessment or Discharge Summary
+function generateAIDoc(docType) {
+    const btn = docType === 'initial' ? document.getElementById('btnGenInitial') : document.getElementById('btnGenDischarge');
+    const originalText = btn.innerHTML;
+    
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Генерується...';
+    btn.disabled = true;
+    
+    const formData = new FormData();
+    formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+    
+    // Auto-save clinical notes first
+    const notes = document.getElementById('aiClinicalNotes').value;
+    formData.append('clinical_state_notes', notes);
+    
+    // First save the notes
+    fetch("{% url 'save_ai_notes' patient.pk %}", {
+        method: 'POST',
+        body: formData
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (!data.success) throw new Error(data.error);
+        // Then generate the document
+        return fetch(`/patients/{{ patient.pk }}/ai/generate_doc/${docType}/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}'
+            }
+        });
+    })
+    .then(res => res.json())
+    .then(data => {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+        
+        if (data.success) {
+            if (docType === 'initial') {
+                document.getElementById('aiInitialText').value = data.text;
+            } else {
+                document.getElementById('aiDischargeText').value = data.text;
+            }
+            alert("Генерація успішно завершена!");
+        } else {
+            alert("Помилка при генерації: " + data.error);
+        }
+    })
+    .catch(err => {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+        alert("Помилка: " + err.message);
+    });
+}
+
+// Save edited Initial / Discharge text
+function saveAIDocText() {
+    const initialText = document.getElementById('aiInitialText').value;
+    const dischargeText = document.getElementById('aiDischargeText').value;
+    
+    const formData = new FormData();
+    formData.append('initial_assessment', initialText);
+    formData.append('discharge_summary', dischargeText);
+    formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+    
+    fetch("{% url 'save_ai_doc_text' patient.pk %}", {
+        method: 'POST',
+        body: formData
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            alert("Чернетку документів успішно збережено!");
+        } else {
+            alert("Помилка при збереженні: " + data.error);
+        }
+    })
+    .catch(err => alert("Помилка: " + err.message));
+}
+
+// Generate new daily diary entry
+function generateAIDiary() {
+    const btn = document.getElementById('btnGenDiary');
+    const originalText = btn.innerHTML;
+    
+    const dateVal = document.getElementById('diaryDate').value;
+    const fractionVal = document.getElementById('diaryFraction').value;
+    const ecogVal = document.getElementById('diaryEcog').value;
+    const ctcaeVal = document.getElementById('diaryCtcae').value;
+    const notesVal = document.getElementById('diaryNotes').value;
+    
+    if (!dateVal) {
+        alert("Будь ласка, вкажіть дату щоденника");
+        return;
+    }
+    
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Генерується щоденник...';
+    btn.disabled = true;
+    
+    const formData = new FormData();
+    formData.append('date', dateVal);
+    formData.append('fraction_number', fractionVal);
+    formData.append('ecog_status', ecogVal);
+    formData.append('ctcae_grade', ctcaeVal);
+    formData.append('clinical_state_notes', notesVal);
+    formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+    
+    fetch("{% url 'generate_ai_diary' patient.pk %}", {
+        method: 'POST',
+        body: formData
+    })
+    .then(res => res.json())
+    .then(data => {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+        
+        if (data.success) {
+            alert("Щоденник успішно згенеровано!");
+            
+            // Remove "no diaries" message if it exists
+            const noDiaries = document.getElementById('noDiariesMsg');
+            if (noDiaries) noDiaries.remove();
+            
+            // Append the new card to the list of diaries at the top
+            const diariesList = document.getElementById('aiDiariesList');
+            const card = document.createElement('div');
+            card.className = 'ai-diary-card';
+            card.id = `diary-card-${data.diary_id}`;
+            card.innerHTML = `
+                <div class="ai-diary-card-header">
+                    <span>
+                        <strong>Фракція ${data.fraction_number || '—'}</strong> (${data.date})
+                        <span class="badge" style="background-color: #6c757d; margin-left: 5px;">ECOG ${data.ecog_status}</span>
+                        <span class="badge" style="background-color: #ffc107; color: black; margin-left: 2px;">CTCAE Grade ${data.ctcae_grade}</span>
+                    </span>
+                    <button onclick="deleteDiary(${data.diary_id})" class="btn-delete-icon" title="Видалити запис">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                </div>
+                <div class="ai-diary-card-body">
+                    <small style="display:block; margin-bottom:5px; color: var(--text-light-color);">
+                        <strong>Нотатки лікаря:</strong> ${data.clinical_state_notes || "немає"}
+                    </small>
+                    <textarea id="diaryText-${data.diary_id}" class="diagnosis-text" style="min-height: 110px; font-family: monospace; font-size: 0.85rem;">${data.text}</textarea>
+                    <div style="display: flex; gap: 10px; margin-top: 8px;">
+                        <button onclick="saveDiary(${data.diary_id})" class="btn btn-success" style="padding: 4px 10px; font-size: 0.8rem; width: auto; flex: none;">
+                            <i class="fas fa-save"></i> Зберегти зміни
+                        </button>
+                        <button onclick="copyToClipboard('diaryText-${data.diary_id}')" class="btn btn-info" style="padding: 4px 10px; font-size: 0.8rem; width: auto; flex: none;">
+                            <i class="fas fa-copy"></i> Копіювати
+                        </button>
+                    </div>
+                </div>
+            `;
+            diariesList.insertBefore(card, diariesList.firstChild);
+            
+            // Increment the fraction counter in the form automatically for the next diary
+            document.getElementById('diaryFraction').value = parseInt(fractionVal || 0) + 1;
+            // Clear current diary notes text
+            document.getElementById('diaryNotes').value = "";
+        } else {
+            alert("Помилка генерації щоденника: " + data.error);
+        }
+    })
+    .catch(err => {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+        alert("Помилка: " + err.message);
+    });
+}
+
+// Save edited daily diary text
+function saveDiary(diaryId) {
+    const text = document.getElementById(`diaryText-${diaryId}`).value;
+    const formData = new FormData();
+    formData.append('generated_text', text);
+    formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+    
+    fetch(`/patients/{{ patient.pk }}/ai/save_diary/${diaryId}/`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            alert("Щоденниковий запис успішно оновлено!");
+        } else {
+            alert("Помилка збереження: " + data.error);
+        }
+    })
+    .catch(err => alert("Помилка: " + err.message));
+}
+
+// Delete daily diary entry
+function deleteDiary(diaryId) {
+    if (!confirm("Ви впевнені, що хочете видалити цей щоденниковий запис?")) return;
+    
+    fetch(`/patients/{{ patient.pk }}/ai/delete_diary/${diaryId}/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}'
+        }
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById(`diary-card-${diaryId}`).remove();
+            alert("Запис видалено!");
+            
+            // If list is empty, show empty message
+            const list = document.getElementById('aiDiariesList');
+            if (list.children.length === 0) {
+                const msg = document.createElement('p');
+                msg.id = 'noDiariesMsg';
+                msg.style = 'margin: 20px 0; text-align: center; color: var(--text-light-color);';
+                msg.textContent = 'Щоденникових записів поки немає.';
+                list.appendChild(msg);
+            }
+        } else {
+            alert("Помилка видалення: " + data.error);
+        }
+    })
+    .catch(err => alert("Помилка: " + err.message));
+}
 </script>
 
 <style>
@@ -949,6 +1403,105 @@ progress::-webkit-progress-value {
 }
 .date-shifted {
     border-left: 3px solid #ffc107;
+}
+
+/* AI Assistant Tab Styles */
+.ai-tabs-container {
+    width: 100%;
+    margin-top: 10px;
+}
+.ai-tabs-header {
+    display: flex;
+    border-bottom: 2px solid var(--border-color);
+    margin-bottom: 15px;
+    gap: 5px;
+}
+.ai-tab-btn {
+    padding: 10px 20px;
+    background: none;
+    border: none;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--text-light-color);
+    border-bottom: 3px solid transparent;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.ai-tab-btn:hover {
+    color: var(--text-color);
+    background-color: rgba(111, 66, 193, 0.03);
+}
+.ai-tab-btn.active {
+    color: #6f42c1;
+    border-bottom-color: #6f42c1;
+}
+.ai-tab-content {
+    display: none;
+    animation: fadeIn 0.3s ease;
+}
+.ai-tab-content.active {
+    display: block;
+}
+.ai-diary-card {
+    background-color: var(--background-color);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 10px 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: all 0.2s ease;
+}
+.ai-diary-card:hover {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+.ai-diary-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 5px;
+    font-size: 0.9rem;
+}
+.ai-diary-card-body {
+    display: flex;
+    flex-direction: column;
+}
+.badge {
+    padding: 2px 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border-radius: 4px;
+    color: white;
+}
+.btn-delete-icon {
+    background: none;
+    border: none;
+    color: #dc3545;
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+.btn-delete-icon:hover {
+    background-color: rgba(220, 53, 69, 0.1);
+}
+.form-control {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background-color: var(--input-bg);
+    color: var(--text-color);
+    box-sizing: border-box;
+}
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 </style>
 <script>

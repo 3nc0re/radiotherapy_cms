@@ -483,13 +483,19 @@ def patient_detail(request, pk):
     missed_fractions_count = patient.fractions.filter(status='missed').count()
     postponed_fractions_count = patient.fractions.filter(original_date__isnull=False).count()
     
+    # Завантажуємо ШІ-документи та щоденники
+    ai_doc = getattr(patient, 'ai_documentation', None)
+    ai_diaries = patient.ai_diaries.all().order_by('-date', '-fraction_number')
+    
     return render(request, 'patients/patient_detail.html', {
         'patient': patient,
         'fractions': fractions,
         'incapacities': incapacities,
         'treatment_info': treatment_info,
         'missed_fractions_count': missed_fractions_count,
-        'postponed_fractions_count': postponed_fractions_count
+        'postponed_fractions_count': postponed_fractions_count,
+        'ai_doc': ai_doc,
+        'ai_diaries': ai_diaries
     })
 
 def login_view(request):
@@ -1038,4 +1044,155 @@ def add_patient_fraction_api(request, pk):
         return JsonResponse({'success': True})
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=400)
+
+
+@login_required
+@require_POST
+def save_ai_notes(request, pk):
+    patient = get_object_or_404(Patient, pk=pk)
+    notes = request.POST.get('clinical_state_notes', '').strip()
+    
+    from .models import PatientAIDocumentation
+    ai_doc, created = PatientAIDocumentation.objects.get_or_create(patient=patient)
+    ai_doc.clinical_state_notes = notes
+    ai_doc.save()
+    
+    return JsonResponse({'success': True})
+
+
+@login_required
+@require_POST
+def generate_ai_doc(request, pk, doc_type):
+    patient = get_object_or_404(Patient, pk=pk)
+    
+    from .models import PatientAIDocumentation
+    ai_doc, created = PatientAIDocumentation.objects.get_or_create(patient=patient)
+    
+    from .ai_service import generate_initial_assessment, generate_discharge_summary
+    
+    try:
+        if doc_type == 'initial':
+            text = generate_initial_assessment(
+                gender=patient.gender,
+                diagnosis=patient.diagnosis or patient.raw_diagnosis,
+                clinical_state_notes=ai_doc.clinical_state_notes,
+                total_fractions=patient.total_fractions,
+                dose_per_fraction=patient.dose_per_fraction,
+                irradiation_zone=patient.irradiation_zone
+            )
+            ai_doc.initial_assessment = text
+            ai_doc.save()
+        elif doc_type == 'discharge':
+            patient.recalculate_received_dose()
+            text = generate_discharge_summary(
+                gender=patient.gender,
+                diagnosis=patient.diagnosis or patient.raw_diagnosis,
+                total_fractions=patient.total_fractions,
+                dose_per_fraction=patient.dose_per_fraction,
+                received_dose=patient.received_dose,
+                clinical_state_notes=ai_doc.clinical_state_notes
+            )
+            ai_doc.discharge_summary = text
+            ai_doc.save()
+        else:
+            return JsonResponse({'success': False, 'error': 'Invalid document type'}, status=400)
+            
+        return JsonResponse({'success': True, 'text': text})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@login_required
+@require_POST
+def save_ai_doc_text(request, pk):
+    patient = get_object_or_404(Patient, pk=pk)
+    initial_text = request.POST.get('initial_assessment', '').strip()
+    discharge_text = request.POST.get('discharge_summary', '').strip()
+    
+    from .models import PatientAIDocumentation
+    ai_doc, created = PatientAIDocumentation.objects.get_or_create(patient=patient)
+    ai_doc.initial_assessment = initial_text
+    ai_doc.discharge_summary = discharge_text
+    ai_doc.save()
+    
+    return JsonResponse({'success': True})
+
+
+@login_required
+@require_POST
+def generate_ai_diary(request, pk):
+    patient = get_object_or_404(Patient, pk=pk)
+    
+    diary_date_str = request.POST.get('date')
+    fraction_number_str = request.POST.get('fraction_number')
+    fraction_number = int(fraction_number_str) if fraction_number_str and fraction_number_str.strip().isdigit() else None
+    ecog_status = int(request.POST.get('ecog_status', 0))
+    ctcae_grade = int(request.POST.get('ctcae_grade', 0))
+    clinical_state_notes = request.POST.get('clinical_state_notes', '').strip()
+    
+    if not diary_date_str:
+        return JsonResponse({'success': False, 'error': 'Date is required'}, status=400)
+        
+    try:
+        from django.utils.dateparse import parse_date
+        diary_date = parse_date(diary_date_str)
+        if not diary_date:
+            raise ValueError("Неправильний формат дати")
+            
+        from .ai_service import generate_diary_entry
+        text = generate_diary_entry(
+            gender=patient.gender,
+            diagnosis=patient.diagnosis or patient.raw_diagnosis,
+            fraction_number=fraction_number,
+            ecog_status=ecog_status,
+            ctcae_grade=ctcae_grade,
+            clinical_state_notes=clinical_state_notes
+        )
+        
+        from .models import PatientAIDiary
+        diary = PatientAIDiary.objects.create(
+            patient=patient,
+            date=diary_date,
+            fraction_number=fraction_number or None,
+            ecog_status=ecog_status,
+            ctcae_grade=ctcae_grade,
+            clinical_state_notes=clinical_state_notes,
+            generated_text=text
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'diary_id': diary.id,
+            'text': text,
+            'date': diary.date.strftime('%d.%m.%Y'),
+            'fraction_number': diary.fraction_number,
+            'ecog_status': diary.ecog_status,
+            'ctcae_grade': diary.ctcae_grade,
+            'clinical_state_notes': diary.clinical_state_notes
+        })
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@login_required
+@require_POST
+def save_ai_diary(request, pk, diary_id):
+    from .models import PatientAIDiary
+    diary = get_object_or_404(PatientAIDiary, pk=diary_id, patient_id=pk)
+    generated_text = request.POST.get('generated_text', '').strip()
+    
+    diary.generated_text = generated_text
+    diary.save()
+    
+    return JsonResponse({'success': True})
+
+
+@login_required
+@require_POST
+def delete_ai_diary(request, pk, diary_id):
+    from .models import PatientAIDiary
+    diary = get_object_or_404(PatientAIDiary, pk=diary_id, patient_id=pk)
+    diary.delete()
+    
+    return JsonResponse({'success': True})
 

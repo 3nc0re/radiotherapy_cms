@@ -459,3 +459,31 @@ def auto_generate_fractions(sender, instance, created, **kwargs):
         
         from .services import generate_fractions_for_patient
         generate_fractions_for_patient(instance)
+
+
+class PatientAIDocumentation(models.Model):
+    """Спільна ШІ-документація (первинний огляд, дані для виписки)"""
+    patient = models.OneToOneField('Patient', on_delete=models.CASCADE, related_name='ai_documentation')
+    clinical_state_notes = models.TextField(blank=True, null=True, help_text="Загальні нотатки про стан пацієнта для ШІ")
+    initial_assessment = models.TextField(blank=True, null=True, help_text="Згенерований ШІ первинний огляд")
+    discharge_summary = models.TextField(blank=True, null=True, help_text="Згенеровані ШІ дані для виписки")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'patient_ai_documentation'
+
+
+class PatientAIDiary(models.Model):
+    """Щоденникові записи пацієнта, згенеровані за допомогою ШІ"""
+    patient = models.ForeignKey('Patient', on_delete=models.CASCADE, related_name='ai_diaries')
+    date = models.DateField(help_text="Дата щоденникового запису")
+    fraction_number = models.IntegerField(blank=True, null=True, help_text="Номер фракції")
+    ecog_status = models.IntegerField(default=0, help_text="Статус ECOG (0-4)")
+    ctcae_grade = models.IntegerField(default=0, help_text="Ступінь токсичності CTCAE (0-4)")
+    clinical_state_notes = models.TextField(help_text="Скарги та опис об'єктивного стану на цю дату")
+    generated_text = models.TextField(help_text="Згенерований ШІ текст щоденника")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'patient_ai_diary'
+        ordering = ['date', 'fraction_number']
