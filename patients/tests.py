@@ -517,22 +517,42 @@ class PatientModelPropertiesTests(TestCase):
         self.assertEqual(self.patient.missed_days, 0)
     
     def test_next_blood_test_due_date_property(self):
-        """Тест властивості next_blood_test_due_date"""
-        # Встановлюємо дату останнього аналізу
+        """Тест властивості next_blood_test_due_date для звичайних пацієнтів"""
+        # Пацієнт без радіомодифікації, з вказаним last_blood_test_date
+        # Якщо last_blood_test_date = 5 днів тому, то наступний аналіз через 12 робочих днів
         self.patient.last_blood_test_date = date.today() - timedelta(days=5)
         self.patient.save()
         
-        # Має повернути дату через 10 днів (тільки будні)
-        next_date = self.patient.next_blood_test_due_date
-        self.assertIsNotNone(next_date)
-        self.assertGreaterEqual(next_date, date.today())
+        # Додаємо 12 робочих днів вручну для перевірки
+        expected_date = self.patient.last_blood_test_date
+        added = 0
+        while added < 12:
+            expected_date += timedelta(days=1)
+            if expected_date.weekday() < 5:
+                added += 1
+                
+        self.assertEqual(self.patient.next_blood_test_due_date, expected_date)
+
+        # Тест без last_blood_test_date (має рахувати від treatment_start_date)
+        self.patient.last_blood_test_date = None
+        self.patient.save()
+        
+        expected_date_start = self.patient.treatment_start_date
+        added = 0
+        while added < 12:
+            expected_date_start += timedelta(days=1)
+            if expected_date_start.weekday() < 5:
+                added += 1
+        self.assertEqual(self.patient.next_blood_test_due_date, expected_date_start)
+        
         # Якщо пацієнт не в лікуванні, має повертати None
         self.patient.discharge_date = date.today() - timedelta(days=1)
         self.patient.save()
         self.assertIsNone(self.patient.next_blood_test_due_date)
         
     def test_next_blood_test_due_date_radiomodification(self):
-        """Тест розрахунку дати аналізу крові для радіомодифікації (щотижнево, 7 днів)"""
+        """Тест розрахунку дати аналізу крові для радіомодифікації (щотижнево, 7 календарних днів)"""
+        # Пацієнт з радіомодифікацією та встановленим last_blood_test_date
         patient_rm = Patient.objects.create(
             last_name='Модифікований',
             first_name='Пацієнт',
@@ -540,11 +560,14 @@ class PatientModelPropertiesTests(TestCase):
             last_blood_test_date=date.today() - timedelta(days=3),
             has_radiomodification=True
         )
+        # Очікується рівно 7 календарних днів без зсувів на вихідні
         expected_date = patient_rm.last_blood_test_date + timedelta(days=7)
-        if expected_date.weekday() >= 5:
-            expected_date += timedelta(days=7 - expected_date.weekday())
-            
         self.assertEqual(patient_rm.next_blood_test_due_date, expected_date)
+
+        # Якщо last_blood_test_date не вказано, має повертати None
+        patient_rm.last_blood_test_date = None
+        patient_rm.save()
+        self.assertIsNone(patient_rm.next_blood_test_due_date)
      
     def test_is_in_treatment_property(self):
         """Тест властивості is_in_treatment"""
@@ -1314,6 +1337,67 @@ class InpatientModuleTests(TestCase):
         own_male_beds = response.context['own_male_beds']
         self.assertFalse(own_male_beds[0]['occupied'])
         self.assertFalse(own_male_beds[1]['occupied'])
+
+    def test_blood_test_dashboard_notifications(self):
+        """
+        Тест нагадувань про аналізи на дашборді:
+        - Для звичайного пацієнта без радіомодифікації нагадування з'являється у день аналізу (через 12 робочих днів).
+        - Для пацієнта з радіомодифікацією нагадування з'являється за 1 день до дати аналізу (через 6 календарних днів після останнього).
+        """
+        self.client.login(username='doctor_inpatient', password='testpass123')
+        today = date.today()
+
+        # 1. Створюємо звичайного пацієнта (без радіомодифікації)
+        # Ставимо дату початку лікування так, щоб 12 робочих днів закінчилися сьогодні.
+        # Рахуємо 12 робочих днів назад від сьогодні:
+        start_date = today
+        subtracted = 0
+        while subtracted < 12:
+            start_date -= timedelta(days=1)
+            if start_date.weekday() < 5:
+                subtracted += 1
+        
+        patient_normal = Patient.objects.create(
+            last_name='Нормальний',
+            first_name='Пацієнт',
+            gender='M',
+            treatment_start_date=start_date,
+            has_radiomodification=False,
+            is_active=True
+        )
+        
+        # 2. Створюємо пацієнта з радіомодифікацією
+        # Дата останнього аналізу: 6 днів тому (нагадування має з'явитися сьогодні, за 1 день до 7-го дня)
+        patient_rm = Patient.objects.create(
+            last_name='Модифікований',
+            first_name='Пацієнт',
+            gender='M',
+            treatment_start_date=today - timedelta(days=10),
+            last_blood_test_date=today - timedelta(days=6),
+            has_radiomodification=True,
+            is_active=True
+        )
+
+        response = self.client.get(reverse('dashboard'))
+        self.assertEqual(response.status_code, 200)
+
+        # Перевіряємо, що обидва нагадування є в контексті дашборду
+        notifications = response.context['notifications']
+        blood_test_notifications = [n for n in notifications if n['type'] == 'blood_test']
+        
+        # Очікуємо 2 нагадування про аналізи крові
+        self.assertEqual(len(blood_test_notifications), 2)
+        
+        # Перевіряємо пацієнтів та очікувані дати
+        patients_notified = [n['patient'] for n in blood_test_notifications]
+        self.assertIn(patient_normal, patients_notified)
+        self.assertIn(patient_rm, patients_notified)
+
+        # Для радіомодифікації очікувана дата виписки/аналізу (due_date) - рівно 7 днів від останнього
+        rm_notification = [n for n in blood_test_notifications if n['patient'] == patient_rm][0]
+        self.assertEqual(rm_notification['due_date'], patient_rm.last_blood_test_date + timedelta(days=7))
+
+
 
 
 

@@ -253,18 +253,31 @@ class Patient(models.Model):
 
     @property
     def next_blood_test_due_date(self):
-        """Розраховує наступну рекомендовану дату аналізу крові (через 7 днів для радіомодифікації, або 10 днів для звичайних, тільки будні)."""
-        if not self.last_blood_test_date or not self.is_in_treatment:
+        """
+        Розраховує наступну рекомендовану дату аналізу крові:
+        - Без радіомодифікації: +12 робочих днів від останнього аналізу (або від початку лікування, якщо аналізів не було).
+        - З радіомодифікацією: +7 календарних днів від останнього аналізу (потрібно вказувати вручну).
+        """
+        if not self.is_in_treatment:
             return None
-            
-        days = 7 if self.has_radiomodification else 10
-        target_date = self.last_blood_test_date + timedelta(days=days)
-        
-        # Якщо дата випадає на вихідний, переносимо на найближчий понеділок
-        if target_date.weekday() >= 5: # Saturday or Sunday
-            target_date += timedelta(days=7 - target_date.weekday())
-            
-        return target_date
+
+        if self.has_radiomodification:
+            if not self.last_blood_test_date:
+                return None
+            return self.last_blood_test_date + timedelta(days=7)
+        else:
+            base_date = self.last_blood_test_date or self.treatment_start_date
+            if not base_date:
+                return None
+
+            # Додаємо 12 робочих днів (пн-пт)
+            current_date = base_date
+            added_working_days = 0
+            while added_working_days < 12:
+                current_date += timedelta(days=1)
+                if current_date.weekday() < 5:  # 0-4 corresponds to Mon-Fri
+                    added_working_days += 1
+            return current_date
 
     @property
     def is_in_treatment(self):

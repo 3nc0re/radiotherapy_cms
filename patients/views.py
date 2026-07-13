@@ -67,16 +67,14 @@ def dashboard(request):
         # Blood test check
         if patient.is_in_treatment:
             due_date = patient.next_blood_test_due_date
-            # Якщо дата останнього аналізу не вказана, орієнтуємось на дату початку лікування
-            if not patient.last_blood_test_date:
-                due_date = patient.treatment_start_date
-                
-            if due_date and due_date <= today:
-                notifications.append({
-                    'type': 'blood_test',
-                    'patient': patient,
-                    'due_date': due_date
-                })
+            if due_date:
+                trigger_date = due_date - timedelta(days=1) if patient.has_radiomodification else due_date
+                if today >= trigger_date:
+                    notifications.append({
+                        'type': 'blood_test',
+                        'patient': patient,
+                        'due_date': due_date
+                    })
         
         # MVTN/Incapacity check
         incapacity = patient.prefetched_incapacities[0] if hasattr(patient, 'prefetched_incapacities') and patient.prefetched_incapacities else None
