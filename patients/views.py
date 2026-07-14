@@ -1197,7 +1197,9 @@ def generate_ai_diary(request, pk):
             ecog_status=ecog_status,
             ctcae_grade=ctcae_grade,
             clinical_state_notes=clinical_state_notes,
-            diary_type=diary_type
+            diary_type=diary_type,
+            total_fractions=patient.total_fractions,
+            dose_per_fraction=patient.dose_per_fraction
         )
         
         from .models import PatientAIDiary
