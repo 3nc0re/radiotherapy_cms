@@ -1797,6 +1797,13 @@ class AIAssistantTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(active_patient, response.context['patients'])
 
+    def test_dashboard_quote_of_the_day(self):
+        """Тест отримання випадкової щоденної цитати на дашборді"""
+        response = self.client.get(reverse('dashboard'))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('quote_of_the_day', response.context)
+        self.assertTrue(response.context['quote_of_the_day'].startswith('💡'))
+
 
 
 

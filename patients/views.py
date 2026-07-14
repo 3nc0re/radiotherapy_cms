@@ -33,6 +33,23 @@ def dashboard(request):
     # Автоматично деактивуємо пацієнтів, у яких завершилося лікування (звільнення ліжок)
     Patient.objects.filter(is_active=True, discharge_date__lt=today).update(is_active=False)
     
+    # Список щоденних цитат
+    quotes = [
+        "💡 Лікар не скаржиться. Лікар мовчки пише",
+        "💡 Променева терапія — це мистецтво точності та терпіння",
+        "💡 Крок за кроком, фракція за фракцією — ми йдемо до перемоги",
+        "💡 Успіх лікування залежить не тільки від лікаря, але й від віри пацієнта",
+        "💡 Точність планування КТ — залог успішної радіотерапії",
+        "💡 Найкращий спосіб передбачити майбутнє — створити його разом із пацієнтом",
+        "💡 Справжній лікар лікує не хворобу, а людину",
+        "💡 Терпіння та праця лікаря долають найскладніші клінічні виклики",
+        "💡 Здоров'я пацієнта — це командна робота лікаря та його волі до життя",
+        "💡 Турбота та професіоналізм — ліки без побічних ефектів"
+    ]
+    # Вибираємо цитату дня на основі дня року
+    day_of_year = today.timetuple().tm_yday
+    quote_of_the_day = quotes[day_of_year % len(quotes)]
+    
     tomorrow = today + timedelta(days=1)
     
     ct_today_count = Patient.objects.filter(ct_simulation_date=today).count()
@@ -126,6 +143,7 @@ def dashboard(request):
         'planned_discharge_count': planned_discharge_count,
         'planned_discharge_label': planned_discharge_label,
         'notifications': notifications,
+        'quote_of_the_day': quote_of_the_day,
     }
     return render(request, 'patients/dashboard.html', context)
 
