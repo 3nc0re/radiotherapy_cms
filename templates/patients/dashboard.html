@@ -68,8 +68,9 @@
         <h3><i class="fas fa-chart-bar"></i> Статистика</h3>
         <ul>
             <li><i class="fas fa-procedures"></i> Зараз на лікуванні: <span>{{ in_treatment_count }}</span></li>
-            <li><i class="fas fa-play-circle"></i> На етапі початку лікування: <span>{{ start_count }}</span></li>
+            <li><i class="fas fa-play-circle"></i> Очікують початку лікування: <span>{{ start_count }}</span></li>
             <li><i class="fas fa-x-ray"></i> На етапі КТ: <span>{{ ct_count }}</span></li>
+            <li><i class="fas fa-door-open" style="color: #6f42c1;"></i> {{ planned_discharge_label }}: <span>{{ planned_discharge_count }}</span></li>
             <li><i class="fas fa-check-circle"></i> Виписані цього тижня: <span>{{ discharged_this_week }}</span></li>
         </ul>
     </div>

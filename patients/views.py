@@ -49,9 +49,9 @@ def dashboard(request):
         actual_discharge_date__in=[today, tomorrow]
     ).count()
     
-    ct_count = Patient.objects.filter(ct_simulation_date__isnull=False, treatment_start_date__isnull=True).count()
-    start_count = Patient.objects.filter(treatment_start_date__isnull=False, treatment_start_date__gt=today).count()
-    in_treatment_count = Patient.objects.filter(treatment_start_date__isnull=False, treatment_start_date__lte=today, discharge_date__isnull=True).count()
+    ct_count = Patient.objects.filter(ct_simulation_date__isnull=False, treatment_start_date__isnull=True, is_active=True).count()
+    start_count = Patient.objects.filter(treatment_start_date__isnull=False, treatment_start_date__gt=today, is_active=True).count()
+    in_treatment_count = Patient.objects.filter(treatment_start_date__isnull=False, treatment_start_date__lte=today, is_active=True).count()
     
     notifications = []
     active_patients = Patient.objects.filter(active_patients_q).prefetch_related(
@@ -101,6 +101,20 @@ def dashboard(request):
     from_date = today - timedelta(days=7)
     discharged_this_week = Patient.objects.filter(discharge_date__isnull=False, discharge_date__gte=from_date).count()
     
+    # Розрахунок запланованої виписки (поточний/наступний тиждень)
+    if today.weekday() < 4:  # Понеділок - Четвер
+        start_of_week = today - timedelta(days=today.weekday())
+        planned_discharge_label = "Випишуться цього тижня"
+    else:  # П'ятниця - Неділя
+        start_of_week = today + timedelta(days=(7 - today.weekday()))
+        planned_discharge_label = "Випишуться наступного тижня"
+        
+    end_of_week = start_of_week + timedelta(days=6)
+    planned_discharge_count = Patient.objects.filter(
+        discharge_date__range=[start_of_week, end_of_week],
+        is_active=True
+    ).count()
+    
     context = {
         'ct_today_count': ct_today_count,
         'start_today_count': start_today_count,
@@ -109,6 +123,8 @@ def dashboard(request):
         'start_count': start_count,
         'in_treatment_count': in_treatment_count,
         'discharged_this_week': discharged_this_week,
+        'planned_discharge_count': planned_discharge_count,
+        'planned_discharge_label': planned_discharge_label,
         'notifications': notifications,
     }
     return render(request, 'patients/dashboard.html', context)

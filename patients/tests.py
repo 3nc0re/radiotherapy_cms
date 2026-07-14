@@ -1751,6 +1751,34 @@ class AIAssistantTests(TestCase):
         self.assertEqual(diary.ctcae_grade, 1)
         self.assertEqual(diary.clinical_state_notes, 'Скарги на еритему')
 
+    def test_dashboard_planned_discharges(self):
+        """Тест розрахунку запланованих виписок на дашборді"""
+        today = timezone.localdate()
+        
+        if today.weekday() < 4:
+            start_of_week = today - timedelta(days=today.weekday())
+            expected_label = "Випишуться цього тижня"
+        else:
+            start_of_week = today + timedelta(days=(7 - today.weekday()))
+            expected_label = "Випишуться наступного тижня"
+            
+        target_discharge_date = start_of_week + timedelta(days=3)
+        
+        discharge_patient = Patient.objects.create(
+            last_name='Виписка',
+            first_name='Тест',
+            gender='F',
+            diagnosis='C50.9',
+            treatment_start_date=today - timedelta(days=10),
+            discharge_date=target_discharge_date,
+            is_active=True
+        )
+        
+        response = self.client.get(reverse('dashboard'))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['planned_discharge_label'], expected_label)
+        self.assertGreaterEqual(response.context['planned_discharge_count'], 1)
+
 
 
 
