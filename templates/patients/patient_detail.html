@@ -33,7 +33,7 @@
         <p><strong>Стать:</strong> {{ patient.get_gender_display|default:"—" }}</p>
         <p><strong>Поточний етап:</strong> <span class="badge">{{ patient.display_stage|default:"—" }}</span></p>
         {% if patient.has_radiomodification %}
-        <p><strong>Радіомодифікація:</strong> <span class="badge" style="background-color: #d9534f; color: white;">Так (щотижневий аналіз)</span></p>
+        <p><strong>Радіомодифікація:</strong> <span class="badge" style="background-color: #d9534f; color: white;">Так</span></p>
         {% endif %}
         <p><strong>Статус госпіталізації:</strong> {{ patient.get_hospitalization_status_display|default:"—" }}</p>
         {% if patient.hospitalization_status == 'queue' and patient.planned_admission_date %}
