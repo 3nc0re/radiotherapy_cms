@@ -1189,6 +1189,18 @@ def generate_ai_diary(request, pk):
         if not diary_date:
             raise ValueError("Неправильний формат дати")
             
+        # Fetch previous diaries for context
+        previous_diaries = patient.ai_diaries.all().order_by('date', 'fraction_number')
+        previous_diaries_text = ""
+        if previous_diaries.exists():
+            lines = []
+            for d in previous_diaries:
+                lines.append(
+                    f"- Фракція {d.fraction_number or '—'} ({d.date.strftime('%d.%m.%Y')}):\n"
+                    f"  Текст щоденника:\n{d.generated_text.strip()}"
+                )
+            previous_diaries_text = "\n".join(lines)
+            
         from .ai_service import generate_diary_entry
         text = generate_diary_entry(
             gender=patient.gender,
@@ -1199,7 +1211,8 @@ def generate_ai_diary(request, pk):
             clinical_state_notes=clinical_state_notes,
             diary_type=diary_type,
             total_fractions=patient.total_fractions,
-            dose_per_fraction=patient.dose_per_fraction
+            dose_per_fraction=patient.dose_per_fraction,
+            previous_diaries_text=previous_diaries_text
         )
         
         from .models import PatientAIDiary

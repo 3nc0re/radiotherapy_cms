@@ -65,7 +65,7 @@ def generate_initial_assessment(gender, diagnosis, clinical_state_notes, total_f
     )
     return response.text
 
-def generate_diary_entry(gender, diagnosis, fraction_number, ecog_status, ctcae_grade, clinical_state_notes, diary_type, total_fractions, dose_per_fraction):
+def generate_diary_entry(gender, diagnosis, fraction_number, ecog_status, ctcae_grade, clinical_state_notes, diary_type, total_fractions, dose_per_fraction, previous_diaries_text=None):
     """
     Генерує щоденниковий запис про стан пацієнта для конкретного сеансу лікування.
     """
@@ -105,6 +105,15 @@ def generate_diary_entry(gender, diagnosis, fraction_number, ecog_status, ctcae_
             "у процесі проходження терапії (переносимість лікування, реакції)."
         )
         
+    previous_diaries_section = ""
+    if previous_diaries_text:
+        previous_diaries_section = (
+            f"\nПопередні щоденникові записи пацієнта для аналізу динаміки та спадкоємності:\n"
+            f"{previous_diaries_text}\n"
+            f"\nВрахуйте ці записи для відображення динаміки перебігу лікування та переносимості променевої терапії "
+            f"(наприклад, чи зменшились/збільшились симптоми порівняно з минулими сеансами, чи допомогли раніше призначені ліки)."
+        )
+        
     prompt = f"""
     Згенеруй щоденниковий запис про стан пацієнта під час променевої терапії на основі наступних знеособлених даних:
     - Стать: {gender_text}
@@ -113,6 +122,7 @@ def generate_diary_entry(gender, diagnosis, fraction_number, ecog_status, ctcae_
     - Статус активності за шкалою ECOG: {ecog_descriptions.get(ecog_status, str(ecog_status))}
     - Ступінь токсичності за CTCAE v5.0: {ctcae_grade} (оцінка променевих реакцій)
     - Нотатки лікаря про поточні симптоми та призначення: {clinical_state_notes or 'скарг немає, переносить опромінення задовільно.'}
+    {previous_diaries_section}
     
     Тип щоденника, який необхідно згенерувати: {diary_type_instruction}
     
@@ -122,7 +132,7 @@ def generate_diary_entry(gender, diagnosis, fraction_number, ecog_status, ctcae_
     3. Першим рядком документа виведіть ТІЛЬКИ наступний рядок (БЕЗ ЖОДНИХ зірочок `**` чи іншого форматування):
        {dose_status_line}
        
-       Заборонено виводити заголовок на кшталт "**Стан на момент фракції №2.**" чи подібні фрази із зірочками.
+       Заборонено виводити заголовок на кшталт "**Стан на момент фракції №2.**" чи подобні фрази із зірочками.
        
     4. Категорично заборонено виводити встановлений діагноз (наприклад, рядки на кшталт "**Діагноз:** C30.0..." або будь-яке згадування коду чи назви діагнозу) у самому тексті щоденника.
     
