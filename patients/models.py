@@ -482,6 +482,16 @@ class PatientAIDiary(models.Model):
     ctcae_grade = models.IntegerField(default=0, help_text="Ступінь токсичності CTCAE (0-4)")
     clinical_state_notes = models.TextField(help_text="Скарги та опис об'єктивного стану на цю дату")
     generated_text = models.TextField(help_text="Згенерований ШІ текст щоденника")
+    diary_type = models.CharField(
+        max_length=20,
+        default='weekly',
+        choices=[
+            ('admission', 'При поступленні'),
+            ('weekly', 'Щотижневий'),
+            ('discharge', 'Виписний')
+        ],
+        help_text="Тип щоденникового запису"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

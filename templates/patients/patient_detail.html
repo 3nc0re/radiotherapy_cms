@@ -272,6 +272,15 @@
                             </div>
                         </div>
 
+                        <div>
+                            <label style="font-size: 0.85rem; font-weight: 600; display: block; margin-bottom: 4px;">Тип щоденника:</label>
+                            <select id="diaryType" class="form-control" style="font-size: 0.9rem;">
+                                <option value="admission">При поступленні (початок лікування)</option>
+                                <option value="weekly" selected>Щотижневий (динаміка перебігу)</option>
+                                <option value="discharge">Виписний (завершення лікування)</option>
+                            </select>
+                        </div>
+
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                             <div>
                                 <label style="font-size: 0.85rem; font-weight: 600; display: block; margin-bottom: 4px;">Статус ECOG:</label>
@@ -315,8 +324,15 @@
                                         <div class="ai-diary-card-header">
                                             <span>
                                                 <strong>Фракція {{ diary.fraction_number|default:"—" }}</strong> ({{ diary.date|date:"d.m.Y" }})
-                                                <span class="badge" style="background-color: #6c757d; margin-left: 5px;">ECOG {{ diary.ecog_status }}</span>
-                                                <span class="badge" style="background-color: #ffc107; color: black; margin-left: 2px;">CTCAE Grade {{ diary.ctcae_grade }}</span>
+                                                {% if diary.diary_type == 'admission' %}
+                                                    <span class="badge" style="background-color: #007bff; margin-left: 5px;">При поступленні</span>
+                                                {% elif diary.diary_type == 'discharge' %}
+                                                    <span class="badge" style="background-color: #28a745; margin-left: 5px;">Виписний</span>
+                                                {% else %}
+                                                    <span class="badge" style="background-color: #6c757d; margin-left: 5px;">Щотижневий</span>
+                                                {% endif %}
+                                                <span class="badge" style="background-color: #17a2b8; margin-left: 2px;">ECOG {{ diary.ecog_status }}</span>
+                                                <span class="badge" style="background-color: #ffc107; color: black; margin-left: 2px;">CTCAE {{ diary.ctcae_grade }}</span>
                                             </span>
                                             <button onclick="deleteDiary({{ diary.id }})" class="btn-delete-icon" title="Видалити запис">
                                                 <i class="fas fa-trash-alt"></i>
@@ -920,6 +936,25 @@ function copyToClipboard(textareaId) {
     }
 }
 
+// Helper to handle fetch responses and raise proper errors for non-JSON or status errors
+function handleFetchResponse(res) {
+    if (!res.ok) {
+        return res.text().then(text => {
+            let errMsg = `Помилка сервера (код ${res.status})`;
+            try {
+                const parsed = JSON.parse(text);
+                if (parsed && parsed.error) errMsg = parsed.error;
+            } catch(e) {}
+            throw new Error(errMsg);
+        });
+    }
+    const contentType = res.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+        throw new Error("Отримано неочікувану відповідь від сервера. Спробуйте ще раз.");
+    }
+    return res.json();
+}
+
 // Save AI Clinical Notes
 function saveAINotes() {
     const notes = document.getElementById('aiClinicalNotes').value;
@@ -931,7 +966,7 @@ function saveAINotes() {
         method: 'POST',
         body: formData
     })
-    .then(res => res.json())
+    .then(handleFetchResponse)
     .then(data => {
         if (data.success) {
             alert("Нотатки успішно збережено!");
@@ -962,7 +997,7 @@ function generateAIDoc(docType) {
         method: 'POST',
         body: formData
     })
-    .then(res => res.json())
+    .then(handleFetchResponse)
     .then(data => {
         if (!data.success) throw new Error(data.error);
         // Then generate the document
@@ -973,7 +1008,7 @@ function generateAIDoc(docType) {
             }
         });
     })
-    .then(res => res.json())
+    .then(handleFetchResponse)
     .then(data => {
         btn.innerHTML = originalText;
         btn.disabled = false;
@@ -1010,7 +1045,7 @@ function saveAIDocText() {
         method: 'POST',
         body: formData
     })
-    .then(res => res.json())
+    .then(handleFetchResponse)
     .then(data => {
         if (data.success) {
             alert("Чернетку документів успішно збережено!");
@@ -1031,6 +1066,7 @@ function generateAIDiary() {
     const ecogVal = document.getElementById('diaryEcog').value;
     const ctcaeVal = document.getElementById('diaryCtcae').value;
     const notesVal = document.getElementById('diaryNotes').value;
+    const diaryTypeVal = document.getElementById('diaryType').value;
     
     if (!dateVal) {
         alert("Будь ласка, вкажіть дату щоденника");
@@ -1046,13 +1082,14 @@ function generateAIDiary() {
     formData.append('ecog_status', ecogVal);
     formData.append('ctcae_grade', ctcaeVal);
     formData.append('clinical_state_notes', notesVal);
+    formData.append('diary_type', diaryTypeVal);
     formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
     
     fetch("{% url 'generate_ai_diary' patient.pk %}", {
         method: 'POST',
         body: formData
     })
-    .then(res => res.json())
+    .then(handleFetchResponse)
     .then(data => {
         btn.innerHTML = originalText;
         btn.disabled = false;
@@ -1064,6 +1101,16 @@ function generateAIDiary() {
             const noDiaries = document.getElementById('noDiariesMsg');
             if (noDiaries) noDiaries.remove();
             
+            // Generate color badge HTML
+            let badgeHtml = '';
+            if (data.diary_type === 'admission') {
+                badgeHtml = `<span class="badge" style="background-color: #007bff; margin-left: 5px;">При поступленні</span>`;
+            } else if (data.diary_type === 'discharge') {
+                badgeHtml = `<span class="badge" style="background-color: #28a745; margin-left: 5px;">Виписний</span>`;
+            } else {
+                badgeHtml = `<span class="badge" style="background-color: #6c757d; margin-left: 5px;">Щотижневий</span>`;
+            }
+            
             // Append the new card to the list of diaries at the top
             const diariesList = document.getElementById('aiDiariesList');
             const card = document.createElement('div');
@@ -1073,8 +1120,9 @@ function generateAIDiary() {
                 <div class="ai-diary-card-header">
                     <span>
                         <strong>Фракція ${data.fraction_number || '—'}</strong> (${data.date})
-                        <span class="badge" style="background-color: #6c757d; margin-left: 5px;">ECOG ${data.ecog_status}</span>
-                        <span class="badge" style="background-color: #ffc107; color: black; margin-left: 2px;">CTCAE Grade ${data.ctcae_grade}</span>
+                        ${badgeHtml}
+                        <span class="badge" style="background-color: #17a2b8; margin-left: 2px;">ECOG ${data.ecog_status}</span>
+                        <span class="badge" style="background-color: #ffc107; color: black; margin-left: 2px;">CTCAE ${data.ctcae_grade}</span>
                     </span>
                     <button onclick="deleteDiary(${data.diary_id})" class="btn-delete-icon" title="Видалити запис">
                         <i class="fas fa-trash-alt"></i>
@@ -1099,6 +1147,10 @@ function generateAIDiary() {
             
             // Increment the fraction counter in the form automatically for the next diary
             document.getElementById('diaryFraction').value = parseInt(fractionVal || 0) + 1;
+            // Trigger auto-select diary type change
+            if (typeof window.updateDiaryType === 'function') {
+                window.updateDiaryType();
+            }
             // Clear current diary notes text
             document.getElementById('diaryNotes').value = "";
         } else {
@@ -1123,7 +1175,7 @@ function saveDiary(diaryId) {
         method: 'POST',
         body: formData
     })
-    .then(res => res.json())
+    .then(handleFetchResponse)
     .then(data => {
         if (data.success) {
             alert("Щоденниковий запис успішно оновлено!");
@@ -1144,7 +1196,7 @@ function deleteDiary(diaryId) {
             'X-CSRFToken': '{{ csrf_token }}'
         }
     })
-    .then(res => res.json())
+    .then(handleFetchResponse)
     .then(data => {
         if (data.success) {
             document.getElementById(`diary-card-${diaryId}`).remove();
@@ -1165,6 +1217,30 @@ function deleteDiary(diaryId) {
     })
     .catch(err => alert("Помилка: " + err.message));
 }
+
+// Automatically update diary type dropdown based on fraction number input
+document.addEventListener("DOMContentLoaded", function() {
+    const fractionInput = document.getElementById('diaryFraction');
+    const diaryTypeSelect = document.getElementById('diaryType');
+    const totalFractions = parseInt("{{ patient.total_fractions|default:0 }}");
+
+    if (fractionInput && diaryTypeSelect) {
+        window.updateDiaryType = () => {
+            const val = parseInt(fractionInput.value);
+            if (val === 1) {
+                diaryTypeSelect.value = 'admission';
+            } else if (totalFractions > 0 && val >= totalFractions) {
+                diaryTypeSelect.value = 'discharge';
+            } else {
+                diaryTypeSelect.value = 'weekly';
+            }
+        };
+        fractionInput.addEventListener('input', window.updateDiaryType);
+        fractionInput.addEventListener('change', window.updateDiaryType);
+        // run initially
+        window.updateDiaryType();
+    }
+});
 </script>
 
 <style>

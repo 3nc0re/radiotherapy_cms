@@ -1736,13 +1736,15 @@ class AIAssistantTests(TestCase):
             'fraction_number': '2',
             'ecog_status': '1',
             'ctcae_grade': '1',
-            'clinical_state_notes': 'Скарги на еритему'
+            'clinical_state_notes': 'Скарги на еритему',
+            'diary_type': 'admission'
         })
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertTrue(data['success'])
         self.assertEqual(data['text'], 'Mocked Diary Content')
         self.assertEqual(data['fraction_number'], 2)
+        self.assertEqual(data['diary_type'], 'admission')
         
         # Перевіряємо створення щоденника в БД
         diary = PatientAIDiary.objects.get(id=data['diary_id'])
@@ -1750,6 +1752,7 @@ class AIAssistantTests(TestCase):
         self.assertEqual(diary.ecog_status, 1)
         self.assertEqual(diary.ctcae_grade, 1)
         self.assertEqual(diary.clinical_state_notes, 'Скарги на еритему')
+        self.assertEqual(diary.diary_type, 'admission')
 
     def test_dashboard_planned_discharges(self):
         """Тест розрахунку запланованих виписок на дашборді"""

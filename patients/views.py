@@ -1114,6 +1114,8 @@ def generate_ai_doc(request, pk, doc_type):
     from .ai_service import generate_initial_assessment, generate_discharge_summary
     
     try:
+        today = timezone.localdate()
+        today_date_str = today.strftime('%d.%m.%Y')
         if doc_type == 'initial':
             text = generate_initial_assessment(
                 gender=patient.gender,
@@ -1121,7 +1123,8 @@ def generate_ai_doc(request, pk, doc_type):
                 clinical_state_notes=ai_doc.clinical_state_notes,
                 total_fractions=patient.total_fractions,
                 dose_per_fraction=patient.dose_per_fraction,
-                irradiation_zone=patient.irradiation_zone
+                irradiation_zone=patient.irradiation_zone,
+                today_date_str=today_date_str
             )
             ai_doc.initial_assessment = text
             ai_doc.save()
@@ -1172,7 +1175,11 @@ def generate_ai_diary(request, pk):
     ecog_status = int(request.POST.get('ecog_status', 0))
     ctcae_grade = int(request.POST.get('ctcae_grade', 0))
     clinical_state_notes = request.POST.get('clinical_state_notes', '').strip()
+    diary_type = request.POST.get('diary_type', 'weekly').strip()
     
+    if diary_type not in ['admission', 'weekly', 'discharge']:
+        diary_type = 'weekly'
+        
     if not diary_date_str:
         return JsonResponse({'success': False, 'error': 'Date is required'}, status=400)
         
@@ -1189,7 +1196,8 @@ def generate_ai_diary(request, pk):
             fraction_number=fraction_number,
             ecog_status=ecog_status,
             ctcae_grade=ctcae_grade,
-            clinical_state_notes=clinical_state_notes
+            clinical_state_notes=clinical_state_notes,
+            diary_type=diary_type
         )
         
         from .models import PatientAIDiary
@@ -1200,7 +1208,8 @@ def generate_ai_diary(request, pk):
             ecog_status=ecog_status,
             ctcae_grade=ctcae_grade,
             clinical_state_notes=clinical_state_notes,
-            generated_text=text
+            generated_text=text,
+            diary_type=diary_type
         )
         
         return JsonResponse({
@@ -1211,7 +1220,9 @@ def generate_ai_diary(request, pk):
             'fraction_number': diary.fraction_number,
             'ecog_status': diary.ecog_status,
             'ctcae_grade': diary.ctcae_grade,
-            'clinical_state_notes': diary.clinical_state_notes
+            'clinical_state_notes': diary.clinical_state_notes,
+            'diary_type': diary.diary_type,
+            'diary_type_display': diary.get_diary_type_display()
         })
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
