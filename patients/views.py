@@ -151,8 +151,7 @@ def patient_list(request, filter_type=None):
         elif filter_type == 'in-treatment':
             patients = base_query.filter(
                 treatment_start_date__isnull=False,
-                treatment_start_date__lte=today,
-                discharge_date__isnull=True
+                treatment_start_date__lte=today
             )
         elif filter_type == 'discharge-prep':
             three_days_later = today + timedelta(days=3)

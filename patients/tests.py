@@ -1779,6 +1779,24 @@ class AIAssistantTests(TestCase):
         self.assertEqual(response.context['planned_discharge_label'], expected_label)
         self.assertGreaterEqual(response.context['planned_discharge_count'], 1)
 
+    def test_filtered_patient_list_in_treatment(self):
+        """Тест фільтрації пацієнтів "В лікуванні" на наявність пацієнтів з датою виписки"""
+        today = timezone.localdate()
+        active_patient = Patient.objects.create(
+            last_name='Активний',
+            first_name='Пацієнт',
+            gender='M',
+            diagnosis='C34.9',
+            treatment_start_date=today - timedelta(days=2),
+            discharge_date=today + timedelta(days=5),
+            is_active=True
+        )
+        
+        url = reverse('patient_list_filtered', kwargs={'filter_type': 'in-treatment'})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(active_patient, response.context['patients'])
+
 
 
 
