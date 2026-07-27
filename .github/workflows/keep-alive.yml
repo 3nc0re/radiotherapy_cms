@@ -1,15 +1,17 @@
 name: 🏓 Keep Database & Render Alive
-
 on:
   schedule:
     # Запуск кожні 2 дні о 10:00 UTC (13:00 за Києвом)
     - cron: '0 10 */2 * *'
-  workflow_dispatch:  # Можливість запустити вручну кнопкою
-
+  workflow_dispatch:
+permissions:
+  contents: write  # Дозвіл на внесення авто-комміту в репозиторій
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
       - name: 🥷 1. Direct Supabase Database Ping
         env:
           DB_HOST: ${{ secrets.DB_HOST }}
@@ -39,12 +41,9 @@ jobs:
               print('❌ Помилка підключення до Supabase:', e)
               exit(1)
           "
-
       - name: 🌐 2. Ping Render Web Service
         run: |
           echo "🔄 2/2: Пінгуємо веб-сайт на Render (з підтримкою Cold Start)..."
-          
-          # connect-timeout=60, max-time=90 та retry=3 дають Render час прокинутися зі сну
           response=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 60 --max-time 90 --retry 3 --retry-delay 10 "${{ secrets.RENDER_URL }}" || echo "000")
           
           echo "📡 HTTP Status з Render: $response"
@@ -56,7 +55,22 @@ jobs:
           else
             echo "ℹ️ Render відповів з кодом $response"
           fi
-
-      - name: 📊 3. Log timestamp
+      - name: 💓 3. Monthly Keep-Alive Commit (Reset GitHub 60-day limit)
+        run: |
+          # Робимо комміт лише 1-го числа кожного місяця
+          DAY=$(date -u '+%d')
+          if [ "$DAY" = "01" ]; then
+            echo "📅 Сьогодні 1-ше число! Оновлюємо статус-файл для підтримання активності репозиторію..."
+            echo "Last keep-alive pulse: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" > keep_alive_status.txt
+            git config --local user.email "action@github.com"
+            git config --local user.name "GitHub Action Bot"
+            git add keep_alive_status.txt
+            git commit -m "chore: monthly keep-alive pulse [skip ci]" || echo "Немає змін для комміту"
+            git push
+            echo "✅ Авто-комміт успішно відправлено! 60-денний таймер GitHub скинуто."
+          else
+            echo "ℹ️ Сьогодні $DAY число. Авто-комміт виконується лише 1-го числа кожного місяця."
+          fi
+      - name: 📊 4. Log timestamp
         run: |
           echo "✅ Повний Keep-alive цикл завершено о $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
