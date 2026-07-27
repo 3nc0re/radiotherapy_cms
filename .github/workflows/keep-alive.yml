@@ -1,34 +1,62 @@
-name: 🏓 Keep Database Alive
+name: 🏓 Keep Database & Render Alive
 
 on:
   schedule:
-    # Запуск кожні 3 дні о 10:00 UTC (12:00 за Києвом)
-    - cron: '0 10 */3 * *'
-  workflow_dispatch:  # Можливість запустити вручну
+    # Запуск кожні 2 дні о 10:00 UTC (13:00 за Києвом)
+    - cron: '0 10 */2 * *'
+  workflow_dispatch:  # Можливість запустити вручну кнопкою
 
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: 🏓 Ping website to keep database alive
+      - name: 🥷 1. Direct Supabase Database Ping
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_PORT: ${{ secrets.DB_PORT }}
         run: |
-          echo "🔄 Пінгуємо сайт для підтримки активності бази даних..."
+          echo "🔄 1/2: Приховано пінгуємо Supabase напряму через PostgreSQL..."
+          python3 -m pip install --quiet psycopg2-binary
+          python3 -c "
+          import psycopg2, os
+          try:
+              conn = psycopg2.connect(
+                  host=os.environ.get('DB_HOST'),
+                  database=os.environ.get('DB_NAME'),
+                  user=os.environ.get('DB_USER'),
+                  password=os.environ.get('DB_PASSWORD'),
+                  port=os.environ.get('DB_PORT', '5432'),
+                  connect_timeout=20
+              )
+              cur = conn.cursor()
+              cur.execute('SELECT 1;')
+              print('✅ Успіх! Прямий SQL-запит гарантовано розбудив/підтвердив активність Supabase.')
+              conn.close()
+          except Exception as e:
+              print('❌ Помилка підключення до Supabase:', e)
+              exit(1)
+          "
+
+      - name: 🌐 2. Ping Render Web Service
+        run: |
+          echo "🔄 2/2: Пінгуємо веб-сайт на Render (з підтримкою Cold Start)..."
           
-          # Пінгуємо головну сторінку (потребує авторизації, але з'єднання з БД все одно відбудеться)
-          response=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "${{ secrets.RENDER_URL }}" || echo "000")
+          # connect-timeout=60, max-time=90 та retry=3 дають Render час прокинутися зі сну
+          response=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 60 --max-time 90 --retry 3 --retry-delay 10 "${{ secrets.RENDER_URL }}" || echo "000")
           
-          echo "📡 HTTP Status: $response"
+          echo "📡 HTTP Status з Render: $response"
           
           if [ "$response" = "000" ]; then
-            echo "⚠️ Сайт не відповідає, але спроба підключення зроблена"
+            echo "⚠️ Render не відповів за 90 секунд, але Supabase вже активовано на Кроці 1!"
           elif [ "$response" = "200" ] || [ "$response" = "302" ] || [ "$response" = "301" ]; then
-            echo "✅ Сайт активний! База даних розбуджена."
+            echo "✅ Веб-сайт на Render успішно прокинувся! Код відповіді: $response"
           else
-            echo "⚠️ Отримано код $response, але з'єднання з БД мало відбутися"
+            echo "ℹ️ Render відповів з кодом $response"
           fi
-          
-          echo "🕐 Наступний пінг через 3 дні"
 
-      - name: 📊 Log timestamp
+      - name: 📊 3. Log timestamp
         run: |
-          echo "✅ Keep-alive ping completed at $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          echo "✅ Повний Keep-alive цикл завершено о $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
