@@ -382,7 +382,12 @@ def fraction_list(request):
         
         for patient_id, earliest_date in patient_earliest_dates.items():
             patient = Patient.objects.get(pk=patient_id)
-            patient.fractions.filter(date__lt=today, status='scheduled').update(status='missed')
+            delivered_count = patient.fractions.filter(status='delivered').count()
+            total = patient.total_fractions or 0
+            if total > 0 and delivered_count >= total:
+                patient.fractions.filter(date__lt=today, status='scheduled').delete()
+            else:
+                patient.fractions.filter(date__lt=today, status='scheduled').update(status='missed')
             from .services import shift_patient_schedule
             shift_patient_schedule(patient)
             patient.recalculate_received_dose()
@@ -510,8 +515,12 @@ def patient_detail(request, pk):
     if is_active:
         overdue_fractions = patient.fractions.filter(date__lt=today, status='scheduled').order_by('date')
         if overdue_fractions.exists():
-            earliest_date = overdue_fractions.first().date
-            overdue_fractions.update(status='missed')
+            delivered_count = patient.fractions.filter(status='delivered').count()
+            total = patient.total_fractions or 0
+            if total > 0 and delivered_count >= total:
+                overdue_fractions.delete()
+            else:
+                overdue_fractions.update(status='missed')
             from .services import shift_patient_schedule
             shift_patient_schedule(patient)
             # Перечитуємо пацієнта після оновлення дат та виписки
@@ -622,8 +631,10 @@ def recalculate_discharge(request, patient_id):
     """Перераховує дату виписки на основі фракцій"""
     if request.method == 'POST':
         patient = get_object_or_404(Patient, pk=patient_id)
-        from .services import recalculate_discharge_date
+        from .services import shift_patient_schedule, recalculate_discharge_date
+        shift_patient_schedule(patient)
         new_date = recalculate_discharge_date(patient)
+        patient.recalculate_received_dose()
         if new_date:
             messages.success(request, f'Дату виписки оновлено на {new_date.strftime("%d.%m.%Y")}')
         else:

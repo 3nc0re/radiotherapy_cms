@@ -1806,9 +1806,57 @@ class AIAssistantTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn('quote_of_the_day', response.context)
         self.assertTrue(response.context['quote_of_the_day'].startswith('💡'))
-
-
-
+    def test_completed_patient_extra_missed_fractions_cleanup(self):
+        """Тест автоматичного видалення фракцій зі статусом missed/scheduled після завершення повного курсу"""
+        today = timezone.localdate()
+        patient = Patient.objects.create(
+            last_name='Тинятовський',
+            first_name='Михайло',
+            gender='M',
+            diagnosis='C30.0',
+            treatment_start_date=today - timedelta(days=10),
+            total_fractions=5,
+            dose_per_fraction=2.0,
+            is_active=True
+        )
+        # Створюємо 5 виконаних фракцій
+        last_delivered_date = today - timedelta(days=3)
+        for i in range(5):
+            FractionHistory.objects.create(
+                patient=patient,
+                date=today - timedelta(days=7 - i),
+                dose=2.0,
+                status='delivered'
+            )
+        # Створюємо 2 зайві "missed" фракції за минулі дні (коли лікар був у відпустці)
+        FractionHistory.objects.create(
+            patient=patient,
+            date=today - timedelta(days=2),
+            dose=2.0,
+            status='missed'
+        )
+        FractionHistory.objects.create(
+            patient=patient,
+            date=today - timedelta(days=1),
+            dose=2.0,
+            status='missed'
+        )
+        
+        # Оскільки post_save автоматично створює 5 scheduled фракцій при створенні пацієнта,
+        # загальна кількість до очищення становить 5 (scheduled) + 5 (delivered) + 2 (missed) = 12.
+        self.assertEqual(patient.fractions.count(), 12)
+        self.assertEqual(patient.fractions.filter(status='missed').count(), 2)
+        
+        # Перераховуємо розклад / дату виписки
+        from .services import shift_patient_schedule, recalculate_discharge_date
+        shift_patient_schedule(patient)
+        recalculate_discharge_date(patient)
+        patient.refresh_from_db()
+        
+        # Перевіряємо: всі зайві (scheduled та missed) фракції видалено, виписку оновлено до дати 5-ї виконаної фракції
+        self.assertEqual(patient.fractions.count(), 5)
+        self.assertEqual(patient.fractions.filter(status='missed').count(), 0)
+        self.assertEqual(patient.discharge_date, last_delivered_date)
 
 
 

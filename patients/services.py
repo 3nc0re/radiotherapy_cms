@@ -101,6 +101,20 @@ def calculate_discharge_date(patient):
 
 def recalculate_discharge_date(patient):
     """Перераховує дату виписки на основі поточних фракцій"""
+    total = patient.total_fractions or 0
+    delivered_count = patient.fractions.filter(status='delivered').count()
+    
+    if total > 0 and delivered_count >= total:
+        last_delivered = patient.fractions.filter(status='delivered').order_by('date').last()
+        # Якщо пацієнт завершив курс, видаляємо всі залишки запланованих (scheduled) фракцій
+        patient.fractions.filter(status='scheduled').delete()
+        if last_delivered:
+            # Видаляємо пропущені (missed) фракції, які були створені після останнього сеансу (наприклад, через запізніле підтвердження)
+            patient.fractions.filter(status='missed', date__gt=last_delivered.date).delete()
+            patient.discharge_date = last_delivered.date
+            patient.save()
+            return patient.discharge_date
+
     # Знаходимо останню фракцію
     last_fraction = patient.fractions.order_by('date').last()
     if last_fraction:
@@ -111,6 +125,15 @@ def recalculate_discharge_date(patient):
 
 def set_discharge_date_from_fractions(patient):
     """Встановлює дату виписки на основі згенерованих фракцій"""
+    total = patient.total_fractions or 0
+    delivered_count = patient.fractions.filter(status='delivered').count()
+    if total > 0 and delivered_count >= total:
+        last_delivered = patient.fractions.filter(status='delivered').order_by('date').last()
+        if last_delivered:
+            patient.discharge_date = last_delivered.date
+            patient.save()
+            return patient.discharge_date
+
     if patient.fractions.exists():
         last_fraction = patient.fractions.order_by('date').last()
         patient.discharge_date = last_fraction.date
@@ -143,6 +166,17 @@ def shift_patient_schedule(patient, from_date=None):
     delivered_count = patient.fractions.filter(status='delivered').count()
     remaining = total - delivered_count
     
+    if remaining <= 0:
+        last_delivered = patient.fractions.filter(status='delivered').order_by('date').last()
+        patient.fractions.filter(status='scheduled').delete()
+        if last_delivered:
+            patient.fractions.filter(status='missed', date__gt=last_delivered.date).delete()
+            patient.discharge_date = last_delivered.date
+            patient.save()
+        else:
+            recalculate_discharge_date(patient)
+        return
+
     # Отримуємо заплановані фракції на/після from_date
     scheduled_to_update = list(patient.fractions.filter(status='scheduled', date__gte=from_date).order_by('date'))
     
@@ -152,8 +186,17 @@ def shift_patient_schedule(patient, from_date=None):
     ).values_list('date', flat=True))
     
     if remaining <= 0:
-        patient.fractions.filter(status='scheduled', date__gte=from_date).delete()
-        recalculate_discharge_date(patient)
+        last_delivered = patient.fractions.filter(status='delivered').order_by('date').last()
+        if last_delivered:
+            patient.fractions.filter(
+                Q(status__in=['scheduled', 'missed']),
+                date__gt=last_delivered.date
+            ).delete()
+            patient.discharge_date = last_delivered.date
+            patient.save()
+        else:
+            patient.fractions.filter(status='scheduled', date__gte=from_date).delete()
+            recalculate_discharge_date(patient)
         return
 
     # Скільки фракцій заплановано ДО from_date?
