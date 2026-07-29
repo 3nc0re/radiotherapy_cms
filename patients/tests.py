@@ -1858,5 +1858,68 @@ class AIAssistantTests(TestCase):
         self.assertEqual(patient.fractions.filter(status='missed').count(), 0)
         self.assertEqual(patient.discharge_date, last_delivered_date)
 
+    def test_bulk_confirm_period_api_and_preview(self):
+        """Тест API модального вікна масового підтвердження за період та попереднього перегляду"""
+        today = timezone.localdate()
+        start = (today - timedelta(days=7)).strftime('%Y-%m-%d')
+        end = (today - timedelta(days=1)).strftime('%Y-%m-%d')
+        
+        patient = Patient.objects.create(
+            last_name='Петренко',
+            first_name='Петро',
+            gender='M',
+            diagnosis='C15.4',
+            treatment_start_date=today - timedelta(days=14),
+            total_fractions=10,
+            dose_per_fraction=2.0,
+            is_active=True
+        )
+        
+        # 1. Тест preview API
+        url_preview = reverse('bulk_confirm_preview_api') + f'?start_date={start}&end_date={end}&include_missed=true'
+        res_preview = self.client.get(url_preview)
+        self.assertEqual(res_preview.status_code, 200)
+        data_preview = res_preview.json()
+        self.assertTrue(data_preview['success'])
+        self.assertGreater(data_preview['total_fractions'], 0)
+        
+        # 2. Тест period confirm API
+        url_confirm = reverse('bulk_confirm_period_api')
+        res_confirm = self.client.post(
+            url_confirm,
+            data=json.dumps({'start_date': start, 'end_date': end, 'include_missed': True}),
+            content_type='application/json'
+        )
+        self.assertEqual(res_confirm.status_code, 200)
+        data_confirm = res_confirm.json()
+        self.assertTrue(data_confirm['success'])
+        self.assertGreater(data_confirm['confirmed_count'], 0)
+
+    def test_bulk_confirm_patient_up_to_date_api(self):
+        """Тест API підтвердження фракцій конкретного пацієнта до обраної дати"""
+        today = timezone.localdate()
+        patient = Patient.objects.create(
+            last_name='Коваленко',
+            first_name='Іван',
+            gender='M',
+            diagnosis='C34.1',
+            treatment_start_date=today - timedelta(days=5),
+            total_fractions=10,
+            dose_per_fraction=2.0,
+            is_active=True
+        )
+        
+        target_date_str = (today - timedelta(days=1)).strftime('%Y-%m-%d')
+        url = reverse('bulk_confirm_patient_up_to_date_api', kwargs={'patient_id': patient.id})
+        res = self.client.post(url, {'up_to_date': target_date_str, 'include_missed': 'true'})
+        
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertTrue(data['success'])
+        self.assertGreater(data['confirmed_count'], 0)
+        patient.refresh_from_db()
+        self.assertGreater(patient.current_fraction, 0)
+
+
 
 

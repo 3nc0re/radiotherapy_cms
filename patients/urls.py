@@ -32,6 +32,9 @@ urlpatterns = [
     path('fractions/confirm/doctor/', views.confirm_fractions_doctor, name='confirm_fractions_doctor'),
     path('fractions/confirm/nurse/', views.confirm_fractions_nurse, name='confirm_fractions_nurse'),
     path('fractions/auto-confirm/', views.auto_confirm_fractions, name='auto_confirm_fractions'),
+    path('api/fractions/bulk-confirm-preview/', views.bulk_confirm_preview_api, name='bulk_confirm_preview_api'),
+    path('api/fractions/bulk-confirm-period/', views.bulk_confirm_period_api, name='bulk_confirm_period_api'),
+    path('api/patients/<int:patient_id>/bulk-confirm-up-to-date/', views.bulk_confirm_patient_up_to_date_api, name='bulk_confirm_patient_up_to_date_api'),
 
     # Medical Incapacity
     path('patients/<int:patient_pk>/medical_incapacity/create/', views.medical_incapacity_create, name='medical_incapacity_create'),

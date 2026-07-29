@@ -410,10 +410,46 @@
                 </button>
             </form>
             <button type="button" class="btn btn-success" onclick="approveAllFractions({{ patient.pk }})">
-                <i class="fas fa-check-double"></i> Затвердити всі фракції на сьогодні
+                <i class="fas fa-check-double"></i> Затвердити за сьогодні
+            </button>
+            <button type="button" class="btn btn-primary" onclick="openPatientBulkConfirmModal()" style="background-color: #27ae60; border-color: #27ae60; font-weight: 600;">
+                <i class="fas fa-calendar-check"></i> Підтвердити фракції до дати...
             </button>
             {% endif %}
         </div>
+
+<!-- МОДАЛЬНЕ ВІКНО: Підтвердження фракцій пацієнта до обраної дати -->
+<div id="patientBulkConfirmModal" class="modal" style="display: none; position: fixed; z-index: 1050; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5);">
+    <div class="modal-content" style="background: white; margin: 10% auto; padding: 25px; border-radius: 12px; max-width: 480px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 12px; margin-bottom: 18px;">
+            <h3 style="margin: 0; font-size: 1.2rem; color: #2c3e50;"><i class="fas fa-calendar-check" style="color: #27ae60; margin-right: 8px;"></i> Підтвердити фракції пацієнта</h3>
+            <span onclick="closePatientBulkConfirmModal()" style="font-size: 1.6rem; cursor: pointer; color: #aaa; line-height: 1;">&times;</span>
+        </div>
+
+        <p style="font-size: 0.95rem; color: #555; margin-bottom: 15px;">
+            Усі заплановані та пропущені фракції пацієнта <strong>{{ patient.full_name }}</strong> з датою до обраного числа включно будуть підтверджені як виконані (`delivered`).
+        </p>
+
+        <div style="margin-bottom: 15px;">
+            <label style="display: block; font-weight: 600; margin-bottom: 6px; font-size: 0.9rem;">Підтвердити фракції з датою до:</label>
+            <input type="date" id="patientUpToDate" class="form-control" value="{{ today|date:'Y-m-d' }}" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ccc; font-size: 0.95rem;">
+        </div>
+
+        <div style="margin-bottom: 20px; background: #f8f9fa; padding: 10px; border-radius: 6px; border: 1px solid #e9ecef;">
+            <label style="display: flex; align-items: center; gap: 8px; font-weight: 500; cursor: pointer; margin: 0; font-size: 0.9rem;">
+                <input type="checkbox" id="patientIncludeMissed" checked style="width: 16px; height: 16px; accent-color: #27ae60;">
+                <span>Включати також дні зі статусом «Пропущена» (missed)</span>
+            </label>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 10px;">
+            <button type="button" class="btn btn-secondary" onclick="closePatientBulkConfirmModal()">Скасувати</button>
+            <button type="button" class="btn btn-success" id="btnExecutePatientBulk" onclick="executePatientBulkConfirm({{ patient.pk }})" style="background-color: #27ae60;">
+                <i class="fas fa-check"></i> Підтвердити
+            </button>
+        </div>
+    </div>
+</div>
         {% if fractions %}
             <table class="styled-table">
                 <thead>
@@ -1587,5 +1623,51 @@ document.getElementById('copy-summary')?.addEventListener('click', function() {
         navigator.clipboard.writeText(text.value);
     }
 });
+
+function openPatientBulkConfirmModal() {
+    document.getElementById('patientBulkConfirmModal').style.display = 'block';
+}
+
+function closePatientBulkConfirmModal() {
+    document.getElementById('patientBulkConfirmModal').style.display = 'none';
+}
+
+function executePatientBulkConfirm(patientId) {
+    const upToDate = document.getElementById('patientUpToDate').value;
+    const includeMissed = document.getElementById('patientIncludeMissed').checked;
+    
+    const btn = document.getElementById('btnExecutePatientBulk');
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Обробка...`;
+    
+    const formData = new FormData();
+    formData.append('up_to_date', upToDate);
+    formData.append('include_missed', includeMissed ? 'true' : 'false');
+    
+    fetch(`/api/patients/${patientId}/bulk-confirm-up-to-date/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: formData
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            alert(`Успішно підтверджено ${data.confirmed_count} фракцій! Стан: ${data.completed_fractions}/${data.total_fractions} фр.`);
+            location.reload();
+        } else {
+            alert('Помилка: ' + data.error);
+            btn.disabled = false;
+            btn.innerHTML = `<i class="fas fa-check"></i> Підтвердити`;
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        alert('Не вдалося підтвердити фракції');
+        btn.disabled = false;
+        btn.innerHTML = `<i class="fas fa-check"></i> Підтвердити`;
+    });
+}
 </script>
 {% endblock %}

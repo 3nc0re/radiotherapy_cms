@@ -1,8 +1,71 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="page-header">
-    <h1>Фракції пацієнтів</h1>
-    <p class="today-date"><i class="fas fa-calendar-day"></i> Сьогодні: {{ today|date:"d.m.Y" }}</p>
+<div class="page-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+    <div>
+        <h1 style="margin: 0;">Фракції пацієнтів</h1>
+        <p class="today-date" style="margin: 5px 0 0 0;"><i class="fas fa-calendar-day"></i> Сьогодні: {{ today|date:"d.m.Y" }}</p>
+    </div>
+    <div>
+        <button type="button" class="btn btn-primary" onclick="openBulkConfirmModal()" style="padding: 10px 18px; font-weight: 600; box-shadow: 0 4px 10px rgba(52, 152, 219, 0.3);">
+            <i class="fas fa-plane-departure" style="margin-right: 6px;"></i> Масове підтвердження за період (відпустка)
+        </button>
+    </div>
+</div>
+
+<!-- МОДАЛЬНЕ ВІКНО: Масове підтвердження за період (відпустка) -->
+<div id="bulkConfirmModal" class="modal" style="display: none; position: fixed; z-index: 1050; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); overflow-y: auto;">
+    <div class="modal-content" style="background: white; margin: 5% auto; padding: 25px; border-radius: 12px; max-width: 650px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 15px; margin-bottom: 20px;">
+            <h2 style="margin: 0; font-size: 1.4rem; color: #2c3e50;"><i class="fas fa-plane-departure" style="color: #3498db; margin-right: 8px;"></i> Масове підтвердження за період</h2>
+            <span onclick="closeBulkConfirmModal()" style="font-size: 1.8rem; cursor: pointer; color: #aaa; line-height: 1;">&times;</span>
+        </div>
+
+        <!-- КРОК 1: Вибір дат та налаштувань -->
+        <div id="bulkStep1">
+            <div style="display: flex; gap: 15px; margin-bottom: 15px;">
+                <div style="flex: 1;">
+                    <label style="display: block; font-weight: 600; margin-bottom: 5px; font-size: 0.9rem;">З дати:</label>
+                    <input type="date" id="bulkStartDate" class="form-control" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ccc; font-size: 0.95rem;">
+                </div>
+                <div style="flex: 1;">
+                    <label style="display: block; font-weight: 600; margin-bottom: 5px; font-size: 0.9rem;">По дату:</label>
+                    <input type="date" id="bulkEndDate" class="form-control" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ccc; font-size: 0.95rem;">
+                </div>
+            </div>
+
+            <div style="margin-bottom: 18px;">
+                <span style="font-size: 0.85rem; color: #666; display: block; margin-bottom: 6px;">Швидкі шаблони дат:</span>
+                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    <button type="button" class="btn btn-outline" style="padding: 4px 10px; font-size: 0.85rem;" onclick="setBulkPreset(7)">За останні 7 днів</button>
+                    <button type="button" class="btn btn-outline" style="padding: 4px 10px; font-size: 0.85rem;" onclick="setBulkPreset(14)">За останні 14 днів</button>
+                    <button type="button" class="btn btn-outline" style="padding: 4px 10px; font-size: 0.85rem;" onclick="setBulkPreset(30)">За останній місяць</button>
+                </div>
+            </div>
+
+            <div style="margin-bottom: 22px; background: #f8f9fa; padding: 12px; border-radius: 8px; border: 1px solid #e9ecef;">
+                <label style="display: flex; align-items: center; gap: 10px; font-weight: 500; cursor: pointer; margin: 0; font-size: 0.95rem;">
+                    <input type="checkbox" id="bulkIncludeMissed" checked style="width: 18px; height: 18px; accent-color: #3498db;">
+                    <span>Підтверджувати також дні зі статусом «Пропущена» (missed) за період відпустки</span>
+                </label>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button type="button" class="btn btn-secondary" onclick="closeBulkConfirmModal()" style="padding: 8px 16px;">Скасувати</button>
+                <button type="button" class="btn btn-primary" onclick="fetchBulkPreview()" style="padding: 8px 20px;"><i class="fas fa-search"></i> Попередній перегляд</button>
+            </div>
+        </div>
+
+        <!-- КРОК 2: Попередній перегляд та підтвердження -->
+        <div id="bulkStep2" style="display: none;">
+            <div id="bulkPreviewContent" style="max-height: 350px; overflow-y: auto; margin-bottom: 20px; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; background: #fafafa;">
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #eee; padding-top: 15px;">
+                <button type="button" class="btn btn-outline" onclick="backToStep1()"><i class="fas fa-arrow-left"></i> Змінити дати</button>
+                <button type="button" id="confirmBulkSubmitBtn" class="btn btn-success" onclick="executeBulkConfirm()" style="padding: 10px 24px; font-weight: bold; background-color: #27ae60;"><i class="fas fa-check-double"></i> Підтвердити всі фракції</button>
+            </div>
+        </div>
+    </div>
 </div>
 
 <!-- СЕКЦІЯ: Фракції на сьогодні -->
@@ -712,6 +775,148 @@ function addExtraFraction(patientId) {
             alert('Не вдалося додати фракцію');
         });
     }
+}
+
+let currentBulkData = null;
+
+function openBulkConfirmModal() {
+    document.getElementById('bulkConfirmModal').style.display = 'block';
+    setBulkPreset(14);
+    backToStep1();
+}
+
+function closeBulkConfirmModal() {
+    document.getElementById('bulkConfirmModal').style.display = 'none';
+    currentBulkData = null;
+}
+
+function backToStep1() {
+    document.getElementById('bulkStep1').style.display = 'block';
+    document.getElementById('bulkStep2').style.display = 'none';
+}
+
+function setBulkPreset(days) {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(end.getDate() - days);
+    
+    document.getElementById('bulkEndDate').value = end.toISOString().split('T')[0];
+    document.getElementById('bulkStartDate').value = start.toISOString().split('T')[0];
+}
+
+function fetchBulkPreview() {
+    const startDate = document.getElementById('bulkStartDate').value;
+    const endDate = document.getElementById('bulkEndDate').value;
+    const includeMissed = document.getElementById('bulkIncludeMissed').checked;
+    
+    if (!startDate || !endDate) {
+        alert('Будь ласка, вкажіть початкову та кінцеву дату.');
+        return;
+    }
+    
+    const url = `/api/fractions/bulk-confirm-preview/?start_date=${startDate}&end_date=${endDate}&include_missed=${includeMissed}`;
+    
+    fetch(url)
+        .then(res => res.json())
+        .then(data => {
+            if (!data.success) {
+                alert('Помилка: ' + data.error);
+                return;
+            }
+            currentBulkData = data;
+            renderBulkPreview(data);
+            document.getElementById('bulkStep1').style.display = 'none';
+            document.getElementById('bulkStep2').style.display = 'block';
+        })
+        .catch(err => {
+            console.error(err);
+            alert('Помилка завантаження попереднього перегляду');
+        });
+}
+
+function renderBulkPreview(data) {
+    const container = document.getElementById('bulkPreviewContent');
+    const submitBtn = document.getElementById('confirmBulkSubmitBtn');
+    
+    if (data.total_fractions === 0) {
+        container.innerHTML = `
+            <div style="text-align: center; padding: 20px; color: #777;">
+                <i class="fas fa-info-circle" style="font-size: 2rem; color: #3498db; margin-bottom: 10px;"></i>
+                <p style="margin: 0; font-weight: 500;">За період з <strong>${data.start_date}</strong> по <strong>${data.end_date}</strong> непідтверджених або пропущених фракцій не знайдено.</p>
+            </div>
+        `;
+        submitBtn.style.display = 'none';
+        return;
+    }
+    
+    submitBtn.style.display = 'inline-block';
+    submitBtn.innerHTML = `<i class="fas fa-check-double"></i> Підтвердити ${data.total_fractions} фракцій (${data.total_patients} пацієнтів)`;
+    
+    let html = `
+        <div style="margin-bottom: 15px; background: #e8f4f8; padding: 10px 14px; border-radius: 6px; border-left: 4px solid #3498db;">
+            <strong style="color: #2980b9;">Знайдено для підтвердження:</strong> <strong>${data.total_fractions}</strong> фракцій у <strong>${data.total_patients}</strong> пацієнтів за період з <strong>${data.start_date}</strong> по <strong>${data.end_date}</strong>.
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+    `;
+    
+    data.patients.forEach(p => {
+        html += `
+            <div style="background: white; padding: 10px 12px; border-radius: 6px; border: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <strong style="color: #2c3e50; font-size: 0.95rem;">${p.full_name}</strong>
+                    <span style="font-size: 0.85rem; color: #666; margin-left: 8px;">(пройдено ${p.completed_fractions}/${p.total_fractions} фр.)</span>
+                </div>
+                <div>
+                    <span class="badge" style="background-color: #27ae60; font-size: 0.85rem; padding: 4px 8px;">+${p.count} фракцій</span>
+                </div>
+            </div>
+        `;
+    });
+    
+    html += `</div>`;
+    container.innerHTML = html;
+}
+
+function executeBulkConfirm() {
+    if (!currentBulkData || currentBulkData.total_fractions === 0) return;
+    
+    const startDate = document.getElementById('bulkStartDate').value;
+    const endDate = document.getElementById('bulkEndDate').value;
+    const includeMissed = document.getElementById('bulkIncludeMissed').checked;
+    
+    const submitBtn = document.getElementById('confirmBulkSubmitBtn');
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Підтвердження...`;
+    
+    fetch('/api/fractions/bulk-confirm-period/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({
+            start_date: startDate,
+            end_date: endDate,
+            include_missed: includeMissed
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            alert(`Успішно підтверджено ${data.confirmed_count} фракцій для ${data.affected_patients_count} пацієнтів!`);
+            location.reload();
+        } else {
+            alert('Помилка: ' + data.error);
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = `<i class="fas fa-check-double"></i> Підтвердити всі фракції`;
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        alert('Помилка при підтвердженні фракцій');
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = `<i class="fas fa-check-double"></i> Підтвердити всі фракції`;
+    });
 }
 </script>
 {% endblock %} 

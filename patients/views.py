@@ -1276,3 +1276,159 @@ def delete_ai_diary(request, pk, diary_id):
     
     return JsonResponse({'success': True})
 
+
+@login_required
+def bulk_confirm_preview_api(request):
+    """
+    Повертає попередній розрахунок для масового підтвердження фракцій за період.
+    """
+    start_date_str = request.GET.get('start_date') or request.POST.get('start_date')
+    end_date_str = request.GET.get('end_date') or request.POST.get('end_date')
+    include_missed = request.GET.get('include_missed', 'true').lower() in ['true', '1', 'on']
+
+    if not start_date_str or not end_date_str:
+        return JsonResponse({'success': False, 'error': 'Потрібно вказати початкову та кінцеву дату.'}, status=400)
+
+    try:
+        from django.utils.dateparse import parse_date
+        start_date = parse_date(start_date_str)
+        end_date = parse_date(end_date_str)
+        if not start_date or not end_date:
+            raise ValueError("Неправильний формат дати")
+
+        status_list = ['scheduled', 'missed'] if include_missed else ['scheduled']
+
+        fractions = FractionHistory.objects.filter(
+            date__gte=start_date,
+            date__lte=end_date,
+            status__in=status_list
+        ).select_related('patient').order_by('patient__last_name', 'patient__first_name', 'date')
+
+        patient_map = {}
+        for f in fractions:
+            p_id = f.patient.id
+            if p_id not in patient_map:
+                patient_map[p_id] = {
+                    'id': p_id,
+                    'full_name': f.patient.full_name,
+                    'completed_fractions': f.patient.current_fraction,
+                    'total_fractions': f.patient.total_fractions,
+                    'dose_per_fraction': f.patient.dose_per_fraction or 0.0,
+                    'count': 0,
+                    'fractions': []
+                }
+            patient_map[p_id]['count'] += 1
+            patient_map[p_id]['fractions'].append({
+                'id': f.id,
+                'date': f.date.strftime('%d.%m.%Y'),
+                'status': f.status,
+                'status_display': 'Пропущена' if f.status == 'missed' else 'Запланована'
+            })
+
+        patients_list = list(patient_map.values())
+        total_fractions_count = sum(p['count'] for p in patients_list)
+
+        return JsonResponse({
+            'success': True,
+            'start_date': start_date.strftime('%d.%m.%Y'),
+            'end_date': end_date.strftime('%d.%m.%Y'),
+            'total_patients': len(patients_list),
+            'total_fractions': total_fractions_count,
+            'patients': patients_list
+        })
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@login_required
+@require_POST
+def bulk_confirm_period_api(request):
+    """
+    Масово підтверджує всі фракції за обраний період.
+    """
+    import json
+    try:
+        data = json.loads(request.body) if request.body else request.POST
+        start_date_str = data.get('start_date')
+        end_date_str = data.get('end_date')
+        include_missed = str(data.get('include_missed', 'true')).lower() in ['true', '1', 'on']
+        patient_ids = data.get('patient_ids', None)
+
+        from django.utils.dateparse import parse_date
+        start_date = parse_date(start_date_str)
+        end_date = parse_date(end_date_str)
+        if not start_date or not end_date:
+            return JsonResponse({'success': False, 'error': 'Неправильний формат дати'}, status=400)
+
+        status_list = ['scheduled', 'missed'] if include_missed else ['scheduled']
+
+        query = FractionHistory.objects.filter(
+            date__gte=start_date,
+            date__lte=end_date,
+            status__in=status_list
+        )
+
+        if patient_ids and isinstance(patient_ids, list):
+            query = query.filter(patient_id__in=patient_ids)
+
+        affected_patient_ids = list(query.values_list('patient_id', flat=True).distinct())
+        confirmed_count = query.update(status='delivered')
+
+        from .services import shift_patient_schedule, recalculate_discharge_date
+        affected_patients = Patient.objects.filter(id__in=affected_patient_ids)
+        for patient in affected_patients:
+            shift_patient_schedule(patient)
+            recalculate_discharge_date(patient)
+            patient.recalculate_received_dose()
+
+        return JsonResponse({
+            'success': True,
+            'confirmed_count': confirmed_count,
+            'affected_patients_count': len(affected_patient_ids)
+        })
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@login_required
+@require_POST
+def bulk_confirm_patient_up_to_date_api(request, patient_id):
+    """
+    Підтверджує всі непідтверджені та пропущені фракції конкретного пацієнта до вказаної дати.
+    """
+    patient = get_object_or_404(Patient, pk=patient_id)
+    up_to_date_str = request.POST.get('up_to_date') or request.GET.get('up_to_date')
+    include_missed = request.POST.get('include_missed', 'true').lower() in ['true', '1', 'on']
+
+    today = timezone.localdate()
+    if up_to_date_str:
+        from django.utils.dateparse import parse_date
+        target_date = parse_date(up_to_date_str) or today
+    else:
+        target_date = today
+
+    status_list = ['scheduled', 'missed'] if include_missed else ['scheduled']
+
+    query = patient.fractions.filter(
+        date__lte=target_date,
+        status__in=status_list
+    )
+
+    confirmed_count = query.update(status='delivered')
+
+    from .services import shift_patient_schedule, recalculate_discharge_date
+    shift_patient_schedule(patient)
+    recalculate_discharge_date(patient)
+    patient.recalculate_received_dose()
+    patient.refresh_from_db()
+
+    return JsonResponse({
+        'success': True,
+        'confirmed_count': confirmed_count,
+        'up_to_date': target_date.strftime('%d.%m.%Y'),
+        'completed_fractions': patient.current_fraction,
+        'total_fractions': patient.total_fractions,
+        'received_dose': patient.received_dose,
+        'discharge_date': patient.discharge_date.strftime('%d.%m.%Y') if patient.discharge_date else None
+    })
+
