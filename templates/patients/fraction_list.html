@@ -13,28 +13,28 @@
 </div>
 
 <!-- МОДАЛЬНЕ ВІКНО: Масове підтвердження за період (відпустка) -->
-<div id="bulkConfirmModal" class="modal" style="display: none; position: fixed; z-index: 1050; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); overflow-y: auto;">
-    <div class="modal-content" style="background: white; margin: 5% auto; padding: 25px; border-radius: 12px; max-width: 650px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);">
-        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 15px; margin-bottom: 20px;">
-            <h2 style="margin: 0; font-size: 1.4rem; color: #2c3e50;"><i class="fas fa-plane-departure" style="color: #3498db; margin-right: 8px;"></i> Масове підтвердження за період</h2>
-            <span onclick="closeBulkConfirmModal()" style="font-size: 1.8rem; cursor: pointer; color: #aaa; line-height: 1;">&times;</span>
+<div id="bulkConfirmModal" class="modal" style="display: none; position: fixed; z-index: 1050; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); overflow-y: auto;">
+    <div class="modal-content" style="background: var(--card-bg-color); color: var(--text-color); margin: 5% auto; padding: 25px; border-radius: 12px; max-width: 650px; border: 1px solid var(--border-color); box-shadow: var(--shadow);">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 15px; margin-bottom: 20px;">
+            <h2 style="margin: 0; font-size: 1.4rem; color: var(--text-color);"><i class="fas fa-plane-departure" style="color: #3498db; margin-right: 8px;"></i> Масове підтвердження за період</h2>
+            <span onclick="closeBulkConfirmModal()" style="font-size: 1.8rem; cursor: pointer; color: var(--text-light-color); line-height: 1;">&times;</span>
         </div>
 
         <!-- КРОК 1: Вибір дат та налаштувань -->
         <div id="bulkStep1">
             <div style="display: flex; gap: 15px; margin-bottom: 15px;">
                 <div style="flex: 1;">
-                    <label style="display: block; font-weight: 600; margin-bottom: 5px; font-size: 0.9rem;">З дати:</label>
-                    <input type="date" id="bulkStartDate" class="form-control" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ccc; font-size: 0.95rem;">
+                    <label style="display: block; font-weight: 600; margin-bottom: 5px; font-size: 0.9rem; color: var(--text-color);">З дати:</label>
+                    <input type="date" id="bulkStartDate" class="form-control" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--border-color); background-color: var(--input-bg); color: var(--text-color); font-size: 0.95rem;">
                 </div>
                 <div style="flex: 1;">
-                    <label style="display: block; font-weight: 600; margin-bottom: 5px; font-size: 0.9rem;">По дату:</label>
-                    <input type="date" id="bulkEndDate" class="form-control" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ccc; font-size: 0.95rem;">
+                    <label style="display: block; font-weight: 600; margin-bottom: 5px; font-size: 0.9rem; color: var(--text-color);">По дату:</label>
+                    <input type="date" id="bulkEndDate" class="form-control" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--border-color); background-color: var(--input-bg); color: var(--text-color); font-size: 0.95rem;">
                 </div>
             </div>
 
             <div style="margin-bottom: 18px;">
-                <span style="font-size: 0.85rem; color: #666; display: block; margin-bottom: 6px;">Швидкі шаблони дат:</span>
+                <span style="font-size: 0.85rem; color: var(--text-light-color); display: block; margin-bottom: 6px;">Швидкі шаблони дат:</span>
                 <div style="display: flex; gap: 8px; flex-wrap: wrap;">
                     <button type="button" class="btn btn-outline" style="padding: 4px 10px; font-size: 0.85rem;" onclick="setBulkPreset(7)">За останні 7 днів</button>
                     <button type="button" class="btn btn-outline" style="padding: 4px 10px; font-size: 0.85rem;" onclick="setBulkPreset(14)">За останні 14 днів</button>
@@ -42,8 +42,8 @@
                 </div>
             </div>
 
-            <div style="margin-bottom: 22px; background: #f8f9fa; padding: 12px; border-radius: 8px; border: 1px solid #e9ecef;">
-                <label style="display: flex; align-items: center; gap: 10px; font-weight: 500; cursor: pointer; margin: 0; font-size: 0.95rem;">
+            <div style="margin-bottom: 22px; background: var(--hover-bg); padding: 12px; border-radius: 8px; border: 1px solid var(--border-color);">
+                <label style="display: flex; align-items: center; gap: 10px; font-weight: 500; cursor: pointer; margin: 0; font-size: 0.95rem; color: var(--text-color);">
                     <input type="checkbox" id="bulkIncludeMissed" checked style="width: 18px; height: 18px; accent-color: #3498db;">
                     <span>Підтверджувати також дні зі статусом «Пропущена» (missed) за період відпустки</span>
                 </label>
@@ -57,10 +57,10 @@
 
         <!-- КРОК 2: Попередній перегляд та підтвердження -->
         <div id="bulkStep2" style="display: none;">
-            <div id="bulkPreviewContent" style="max-height: 350px; overflow-y: auto; margin-bottom: 20px; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; background: #fafafa;">
+            <div id="bulkPreviewContent" style="max-height: 350px; overflow-y: auto; margin-bottom: 20px; border: 1px solid var(--border-color); border-radius: 8px; padding: 15px; background: var(--background-color);">
             </div>
 
-            <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #eee; padding-top: 15px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-color); padding-top: 15px;">
                 <button type="button" class="btn btn-outline" onclick="backToStep1()"><i class="fas fa-arrow-left"></i> Змінити дати</button>
                 <button type="button" id="confirmBulkSubmitBtn" class="btn btn-success" onclick="executeBulkConfirm()" style="padding: 10px 24px; font-weight: bold; background-color: #27ae60;"><i class="fas fa-check-double"></i> Підтвердити всі фракції</button>
             </div>
@@ -853,18 +853,18 @@ function renderBulkPreview(data) {
     submitBtn.innerHTML = `<i class="fas fa-check-double"></i> Підтвердити ${data.total_fractions} фракцій (${data.total_patients} пацієнтів)`;
     
     let html = `
-        <div style="margin-bottom: 15px; background: #e8f4f8; padding: 10px 14px; border-radius: 6px; border-left: 4px solid #3498db;">
-            <strong style="color: #2980b9;">Знайдено для підтвердження:</strong> <strong>${data.total_fractions}</strong> фракцій у <strong>${data.total_patients}</strong> пацієнтів за період з <strong>${data.start_date}</strong> по <strong>${data.end_date}</strong>.
+        <div style="margin-bottom: 15px; background: rgba(52, 152, 219, 0.15); padding: 10px 14px; border-radius: 6px; border-left: 4px solid #3498db; color: var(--text-color);">
+            <strong style="color: #3498db;">Знайдено для підтвердження:</strong> <strong>${data.total_fractions}</strong> фракцій у <strong>${data.total_patients}</strong> пацієнтів за період з <strong>${data.start_date}</strong> по <strong>${data.end_date}</strong>.
         </div>
         <div style="display: flex; flex-direction: column; gap: 10px;">
     `;
     
     data.patients.forEach(p => {
         html += `
-            <div style="background: white; padding: 10px 12px; border-radius: 6px; border: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center;">
+            <div style="background: var(--card-bg-color); padding: 10px 12px; border-radius: 6px; border: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
                 <div>
-                    <strong style="color: #2c3e50; font-size: 0.95rem;">${p.full_name}</strong>
-                    <span style="font-size: 0.85rem; color: #666; margin-left: 8px;">(пройдено ${p.completed_fractions}/${p.total_fractions} фр.)</span>
+                    <strong style="color: var(--text-color); font-size: 0.95rem;">${p.full_name}</strong>
+                    <span style="font-size: 0.85rem; color: var(--text-light-color); margin-left: 8px;">(пройдено ${p.completed_fractions}/${p.total_fractions} фр.)</span>
                 </div>
                 <div>
                     <span class="badge" style="background-color: #27ae60; font-size: 0.85rem; padding: 4px 8px;">+${p.count} фракцій</span>
