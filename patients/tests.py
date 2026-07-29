@@ -1956,6 +1956,43 @@ class AIAssistantTests(TestCase):
         self.assertFalse(res_prep.context['is_archive'])
         self.assertEqual(res_prep.context['filter_type'], 'discharge-prep')
 
+    def test_simultaneous_integrated_boost_sib(self):
+        """Тест роботи симультанного бусту (SIB): парсинг 2.66/3.0, розрахунок планової та виписаної СОД/СВД"""
+        today = timezone.localdate()
+        patient = Patient(
+            last_name='Симультанний',
+            first_name='Буст',
+            gender='M',
+            diagnosis='C15.4',
+            treatment_start_date=today,
+            total_fractions=16
+        )
+        patient.parse_and_set_doses("2.66/3.0")
+        patient.save()
+        
+        self.assertTrue(patient.is_sib)
+        self.assertEqual(patient.dose_per_fraction, 2.66)
+        self.assertEqual(patient.dose_per_fraction_secondary, 3.0)
+        self.assertEqual(patient.dose_per_fraction_display, "2.66/3 Гр")
+        self.assertEqual(patient.planned_total_dose_display, "42.56/48 Гр")
+        
+        # Додаємо 5 виконаних фракцій
+        for i in range(5):
+            FractionHistory.objects.create(
+                patient=patient,
+                date=today + timedelta(days=i),
+                dose=2.66,
+                status='delivered'
+            )
+            
+        patient.recalculate_received_dose()
+        patient.refresh_from_db()
+        
+        self.assertEqual(patient.received_dose, 13.3)
+        self.assertEqual(patient.received_dose_secondary, 15.0)
+        self.assertEqual(patient.received_dose_display, "13.3/15 Гр")
+
+
 
 
 

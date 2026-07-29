@@ -10,6 +10,42 @@ def get_gemini_client():
         raise ValueError("GEMINI_API_KEY не знайдено в змінних середовища чи налаштуваннях Django.")
     return genai.Client(api_key=api_key)
 
+def format_dose_for_ai(total_fractions, dose_per_fraction, received_dose=None):
+    """Форматує РОД та СОД/СВД для передачі в AI промпти з підтримкою SIB"""
+    if not dose_per_fraction:
+        return "не вказано", "не вказано", "не вказано"
+
+    raw_str = str(dose_per_fraction).strip()
+    if '/' in raw_str:
+        parts = [p.strip().replace(',', '.') for p in raw_str.split('/') if p.strip()]
+        if len(parts) >= 2 and total_fractions:
+            try:
+                tf = float(total_fractions)
+                d1, d2 = float(parts[0]), float(parts[1])
+                tot1, tot2 = round(tf * d1, 2), round(tf * d2, 2)
+                
+                if received_dose is not None:
+                    rec_str = f"{received_dose} Гр"
+                else:
+                    rec_str = f"{tot1:g}/{tot2:g} Гр"
+                return f"{raw_str} Гр", f"{tot1:g}/{tot2:g} Гр", rec_str
+            except (ValueError, TypeError):
+                pass
+        return f"{raw_str} Гр", "не вказано", f"{received_dose or 'не вказано'}"
+
+    try:
+        d = float(raw_str.replace(',', '.'))
+        if total_fractions:
+            tot = round(float(total_fractions) * d, 2)
+            tot_str = f"{tot:g} Гр"
+        else:
+            tot_str = "не вказано"
+        rec_str = f"{received_dose:g} Гр" if (received_dose is not None and isinstance(received_dose, (int, float))) else f"{received_dose or tot_str}"
+        return f"{d:g} Гр", tot_str, rec_str
+    except (ValueError, TypeError):
+        return f"{raw_str} Гр", "не вказано", f"{received_dose or 'не вказано'}"
+
+
 def generate_initial_assessment(gender, diagnosis, clinical_state_notes, total_fractions, dose_per_fraction, irradiation_zone, today_date_str):
     """
     Генерує первинний огляд для пацієнта без персональних даних.
@@ -18,12 +54,8 @@ def generate_initial_assessment(gender, diagnosis, clinical_state_notes, total_f
     
     gender_text = "чоловіча" if gender == 'M' else "жіноча"
     
-    try:
-        total_dose = float(total_fractions) * float(dose_per_fraction)
-        total_dose_str = f"{total_dose:.1f}"
-    except (ValueError, TypeError):
-        total_dose_str = "___"
-        
+    rod_str, sod_planned_str, _ = format_dose_for_ai(total_fractions, dose_per_fraction)
+    
     prompt = f"""
     Згенеруй медичний документ "Первинний огляд лікаря з радіаційної онкології" на основі наступних знеособлених даних:
     - Стать пацієнта: {gender_text}
@@ -31,7 +63,7 @@ def generate_initial_assessment(gender, diagnosis, clinical_state_notes, total_f
     - Клінічні нотатки лікаря про стан пацієнта: {clinical_state_notes or 'загальний стан задовільний, активних скарг немає.'}
     - Зона опромінення: {irradiation_zone or 'не вказано'}
     - Запланована кількість фракцій: {total_fractions or 'не вказано'}
-    - Разова вогнищева доза (РВД): {dose_per_fraction or 'не вказано'} Гр
+    - Разова вогнищева доза (РВД/РОД): {rod_str}
     - Дата огляду: {today_date_str}
     
     Вимоги до документу:
@@ -49,7 +81,7 @@ def generate_initial_assessment(gender, diagnosis, clinical_state_notes, total_f
        - **Анамнез життя (Anamnesis vitae)**: Напишіть живим медичним стилем. Обов'язково вкажіть, що такі захворювання, як туберкульоз, інфаркт міокарда, інсульт, вірусні гепатити, венеричні захворювання в анамнезі заперечуються (наприклад: "Туберкульоз, інфаркт міокарда, інсульт, вірусні гепатити в анамнезі заперечує. Аллергологічний анамнез не обтяжений."). Додайте супутні хвороби, якщо вони згадуються в нотатках.
        - **Об'єктивний стан та локальний статус (Status localis)**: У цьому розділі першим рядком обов'язково має бути вказано оцінку статусу активності за шкалою ECOG (наприклад: "Статус активності за ECOG: 1"), яку ви повинні знайти та витягнути з переданих клінічних нотаток лікаря (якщо оцінки ECOG немає в нотатках, виведіть "Статус активності за ECOG: 0" або на основі опису скарг). **Важливо**: якщо оцінка ECOG становить 2 або більше (ECOG 2, 3, 4), ви обов'язково повинні обґрунтувати це далі в тексті опису загального/неврологічного статусу, пояснивши, які саме обмеження чи порушення викликали таку оцінку (наприклад, виражений парез, пересування на милицях, потреба в сторонній допомозі тощо). Опишіть детально загальний опис стану пацієнта: свідомість, системи дихання, серцево-судинна система (пульс, АТ в межах норми відповідно до скарг), опис стану тканин та вогнища у зоні {irradiation_zone or 'проекції пухлини'} відповідно до діагнозу.
        - **Обґрунтування діагнозу та план лікування**: Цей розділ має містити ЛИШЕ наступне твердження, сформоване строго за шаблоном:
-         "Планується [післяопераційний/радикальний] курс дистанційної променевої терапії на {irradiation_zone or 'ложе пухлини'} РВД - {dose_per_fraction or '___'} Гр, СВД - {total_dose_str} Гр. Проведено КТ-симуляцію, планування. Розпочато лікування."
+         "Планується [післяопераційний/радикальний] курс дистанційної променевої терапії на {irradiation_zone or 'ложе пухлини'} РВД - {rod_str}, СВД - {sod_planned_str}. Проведено КТ-симуляцію, планування. Розпочато лікування."
          (Замість [післяопераційний/радикальний] обери найбільш підходящий за клінічним змістом варіант).
          
     4. ЖОДНИХ імен, прізвищ чи дат народження пацієнта (навіть у вигляді порожніх ліній чи заглушок).
@@ -81,12 +113,8 @@ def generate_diary_entry(gender, diagnosis, fraction_number, ecog_status, ctcae_
         4: "4 (повна інвалідність)"
     }
     
-    try:
-        received_dose = float(fraction_number) * float(dose_per_fraction)
-        total_planned_dose = float(total_fractions) * float(dose_per_fraction)
-        dose_status_line = f"Отримано дозу: {received_dose:.1f} Гр з {total_planned_dose:.1f} Гр запланованих."
-    except (ValueError, TypeError):
-        dose_status_line = f"Сеанс №{fraction_number or '—'}"
+    rod_str, sod_planned_str, sod_rec_str = format_dose_for_ai(total_fractions, dose_per_fraction)
+    dose_status_line = f"Сеанс №{fraction_number or '—'}. РОД: {rod_str}, планова СВД: {sod_planned_str}."
         
     if diary_type == 'admission':
         diary_type_instruction = (
@@ -168,21 +196,22 @@ def generate_discharge_summary(gender, diagnosis, total_fractions, dose_per_frac
     client = get_gemini_client()
     
     gender_text = "чоловіча" if gender == 'M' else "жіноча"
+    rod_str, sod_planned_str, sod_rec_str = format_dose_for_ai(total_fractions, dose_per_fraction, received_dose)
     
     prompt = f"""
     Згенеруй виписні дані (епікриз виписки зі стаціонару) після проведення курсу променевої терапії на основі наступних знеособлених даних:
     - Стать: {gender_text}
     - Діагноз: {diagnosis}
     - Проведено фракцій: {total_fractions or 'не вказано'}
-    - Разова доза (РВД): {dose_per_fraction or 'не вказано'} Гр
-    - Сумарна отримана доза (СОД): {received_dose or 'не вказано'} Гр
+    - Разова доза (РВД/РОД): {rod_str}
+    - Сумарна отримана доза (СОД/СВД): {sod_rec_str} (планова: {sod_planned_str})
     - Опис стану та рекомендації при виписці: {clinical_state_notes or 'рекомендовано спостереження онколога.'}
     
     Вимоги до документу:
     1. Мова: українська.
     2. Структура документу має містити:
        - **Діагноз при виписці**: структуроване представлення діагнозу. Не створюйте порожні клінічні групи або заглушки для супутніх діагнозів, якщо їх не вказано.
-       - **Проведене лікування**: курс дистанційної променевої терапії, вказавши РВД {dose_per_fraction or '___'} Гр, СОД {received_dose or '___'} Гр та кількість виконаних фракцій {total_fractions or '___'}.
+       - **Проведене лікування**: курс дистанційної променевої терапії, вказавши РВД/РОД {rod_str}, СВД {sod_rec_str} та кількість виконаних фракцій {total_fractions or '___'}.
        - **Стан пацієнта при виписці**: оцінка загального самопочуття, переносимості лікування на основі нотаток стану.
        - **Рекомендації**: мають бути максимально лаконічними, короткими та відповідати реаліям української онкологічної практики. Уникайте довгих розлогих абзаців про вибір одягу чи детальних описів гігієни. Сформулюйте рекомендації короткими тезами за такими пунктами:
          1. Диспансерне спостереження: консультація онколога/радіолога за місцем проживання через 1 міс., далі раз на 3 міс.

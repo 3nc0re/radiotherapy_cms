@@ -124,8 +124,12 @@ class Patient(models.Model):
     treatment_phase = models.CharField(max_length=255, blank=True, null=True, help_text="Фаза лікування")
     irradiation_zone = models.CharField(max_length=255, blank=True, null=True, help_text="Зона опромінення")
     total_fractions = models.IntegerField(blank=True, null=True, help_text="Загальна кількість фракцій")
-    dose_per_fraction = models.FloatField(blank=True, null=True, help_text="РОД (Гр)")
-    received_dose = models.FloatField(blank=True, null=True, help_text="СОД (Гр)")
+    dose_per_fraction_raw = models.CharField(max_length=100, blank=True, null=True, help_text="Текстовий запис РОД (наприклад: 2.0 або 2.66/3.0)")
+    dose_per_fraction = models.FloatField(blank=True, null=True, help_text="Основна РОД (Гр)")
+    dose_per_fraction_secondary = models.FloatField(blank=True, null=True, help_text="Другорядна РОД (Гр) при SIB")
+    received_dose = models.FloatField(blank=True, null=True, help_text="Основна СОД (Гр)")
+    received_dose_secondary = models.FloatField(blank=True, null=True, help_text="Другорядна СОД (Гр) при SIB")
+    is_sib = models.BooleanField(default=False, help_text="Чи застосовується симультанний буст (SIB)")
 
     # Дати
     ct_simulation_date = models.DateField(blank=True, null=True, help_text="Дата КТ-симуляції")
@@ -274,11 +278,98 @@ class Patient(models.Model):
     def get_latest_medical_incapacity(self):
         return self.medical_incapacities.order_by('-end_date').first()
 
+    def parse_and_set_doses(self, raw_input):
+        """
+        Розбирає текстове значення РОД (наприклад '2.66/3.0', '2,66/3,0' або '2.0')
+        та встановлює поля dose_per_fraction, dose_per_fraction_secondary, is_sib.
+        """
+        if raw_input is None or str(raw_input).strip() == '':
+            self.dose_per_fraction_raw = None
+            self.dose_per_fraction = None
+            self.dose_per_fraction_secondary = None
+            self.is_sib = False
+            return
+
+        raw_str = str(raw_input).strip()
+        self.dose_per_fraction_raw = raw_str
+
+        if '/' in raw_str:
+            parts = [p.strip().replace(',', '.') for p in raw_str.split('/') if p.strip()]
+            if len(parts) >= 2:
+                try:
+                    val1 = float(parts[0])
+                    val2 = float(parts[1])
+                    self.dose_per_fraction = val1
+                    self.dose_per_fraction_secondary = val2
+                    self.is_sib = True
+                    return
+                except ValueError:
+                    pass
+        
+        # Одне число (не SIB)
+        try:
+            val = float(raw_str.replace(',', '.'))
+            self.dose_per_fraction = val
+            self.dose_per_fraction_secondary = None
+            self.is_sib = False
+        except ValueError:
+            pass
+
+    @property
+    def dose_per_fraction_display(self):
+        """Повертає форматований рядок РОД (наприклад '2.66/3.0 Гр' або '2.0 Гр')"""
+        if self.is_sib and self.dose_per_fraction is not None and self.dose_per_fraction_secondary is not None:
+            d1 = f"{self.dose_per_fraction:g}"
+            d2 = f"{self.dose_per_fraction_secondary:g}"
+            return f"{d1}/{d2} Гр"
+        elif self.dose_per_fraction_raw and '/' in self.dose_per_fraction_raw:
+            return f"{self.dose_per_fraction_raw} Гр"
+        elif self.dose_per_fraction is not None:
+            return f"{self.dose_per_fraction:g} Гр"
+        return "—"
+
+    @property
+    def planned_total_dose_display(self):
+        """Повертає форматовану планову СОД/СВД (наприклад '42.56/48.0 Гр' або '50.0 Гр')"""
+        tf = self.total_fractions or 0
+        if tf <= 0:
+            return "—"
+            
+        if self.is_sib and self.dose_per_fraction is not None and self.dose_per_fraction_secondary is not None:
+            tot1 = round(tf * self.dose_per_fraction, 2)
+            tot2 = round(tf * self.dose_per_fraction_secondary, 2)
+            return f"{tot1:g}/{tot2:g} Гр"
+        elif self.dose_per_fraction is not None:
+            tot = round(tf * self.dose_per_fraction, 2)
+            return f"{tot:g} Гр"
+        return "—"
+
+    @property
+    def received_dose_display(self):
+        """Повертає форматовану накопичену СОД/СВД (наприклад '13.3/15.0 Гр' або '20.0 Гр')"""
+        if self.is_sib and self.dose_per_fraction is not None and self.dose_per_fraction_secondary is not None:
+            rd1 = self.received_dose if self.received_dose is not None else round((self.current_fraction or 0) * self.dose_per_fraction, 2)
+            rd2 = self.received_dose_secondary if self.received_dose_secondary is not None else round((self.current_fraction or 0) * self.dose_per_fraction_secondary, 2)
+            return f"{round(rd1, 2):g}/{round(rd2, 2):g} Гр"
+        elif self.received_dose is not None:
+            return f"{round(self.received_dose, 2):g} Гр"
+        elif self.dose_per_fraction is not None:
+            rd = round((self.current_fraction or 0) * self.dose_per_fraction, 2)
+            return f"{rd:g} Гр"
+        return "0.0 Гр"
+
     def recalculate_received_dose(self):
-        """Перераховує отриману дозу на основі виконаних фракцій за формулою: кількість delivered * dose_per_fraction"""
+        """Перераховує отриману дозу на основі виконаних фракцій"""
         delivered_count = self.fractions.filter(status='delivered').count()
-        dose_per = self.dose_per_fraction or 0.0
-        self.received_dose = delivered_count * dose_per
+        dose1 = self.dose_per_fraction or 0.0
+        self.received_dose = round(delivered_count * dose1, 2)
+        
+        if self.is_sib and self.dose_per_fraction_secondary is not None:
+            dose2 = self.dose_per_fraction_secondary or 0.0
+            self.received_dose_secondary = round(delivered_count * dose2, 2)
+        else:
+            self.received_dose_secondary = None
+            
         self.save()
 
     def get_diagnosis_text_for_copy(self):

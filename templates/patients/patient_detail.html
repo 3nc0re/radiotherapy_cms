@@ -17,7 +17,7 @@
         </div>
     </div>
         <div style="display: flex; justify-content: space-between; font-size: 0.9em; margin-bottom: 5px; font-weight: bold; color: var(--primary-color);">
-            <span>Пройдено: <span id="current-fraction-val">{{ patient.current_fraction }}</span>/<span id="total-fractions-val">{{ patient.total_fractions }}</span> фр. (СОД: <span id="received-dose-val">{{ patient.received_dose|default:"0" }}</span> Гр)</span>
+            <span>Пройдено: <span id="current-fraction-val">{{ patient.current_fraction }}</span>/<span id="total-fractions-val">{{ patient.total_fractions }}</span> фр. (СОД/СВД: <span id="received-dose-val">{{ patient.received_dose_display }}</span>)</span>
         </div>
         <progress id="treatment-progress-bar" value="{{ patient.current_fraction }}" max="{{ patient.total_fractions|default:1 }}" style="width: 100%; height: 12px; border-radius: 6px;"></progress>
 </div>
@@ -69,8 +69,8 @@
         <p><strong>Тип лікування:</strong> {{ patient.treatment_type|default:"—" }}</p>
         <p><strong>Зона опромінення:</strong> {{ patient.irradiation_zone|default:"—" }}</p>
         <p><strong>Загальна кількість фракцій:</strong> {{ patient.total_fractions|default:"—" }}</p>
-        <p><strong>РОД (Гр):</strong> {{ patient.dose_per_fraction|default:"—" }}</p>
-        <p><strong>СОД (Гр):</strong> <span id="treatment-sod-val">{{ patient.received_dose|default:"—" }}</span></p>
+        <p><strong>РОД:</strong> {{ patient.dose_per_fraction_display }}</p>
+        <p><strong>СОД/СВД:</strong> <span id="treatment-sod-val">{{ patient.received_dose_display }}</span> <span style="font-size: 0.85em; color: var(--text-light-color);">(планова: {{ patient.planned_total_dose_display }})</span></p>
         <p><strong>Поточна фракція:</strong> <span id="treatment-current-val">{{ patient.current_fraction|default:"0" }}</span></p>
         {% if patient.fractions.exists %}
         <p><strong>Пропущені фракції:</strong> {{ missed_fractions_count }}</p>
@@ -95,8 +95,8 @@
         <p><strong>Дата КТ-симуляції:</strong> {{ patient.ct_simulation_date|date:"d.m.Y"|default:"—" }}</p>
         <p><strong>Дата початку лікування:</strong> {{ patient.treatment_start_date|date:"d.m.Y"|default:"—" }}</p>
         <p><strong>Загальна кількість фракцій:</strong> {{ patient.total_fractions|default:"—" }}</p>
-        <p><strong>РОД (Гр):</strong> {{ patient.dose_per_fraction|default:"—" }}</p>
-        <p><strong>СОД (Гр):</strong> <span id="dates-sod-val">{{ patient.received_dose|default:"—" }}</span></p>
+        <p><strong>РОД:</strong> {{ patient.dose_per_fraction_display }}</p>
+        <p><strong>СОД/СВД:</strong> <span id="dates-sod-val">{{ patient.received_dose_display }}</span> <span style="font-size: 0.85em; color: var(--text-light-color);">(планова: {{ patient.planned_total_dose_display }})</span></p>
         <p><strong>Дата виписки:</strong> <span id="discharge-date-val">{{ patient.get_actual_discharge_date|date:"d.m.Y"|default:"—" }}</span></p>
         <p><strong>Статус госпіталізації:</strong> {{ patient.get_hospitalization_status_display|default:"—" }}</p>
         {% if patient.hospitalization_status == 'queue' and patient.planned_admission_date %}

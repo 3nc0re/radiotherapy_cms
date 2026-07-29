@@ -40,6 +40,11 @@ class PatientForm(forms.ModelForm):
         required=False,
         widget=forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input', 'placeholder': 'дд.мм.рррр'})
     )
+    dose_per_fraction = forms.CharField(
+        required=False,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'напр. 2.0 або 2.66/3.0 (SIB)'}),
+        help_text="Доза на фракцію (Гр). Для SIB вказуйте через слеш: 2.66/3.0"
+    )
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -51,6 +56,46 @@ class PatientForm(forms.ModelForm):
                 date_value = getattr(self.instance, field_name)
                 if date_value:
                     self.initial[field_name] = date_value.strftime('%d.%m.%Y')
+        
+        if self.instance.pk:
+            if self.instance.dose_per_fraction_raw:
+                self.initial['dose_per_fraction'] = self.instance.dose_per_fraction_raw
+            elif self.instance.dose_per_fraction is not None:
+                if self.instance.is_sib and self.instance.dose_per_fraction_secondary is not None:
+                    self.initial['dose_per_fraction'] = f"{self.instance.dose_per_fraction:g}/{self.instance.dose_per_fraction_secondary:g}"
+                else:
+                    self.initial['dose_per_fraction'] = f"{self.instance.dose_per_fraction:g}"
+
+    def clean_dose_per_fraction(self):
+        val = self.cleaned_data.get('dose_per_fraction')
+        if not val:
+            return None
+        val_str = str(val).strip()
+        if '/' in val_str:
+            parts = [p.strip().replace(',', '.') for p in val_str.split('/') if p.strip()]
+            if len(parts) != 2:
+                raise ValidationError("Для SIB вкажіть дві дози через слеш (наприклад: 2.66/3.0)")
+            try:
+                float(parts[0])
+                float(parts[1])
+            except ValueError:
+                raise ValidationError("Введіть коректні числові дози (наприклад: 2.66/3.0)")
+            return val_str
+        else:
+            try:
+                float(val_str.replace(',', '.'))
+                return val_str
+            except ValueError:
+                raise ValidationError("Введіть числову дозу (наприклад: 2.0 або 2.66/3.0)")
+
+    def save(self, commit=True):
+        patient = super().save(commit=False)
+        raw_dose = self.cleaned_data.get('dose_per_fraction')
+        patient.parse_and_set_doses(raw_dose)
+        if commit:
+            patient.save()
+            self.save_m2m()
+        return patient
     
     class Meta:
         model = Patient
