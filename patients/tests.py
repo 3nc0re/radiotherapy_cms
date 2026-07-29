@@ -1920,6 +1920,43 @@ class AIAssistantTests(TestCase):
         patient.refresh_from_db()
         self.assertGreater(patient.current_fraction, 0)
 
+    def test_archive_and_filtered_tabs_sorting(self):
+        """Тест збереження вкладки Архів та інших фільтрів при сортуванні за різними колонками"""
+        today = timezone.localdate()
+        # Архівний пацієнт
+        p_arch = Patient.objects.create(
+            last_name='Архівний',
+            first_name='Тест',
+            gender='M',
+            diagnosis='C50.9',
+            treatment_start_date=today - timedelta(days=30),
+            discharge_date=today - timedelta(days=5),
+            total_fractions=10,
+            dose_per_fraction=2.0
+        )
+        
+        # 1. Запит на архів з сортуванням по даті виписки
+        url_arch = reverse('patient_archive') + '?sort=discharge_date&order=asc'
+        res_arch = self.client.get(url_arch)
+        self.assertEqual(res_arch.status_code, 200)
+        self.assertTrue(res_arch.context['is_archive'])
+        self.assertEqual(res_arch.context['filter_type'], 'archive')
+        self.assertEqual(res_arch.context['current_sort'], 'discharge_date')
+        
+        # 2. Запит через filter_type='archive'
+        url_filter_arch = reverse('patient_list_filtered', kwargs={'filter_type': 'archive'}) + '?sort=discharge_date&order=desc'
+        res_filter_arch = self.client.get(url_filter_arch)
+        self.assertEqual(res_filter_arch.status_code, 200)
+        self.assertTrue(res_filter_arch.context['is_archive'])
+        
+        # 3. Запит на підготовку до виписки з сортуванням
+        url_prep = reverse('patient_list_filtered', kwargs={'filter_type': 'discharge-prep'}) + '?sort=full_name&order=asc'
+        res_prep = self.client.get(url_prep)
+        self.assertEqual(res_prep.status_code, 200)
+        self.assertFalse(res_prep.context['is_archive'])
+        self.assertEqual(res_prep.context['filter_type'], 'discharge-prep')
+
+
 
 
 

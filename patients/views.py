@@ -157,9 +157,49 @@ def dashboard(request):
     }
     return render(request, 'patients/dashboard.html', context)
 
+def _sort_patients_queryset(patients, sort_by, sort_order):
+    """Допоміжна функція для сортування QuerySet пацієнтів"""
+    if sort_by == 'full_name':
+        order_field = 'last_name'
+    elif sort_by == 'ct_simulation_date':
+        order_field = 'ct_simulation_date'
+    elif sort_by == 'treatment_start_date':
+        order_field = 'treatment_start_date'
+    elif sort_by == 'discharge_date':
+        order_field = 'discharge_date'
+    elif sort_by == 'medical_incapacity_end':
+        if sort_order == 'desc':
+            return patients.annotate(
+                latest_incapacity_end=models.Subquery(
+                    MedicalIncapacity.objects.filter(
+                        patient=models.OuterRef('pk')
+                    ).order_by('-end_date').values('end_date')[:1]
+                )
+            ).order_by('-latest_incapacity_end')
+        else:
+            return patients.annotate(
+                latest_incapacity_end=models.Subquery(
+                    MedicalIncapacity.objects.filter(
+                        patient=models.OuterRef('pk')
+                    ).order_by('-end_date').values('end_date')[:1]
+                )
+            ).order_by('latest_incapacity_end')
+    else:
+        order_field = 'last_name'
+        
+    if sort_order == 'desc':
+        order_field = f'-{order_field}'
+        
+    return patients.order_by(order_field)
+
+
 @login_required
 def patient_list(request, filter_type=None):
     today = timezone.localdate()
+    
+    if filter_type == 'archive':
+        return patient_archive(request)
+        
     # Активні: discharge_date немає або у майбутньому
     base_query = Patient.objects.filter(
         models.Q(discharge_date__isnull=True) | models.Q(discharge_date__gte=today)
@@ -197,54 +237,14 @@ def patient_list(request, filter_type=None):
     sort_by = request.GET.get('sort', 'last_name')
     sort_order = request.GET.get('order', 'asc')
     
-    # Визначаємо поле для сортування
-    if sort_by == 'full_name':
-        order_field = 'last_name'
-    elif sort_by == 'ct_simulation_date':
-        order_field = 'ct_simulation_date'
-    elif sort_by == 'treatment_start_date':
-        order_field = 'treatment_start_date'
-    elif sort_by == 'discharge_date':
-        order_field = 'discharge_date'
-    elif sort_by == 'medical_incapacity_end':
-        # Сортування за датою закінчення останнього МВТН
-        if sort_order == 'desc':
-            patients = patients.annotate(
-                latest_incapacity_end=models.Subquery(
-                    MedicalIncapacity.objects.filter(
-                        patient=models.OuterRef('pk')
-                    ).order_by('-end_date').values('end_date')[:1]
-                )
-            ).order_by('-latest_incapacity_end')
-        else:
-            patients = patients.annotate(
-                latest_incapacity_end=models.Subquery(
-                    MedicalIncapacity.objects.filter(
-                        patient=models.OuterRef('pk')
-                    ).order_by('-end_date').values('end_date')[:1]
-                )
-            ).order_by('latest_incapacity_end')
-        return render(request, 'patients/patient_list.html', {
-            'patients': patients,
-            'filter_type': filter_type,
-            'current_sort': sort_by,
-            'current_order': sort_order
-        })
-    else:
-        order_field = 'last_name'
-    
-    # Додаємо префікс для зворотного сортування
-    if sort_order == 'desc':
-        order_field = f'-{order_field}'
-    
-    # Застосовуємо сортування
-    patients = patients.order_by(order_field)
+    patients = _sort_patients_queryset(patients, sort_by, sort_order)
         
     return render(request, 'patients/patient_list.html', {
         'patients': patients,
         'filter_type': filter_type,
         'current_sort': sort_by,
-        'current_order': sort_order
+        'current_order': sort_order,
+        'is_archive': False
     })
 
 @login_required
@@ -754,15 +754,24 @@ def admit_patient(request, pk):
 
 @login_required
 def patient_archive(request):
-    """Список пацієнтів в архіві"""
+    """Список пацієнтів в архіві з підтримкою сортування"""
     today = timezone.localdate()
     archived_patients = Patient.objects.filter(
         discharge_date__isnull=False,
         discharge_date__lt=today  # Тільки виписані пацієнти (дата виписки в минулому)
-    ).order_by('-discharge_date')
+    )
+    
+    sort_by = request.GET.get('sort', 'discharge_date')
+    sort_order = request.GET.get('order', 'desc')
+    
+    archived_patients = _sort_patients_queryset(archived_patients, sort_by, sort_order)
+    
     return render(request, 'patients/patient_list.html', {
         'patients': archived_patients,
-        'is_archive': True
+        'filter_type': 'archive',
+        'is_archive': True,
+        'current_sort': sort_by,
+        'current_order': sort_order
     })
 
 @login_required
