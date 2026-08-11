@@ -966,9 +966,10 @@ function copyToClipboard(textareaId) {
     
     try {
         document.execCommand('copy');
-        alert("Текст скопійовано в буфер обміну!");
+        showToast("Текст скопійовано в буфер обміну!", "success");
     } catch (err) {
         console.error('Помилка копіювання: ', err);
+        showToast("Не вдалося скопіювати текст", "error");
     }
 }
 
@@ -1005,12 +1006,12 @@ function saveAINotes() {
     .then(handleFetchResponse)
     .then(data => {
         if (data.success) {
-            alert("Нотатки успішно збережено!");
+            showToast("Нотатки успішно збережено!", "success");
         } else {
-            alert("Помилка при збереженні: " + data.error);
+            showToast("Помилка при збереженні: " + data.error, "error");
         }
     })
-    .catch(err => alert("Помилка підключення: " + err.message));
+    .catch(err => showToast("Помилка підключення: " + err.message, "error"));
 }
 
 // Generate Initial Assessment or Discharge Summary
@@ -1055,15 +1056,15 @@ function generateAIDoc(docType) {
             } else {
                 document.getElementById('aiDischargeText').value = data.text;
             }
-            alert("Генерація успішно завершена!");
+            showToast("Генерація успішно завершена!", "success");
         } else {
-            alert("Помилка при генерації: " + data.error);
+            showToast("Помилка при генерації: " + data.error, "error");
         }
     })
     .catch(err => {
         btn.innerHTML = originalText;
         btn.disabled = false;
-        alert("Помилка: " + err.message);
+        showToast("Помилка: " + err.message, "error");
     });
 }
 
@@ -1084,12 +1085,12 @@ function saveAIDocText() {
     .then(handleFetchResponse)
     .then(data => {
         if (data.success) {
-            alert("Чернетку документів успішно збережено!");
+            showToast("Чернетку документів успішно збережено!", "success");
         } else {
-            alert("Помилка при збереженні: " + data.error);
+            showToast("Помилка при збереженні: " + data.error, "error");
         }
     })
-    .catch(err => alert("Помилка: " + err.message));
+    .catch(err => showToast("Помилка: " + err.message, "error"));
 }
 
 // Generate new daily diary entry
@@ -1105,7 +1106,7 @@ function generateAIDiary() {
     const diaryTypeVal = document.getElementById('diaryType').value;
     
     if (!dateVal) {
-        alert("Будь ласка, вкажіть дату щоденника");
+        showToast("Будь ласка, вкажіть дату щоденника", "warning");
         return;
     }
     
@@ -1131,7 +1132,7 @@ function generateAIDiary() {
         btn.disabled = false;
         
         if (data.success) {
-            alert("Щоденник успішно згенеровано!");
+            showToast("Щоденник успішно згенеровано!", "success");
             
             // Remove "no diaries" message if it exists
             const noDiaries = document.getElementById('noDiariesMsg');
@@ -1190,13 +1191,13 @@ function generateAIDiary() {
             // Clear current diary notes text
             document.getElementById('diaryNotes').value = "";
         } else {
-            alert("Помилка генерації щоденника: " + data.error);
+            showToast("Помилка генерації щоденника: " + data.error, "error");
         }
     })
     .catch(err => {
         btn.innerHTML = originalText;
         btn.disabled = false;
-        alert("Помилка: " + err.message);
+        showToast("Помилка: " + err.message, "error");
     });
 }
 
@@ -1214,12 +1215,12 @@ function saveDiary(diaryId) {
     .then(handleFetchResponse)
     .then(data => {
         if (data.success) {
-            alert("Щоденниковий запис успішно оновлено!");
+            showToast("Щоденниковий запис успішно оновлено!", "success");
         } else {
-            alert("Помилка збереження: " + data.error);
+            showToast("Помилка збереження: " + data.error, "error");
         }
     })
-    .catch(err => alert("Помилка: " + err.message));
+    .catch(err => showToast("Помилка: " + err.message, "error"));
 }
 
 // Delete daily diary entry
@@ -1236,7 +1237,7 @@ function deleteDiary(diaryId) {
     .then(data => {
         if (data.success) {
             document.getElementById(`diary-card-${diaryId}`).remove();
-            alert("Запис видалено!");
+            showToast("Запис видалено!", "info");
             
             // If list is empty, show empty message
             const list = document.getElementById('aiDiariesList');
@@ -1248,10 +1249,10 @@ function deleteDiary(diaryId) {
                 list.appendChild(msg);
             }
         } else {
-            alert("Помилка видалення: " + data.error);
+            showToast("Помилка видалення: " + data.error, "error");
         }
     })
-    .catch(err => alert("Помилка: " + err.message));
+    .catch(err => showToast("Помилка: " + err.message, "error"));
 }
 
 // Automatically update diary type dropdown based on fraction number input
