@@ -103,18 +103,17 @@ def dashboard(request):
                         'due_date': due_date
                     })
         
-        # MVTN/Incapacity check
+        # MVTN/Incapacity check: сповіщення лише за 3 дні до закінчення МВТН, якщо вона не покриває курс
         incapacity = patient.prefetched_incapacities[0] if hasattr(patient, 'prefetched_incapacities') and patient.prefetched_incapacities else None
         if incapacity and incapacity.end_date and incapacity.end_date >= today:
             actual_end = patient.get_actual_discharge_date
             incapacity_end = incapacity.end_date
-            cond_a = actual_end and actual_end > incapacity_end
-            cond_b = (incapacity_end - today).days <= 2
+            days_to_exp = (incapacity_end - today).days
             
-            if cond_a or cond_b:
+            if days_to_exp <= 3 and actual_end and actual_end > incapacity_end:
                 actual_end_str = actual_end.strftime('%d.%m.%Y') if actual_end else '—'
                 incapacity_end_str = incapacity_end.strftime('%d.%m.%Y')
-                message = f"⚠️ У пацієнта {patient.full_name} МВТН НЕ покриває курс лікування або збігає! Діє до: {incapacity_end_str}. Реальне завершення лікування: {actual_end_str}. Потрібно продовжити вручну."
+                message = f"⚠️ У пацієнта {patient.full_name} МВТН закінчується через {days_to_exp} дн. ({incapacity_end_str}) і не покриває курс лікування (завершення: {actual_end_str})! Потрібно продовжити в МІС."
                 notifications.append({
                     'type': 'incapacity_alert',
                     'patient': patient,

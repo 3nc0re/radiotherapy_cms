@@ -1127,11 +1127,18 @@ class MVTNNotificationTests(TestCase):
             patient.refresh_from_db()
             
             # Перевіряємо, що дата останньої фракції змістилася на понеділок 2026-06-01
-            # (оскільки п'ятнична фракція перенеслася на понеділок)
             new_last_date = patient.get_actual_discharge_date
             self.assertEqual(new_last_date, datetime.date(2026, 6, 1))
             
-            # 5. Перевіряємо появу критичного алерта на дашборді
+            # На 25.05 залишилося 4 дні до закінчення МВТН (29.05), тому алерт ще НЕ показується (>3 днів)
+            response = self.client.get(reverse('dashboard'))
+            notifications = response.context['notifications']
+            incapacity_alerts = [n for n in notifications if n['type'] == 'incapacity_alert']
+            self.assertEqual(len(incapacity_alerts), 0)
+
+        # Тепер переміщуємось на 26.05 (залишилося 3 дні до 29.05) -> алерт МАЄ з'явитися!
+        with patch('django.utils.timezone.now') as mock_now:
+            mock_now.return_value = datetime.datetime(2026, 5, 26, 12, 0, 0, tzinfo=datetime.timezone.utc)
             response = self.client.get(reverse('dashboard'))
             self.assertEqual(response.status_code, 200)
             
@@ -1145,16 +1152,16 @@ class MVTNNotificationTests(TestCase):
             self.assertEqual(alert['actual_discharge_date'], datetime.date(2026, 6, 1))
             
             # Перевіряємо, що в HTML є правильний текст попередження
+            self.assertIn('МВТН закінчується через 3 дн.', alert['message'])
             self.assertContains(response, 'Петренко Іван Петрович')
-            self.assertContains(response, 'МВТН закінчується або не покриває лікування')
             self.assertContains(response, '29.05.2026')
             self.assertContains(response, '01.06.2026')
 
     def test_mvtn_expiring_soon_alert(self):
         """
         Тест-кейс:
-        1. МВТН закінчується через 2 дні від 'сьогодні'.
-        2. Перевіряємо появу алерта про швидке закінчення МВТН.
+        1. МВТН закінчується через 2 дні від 'сьогодні' і курс закінчується пізніше.
+        2. Перевіряємо появу алерта про швидке закінчення МВТН за 2 дні.
         """
         import datetime
         from unittest.mock import patch
@@ -1163,18 +1170,18 @@ class MVTNNotificationTests(TestCase):
             # Співпадіння: сьогодні понеділок 2026-05-25
             mock_now.return_value = datetime.datetime(2026, 5, 25, 12, 0, 0, tzinfo=datetime.timezone.utc)
             
-            # Створюємо пацієнта з лікуванням, що закінчується через 1 день (2026-05-26)
+            # Створюємо пацієнта з лікуванням, що закінчується через 3 дні (2026-05-28)
             patient = Patient.objects.create(
                 last_name='Коваленко',
                 first_name='Ольга',
                 middle_name='Миколаївна',
                 diagnosis='Тестовий діагноз',
                 treatment_start_date=datetime.date(2026, 5, 25),
-                total_fractions=2,
+                total_fractions=4,
                 dose_per_fraction=2.0
             )
             
-            # МВТН діє до 2026-05-26 (закінчується завтра, тобто залишився 1 день)
+            # МВТН діє до 2026-05-26 (закінчується через 1 день і не покриває курс до 28.05)
             MedicalIncapacity.objects.create(
                 patient=patient,
                 start_date=datetime.date(2026, 5, 25),
@@ -1192,6 +1199,43 @@ class MVTNNotificationTests(TestCase):
             
             self.assertContains(response, 'Коваленко Ольга Миколаївна')
             self.assertContains(response, '26.05.2026')
+
+    def test_mvtn_distant_future_no_alert(self):
+        """
+        Тест-кейс: МВТН закінчується через 20 днів. Попри те, що курс лікування триваліший,
+        сповіщення НЕ повинно показуватися, поки до закінчення МВТН залишається більше 3 днів.
+        """
+        import datetime
+        from unittest.mock import patch
+
+        with patch('django.utils.timezone.now') as mock_now:
+            mock_now.return_value = datetime.datetime(2026, 8, 12, 12, 0, 0, tzinfo=datetime.timezone.utc)
+            
+            patient = Patient.objects.create(
+                last_name='Сажнев',
+                first_name='Віктор',
+                middle_name='Леонідович',
+                diagnosis='Тестовий',
+                treatment_start_date=datetime.date(2026, 8, 10),
+                total_fractions=30,
+                dose_per_fraction=2.0
+            )
+            
+            # МВТН діє до 08.09.2026 (через 27 днів). Завершення лікування: 21.09.2026
+            MedicalIncapacity.objects.create(
+                patient=patient,
+                start_date=datetime.date(2026, 8, 10),
+                end_date=datetime.date(2026, 9, 8),
+                mvt_number='1111-2222-3333-4444'
+            )
+            
+            self.client.login(username='doctor_mvtn', password='testpass123')
+            response = self.client.get(reverse('dashboard'))
+            self.assertEqual(response.status_code, 200)
+            
+            notifications = response.context['notifications']
+            incapacity_alerts = [n for n in notifications if n['type'] == 'incapacity_alert']
+            self.assertEqual(len(incapacity_alerts), 0)
 
 
 class InpatientModuleTests(TestCase):
