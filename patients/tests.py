@@ -2037,6 +2037,65 @@ class AIAssistantTests(TestCase):
         self.assertEqual(patient.received_dose_display, "13.3/15 Гр")
 
 
+class BloodTestTabTests(TestCase):
+    """Тести для нової вкладки 'Аналізи' та її функціоналу"""
+
+    def setUp(self):
+        self.client = Client()
+        self.user = User.objects.create_user(
+            username='doctor_blood',
+            password='testpass123',
+            role='doctor',
+            approved=True
+        )
+        self.client.login(username='doctor_blood', password='testpass123')
+        self.today = timezone.localdate()
+
+    def test_blood_tests_list_view(self):
+        patient = Patient.objects.create(
+            last_name='Тестовий',
+            first_name='Аналіз',
+            middle_name='Іванович',
+            diagnosis='C34.1',
+            treatment_start_date=self.today - timedelta(days=5),
+            discharge_date=self.today + timedelta(days=10),
+            has_radiomodification=True,
+            is_active=True
+        )
+
+        response = self.client.get(reverse('patient_blood_tests'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Контроль та моніторинг аналізів крові')
+        self.assertContains(response, 'Тестовий Аналіз Іванович')
+        self.assertIn('patient_items', response.context)
+        self.assertEqual(response.context['radiomod_count'], 1)
+
+    def test_confirm_blood_test_ajax(self):
+        patient = Patient.objects.create(
+            last_name='Кров',
+            first_name='Пацієнт',
+            diagnosis='C50.0',
+            treatment_start_date=self.today - timedelta(days=3),
+            discharge_date=self.today + timedelta(days=10),
+            is_active=True
+        )
+
+        url = reverse('confirm_blood_test', kwargs={'patient_id': patient.id})
+        response = self.client.post(
+            url,
+            data={'test_date': self.today.strftime('%d.%m.%Y')},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data['success'])
+        self.assertEqual(data['last_blood_test_date'], self.today.strftime('%d.%m.%Y'))
+
+        patient.refresh_from_db()
+        self.assertEqual(patient.last_blood_test_date, self.today)
+
+
+
 
 
 

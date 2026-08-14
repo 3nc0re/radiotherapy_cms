@@ -625,9 +625,43 @@ def admin_approve_user(request, user_id):
 @login_required
 def confirm_blood_test(request, patient_id):
     patient = get_object_or_404(Patient, id=patient_id)
-    patient.last_blood_test_date = timezone.localdate()
+    today = timezone.localdate()
+    
+    test_date_str = request.POST.get('test_date') or request.GET.get('test_date')
+    if test_date_str:
+        from django.utils.dateparse import parse_date
+        parsed_date = parse_date(test_date_str)
+        if not parsed_date:
+            try:
+                parts = test_date_str.split('.')
+                if len(parts) == 3:
+                    parsed_date = date(int(parts[2]), int(parts[1]), int(parts[0]))
+            except (ValueError, IndexError):
+                parsed_date = None
+        patient.last_blood_test_date = parsed_date or today
+    else:
+        patient.last_blood_test_date = today
+
     patient.save()
-    messages.success(request, f'Аналіз крові підтверджено для {patient.full_name}')
+    patient.refresh_from_db()
+
+    msg = f'Аналіз крові підтверджено для {patient.full_name} ({patient.last_blood_test_date.strftime("%d.%m.%Y")})'
+    
+    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or 'application/json' in request.headers.get('accept', '') or request.content_type == 'application/json'
+    if is_ajax:
+        next_due = patient.next_blood_test_due_date
+        return JsonResponse({
+            'success': True,
+            'message': msg,
+            'last_blood_test_date': patient.last_blood_test_date.strftime('%d.%m.%Y'),
+            'next_blood_test_due_date': next_due.strftime('%d.%m.%Y') if next_due else None,
+            'days_until_next': (next_due - today).days if next_due else None,
+        })
+
+    messages.success(request, msg)
+    referer = request.META.get('HTTP_REFERER')
+    if referer:
+        return redirect(referer)
     return redirect('dashboard')
 
 @login_required
@@ -1456,4 +1490,113 @@ def bulk_confirm_patient_up_to_date_api(request, patient_id):
         'received_dose': patient.received_dose,
         'discharge_date': patient.discharge_date.strftime('%d.%m.%Y') if patient.discharge_date else None
     })
+
+
+@login_required
+def patient_blood_tests(request):
+    """
+    Відображає сторінку з датами останніх та наступних аналізів крові для пацієнтів на лікуванні.
+    """
+    today = timezone.localdate()
+    search_query = request.GET.get('q', '').strip()
+    status_filter = request.GET.get('status', 'all').strip()
+
+    # Отримуємо активних пацієнтів, які перебувають на лікуванні
+    active_patients_q = Q(discharge_date__isnull=True) | Q(discharge_date__gte=today)
+    patients = Patient.objects.filter(is_active=True).filter(active_patients_q)
+
+    if search_query:
+        patients = patients.filter(
+            Q(last_name__icontains=search_query) |
+            Q(first_name__icontains=search_query) |
+            Q(middle_name__icontains=search_query) |
+            Q(ambulatory_card_number__icontains=search_query)
+        )
+
+    patient_items = []
+    urgent_count = 0
+    radiomod_count = 0
+    planned_count = 0
+
+    for patient in patients:
+        last_test = patient.last_blood_test_date
+        next_due = patient.next_blood_test_due_date
+        has_rm = patient.has_radiomodification
+        if has_rm:
+            radiomod_count += 1
+
+        days_since_last = (today - last_test).days if last_test else None
+        
+        if next_due:
+            days_until_next = (next_due - today).days
+            if next_due < today:
+                status_code = 'overdue'
+                status_label = f'Протерміновано (на {abs(days_until_next)} дн.)' if abs(days_until_next) > 0 else 'Протерміновано'
+                badge_class = 'badge-danger'
+                urgent_count += 1
+            elif next_due == today:
+                status_code = 'today'
+                status_label = 'Сьогодні'
+                badge_class = 'badge-warning'
+                urgent_count += 1
+            else:
+                status_code = 'upcoming'
+                status_label = f'Через {days_until_next} дн.'
+                badge_class = 'badge-info'
+                planned_count += 1
+        else:
+            days_until_next = None
+            status_code = 'no_due'
+            status_label = 'Не визначено'
+            badge_class = 'badge-secondary'
+
+        item = {
+            'patient': patient,
+            'last_test_date': last_test,
+            'days_since_last': days_since_last,
+            'next_due_date': next_due,
+            'days_until_next': days_until_next,
+            'status_code': status_code,
+            'status_label': status_label,
+            'badge_class': badge_class,
+            'has_radiomodification': has_rm,
+        }
+
+        # Фільтрація
+        if status_filter == 'urgent' and status_code not in ['overdue', 'today']:
+            continue
+        elif status_filter == 'radiomod' and not has_rm:
+            continue
+        elif status_filter == 'standard' and has_rm:
+            continue
+
+        patient_items.append(item)
+
+    # Сортування за терміновістю: протерміновані -> сьогодні -> майбутні -> без дати
+    def sort_key(item):
+        code = item['status_code']
+        due = item['next_due_date']
+        if code == 'overdue':
+            return (0, due or date.max)
+        elif code == 'today':
+            return (1, due or date.max)
+        elif code == 'upcoming':
+            return (2, due or date.max)
+        else:
+            return (3, date.max)
+
+    patient_items.sort(key=sort_key)
+
+    context = {
+        'patient_items': patient_items,
+        'urgent_count': urgent_count,
+        'radiomod_count': radiomod_count,
+        'planned_count': planned_count,
+        'total_count': patients.count(),
+        'today': today,
+        'search_query': search_query,
+        'status_filter': status_filter,
+    }
+
+    return render(request, 'patients/blood_test_list.html', context)
 

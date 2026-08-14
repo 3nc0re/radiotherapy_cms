@@ -395,7 +395,8 @@
             <a href="{% url 'patient_create' %}"><i class="fas fa-plus"></i> Додати</a>
             <a href="{% url 'patient_list' %}" class="nav-link">Пацієнти</a>
             <a href="{% url 'inpatient_list' %}" class="nav-link">Стаціонар</a>
-            <a href="/fractions/"><i class="fas fa-radiation"></i> Фракції</a>
+            <a href="{% url 'fraction_list' %}"><i class="fas fa-radiation"></i> Фракції</a>
+            <a href="{% url 'patient_blood_tests' %}" class="nav-link"><i class="fas fa-vial"></i> Аналізи</a>
         </nav>
         <nav class="user-nav">
             <button id="theme-toggle" class="theme-toggle" title="Перемкнути тему">

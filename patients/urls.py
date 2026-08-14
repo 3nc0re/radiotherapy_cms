@@ -12,6 +12,7 @@ urlpatterns = [
     path('patients/new/', views.patient_create, name='patient_create'), # Specific path first
     path('patients/archive/', views.patient_archive, name='patient_archive'),
     path('patients/inpatient/', views.inpatient_list, name='inpatient_list'),
+    path('patients/blood-tests/', views.patient_blood_tests, name='patient_blood_tests'),
     path('patients/filter/<str:filter_type>/', views.patient_list, name='patient_list_filtered'),
     path('patients/<int:pk>/', views.patient_detail, name='patient_detail'),
     path('patients/<int:pk>/edit/', views.patient_update, name='patient_update'),
