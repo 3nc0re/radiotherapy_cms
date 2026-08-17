@@ -2140,6 +2140,32 @@ class BloodTestTabTests(TestCase):
         # Оскільки +7 днів припадає РІВНО на день виписки, новий аналіз НЕ призначається
         self.assertIsNone(patient.next_blood_test_due_date)
 
+    def test_future_patient_blood_test_scheduling(self):
+        """
+        Пацієнт ще не почав лікування (початок через 9 днів, виписка через 50 днів).
+        next_blood_test_due_date має повертати розраховану дату аналізу під час курсу.
+        """
+        start = self.today + timedelta(days=9)
+        discharge = self.today + timedelta(days=50)
+        patient = Patient.objects.create(
+            last_name='Майбутній',
+            first_name='Сергій',
+            diagnosis='C50.9',
+            treatment_start_date=start,
+            discharge_date=discharge,
+            has_radiomodification=False,
+            is_active=True
+        )
+
+        self.assertIsNotNone(patient.next_blood_test_due_date)
+        self.assertLess(patient.next_blood_test_due_date, discharge)
+
+        response = self.client.get(reverse('patient_blood_tests'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Майбутній Сергій')
+        self.assertContains(response, 'Початок лікування')
+
+
 
 
 

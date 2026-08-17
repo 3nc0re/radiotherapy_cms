@@ -1543,13 +1543,18 @@ def patient_blood_tests(request):
                 urgent_count += 1
             else:
                 status_code = 'upcoming'
-                status_label = f'Через {days_until_next} дн.'
+                if patient.treatment_start_date and patient.treatment_start_date > today:
+                    status_label = f'Початок лікування {patient.treatment_start_date.strftime("%d.%m.%Y")}'
+                else:
+                    status_label = f'Через {days_until_next} дн.'
                 badge_class = 'badge-info'
                 planned_count += 1
         else:
             days_until_next = None
             status_code = 'no_due'
-            if actual_discharge and actual_discharge >= today:
+            if patient.treatment_start_date and patient.treatment_start_date > today:
+                status_label = f'Початок лікування {patient.treatment_start_date.strftime("%d.%m.%Y")}'
+            elif actual_discharge and actual_discharge >= today:
                 status_label = f'Виписка {actual_discharge.strftime("%d.%m.%Y")} (аналіз не потрібен)'
             else:
                 status_label = 'Не визначено'
