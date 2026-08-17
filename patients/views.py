@@ -1527,6 +1527,8 @@ def patient_blood_tests(request):
 
         days_since_last = (today - last_test).days if last_test else None
         
+        actual_discharge = patient.get_actual_discharge_date or patient.discharge_date
+
         if next_due:
             days_until_next = (next_due - today).days
             if next_due < today:
@@ -1547,7 +1549,10 @@ def patient_blood_tests(request):
         else:
             days_until_next = None
             status_code = 'no_due'
-            status_label = 'Не визначено'
+            if actual_discharge and actual_discharge >= today:
+                status_label = f'Виписка {actual_discharge.strftime("%d.%m.%Y")} (аналіз не потрібен)'
+            else:
+                status_label = 'Не визначено'
             badge_class = 'badge-secondary'
 
         item = {
@@ -1556,6 +1561,7 @@ def patient_blood_tests(request):
             'days_since_last': days_since_last,
             'next_due_date': next_due,
             'days_until_next': days_until_next,
+            'actual_discharge_date': actual_discharge,
             'status_code': status_code,
             'status_label': status_label,
             'badge_class': badge_class,

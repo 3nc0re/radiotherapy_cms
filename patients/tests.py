@@ -2094,6 +2094,33 @@ class BloodTestTabTests(TestCase):
         patient.refresh_from_db()
         self.assertEqual(patient.last_blood_test_date, self.today)
 
+    def test_no_blood_test_after_discharge_date(self):
+        """
+        Якщо розрахована дата наступного аналізу виходить за межі лікування (після дати виписки),
+        next_blood_test_due_date має повертати None.
+        """
+        patient = Patient.objects.create(
+            last_name='Скоровиписка',
+            first_name='Олег',
+            diagnosis='C61',
+            treatment_start_date=self.today - timedelta(days=10),
+            discharge_date=self.today + timedelta(days=2),
+            has_radiomodification=False,
+            is_active=True
+        )
+
+        patient.last_blood_test_date = self.today - timedelta(days=3)
+        patient.save()
+
+        # Оскільки 12 р.д. виходять далеко за дату виписки, новий аналіз НЕ призначається
+        self.assertIsNone(patient.next_blood_test_due_date)
+
+        response = self.client.get(reverse('patient_blood_tests'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Не потрібно')
+        self.assertContains(response, 'Скоровиписка Олег')
+
+
 
 
 

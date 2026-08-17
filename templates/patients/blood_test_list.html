@@ -147,7 +147,14 @@
                                             {% endif %}
                                         </div>
                                     {% else %}
-                                        <span class="text-muted">—</span>
+                                        {% if item.actual_discharge_date %}
+                                            <span class="text-muted" title="Пацієнт закінчує лікування {{ item.actual_discharge_date|date:'d.m.Y' }}, тому наступний аналіз не призначається">
+                                                <i class="fas fa-check-double" style="color: #27ae60;"></i> Не потрібно<br>
+                                                <small style="font-size: 0.78rem; opacity: 0.8;">(Виписка {{ item.actual_discharge_date|date:"d.m.Y" }})</small>
+                                            </span>
+                                        {% else %}
+                                            <span class="text-muted">—</span>
+                                        {% endif %}
                                     {% endif %}
                                 </td>
                                 <td style="text-align: center;" class="status-cell">

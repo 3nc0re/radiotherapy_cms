@@ -215,18 +215,19 @@ class Patient(models.Model):
     def get_actual_discharge_date(self):
         """
         Повертає дату найостаннішої фракції пацієнта з FractionHistory.
-        Якщо фракцій немає, повертає treatment_start_date або None.
+        Якщо фракції згенеровані, це дата останньої фракції.
+        Якщо фракцій ще немає, повертає discharge_date або None.
         """
         if hasattr(self, '_prefetched_objects_cache') and 'fractions' in self._prefetched_objects_cache:
             fractions = list(self.fractions.all())
             if fractions:
                 return max(f.date for f in fractions)
-            return self.treatment_start_date or None
+            return self.discharge_date or None
             
         latest_fraction = self.fractions.order_by('date').last()
         if latest_fraction:
             return latest_fraction.date
-        return self.treatment_start_date or None
+        return self.discharge_date or None
 
     @property
     def current_fraction(self):
@@ -244,27 +245,39 @@ class Patient(models.Model):
         Розраховує наступну рекомендовану дату аналізу крові:
         - Без радіомодифікації: +12 робочих днів від останнього аналізу (або від початку лікування, якщо аналізів не було).
         - З радіомодифікацією: +7 календарних днів від останнього аналізу (потрібно вказувати вручну).
+        - Якщо розрахована дата виходить за межі періоду лікування (після дати виписки), аналіз НЕ призначається.
         """
         if not self.is_in_treatment:
             return None
 
         if self.has_radiomodification:
             if not self.last_blood_test_date:
-                return None
-            return self.last_blood_test_date + timedelta(days=7)
+                due_date = None
+            else:
+                due_date = self.last_blood_test_date + timedelta(days=7)
         else:
             base_date = self.last_blood_test_date or self.treatment_start_date
             if not base_date:
-                return None
+                due_date = None
+            else:
+                current_date = base_date
+                added_working_days = 0
+                while added_working_days < 12:
+                    current_date += timedelta(days=1)
+                    if current_date.weekday() < 5:  # 0-4 corresponds to Mon-Fri
+                        added_working_days += 1
+                due_date = current_date
 
-            # Додаємо 12 робочих днів (пн-пт)
-            current_date = base_date
-            added_working_days = 0
-            while added_working_days < 12:
-                current_date += timedelta(days=1)
-                if current_date.weekday() < 5:  # 0-4 corresponds to Mon-Fri
-                    added_working_days += 1
-            return current_date
+        if not due_date:
+            return None
+
+        # Якщо дата виписки (завершення лікування) передує розрахованій даті аналізу,
+        # то здавати аналіз не потрібно, оскільки пацієнт вже закінчить лікування!
+        actual_discharge = self.get_actual_discharge_date or self.discharge_date
+        if actual_discharge and due_date > actual_discharge:
+            return None
+
+        return due_date
 
     @property
     def is_in_treatment(self):
