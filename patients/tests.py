@@ -2120,6 +2120,27 @@ class BloodTestTabTests(TestCase):
         self.assertContains(response, 'Не потрібно')
         self.assertContains(response, 'Скоровиписка Олег')
 
+    def test_no_blood_test_on_exact_discharge_date(self):
+        """
+        Якщо розрахована дата наступного аналізу припадає РІВНО на день виписки,
+        аналіз також НЕ проводиться (повертає None).
+        """
+        discharge = self.today + timedelta(days=7)
+        patient = Patient.objects.create(
+            last_name='ДеньВиписки',
+            first_name='Андрій',
+            diagnosis='C18',
+            treatment_start_date=self.today - timedelta(days=5),
+            discharge_date=discharge,
+            last_blood_test_date=self.today,
+            has_radiomodification=True,
+            is_active=True
+        )
+
+        # Оскільки +7 днів припадає РІВНО на день виписки, новий аналіз НЕ призначається
+        self.assertIsNone(patient.next_blood_test_due_date)
+
+
 
 
 

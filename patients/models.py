@@ -271,10 +271,10 @@ class Patient(models.Model):
         if not due_date:
             return None
 
-        # Якщо дата виписки (завершення лікування) передує розрахованій даті аналізу,
-        # то здавати аналіз не потрібно, оскільки пацієнт вже закінчить лікування!
+        # Якщо дата виписки (завершення лікування) передує або ЗБІГАЄТЬСЯ з розрахованою датою аналізу,
+        # то здавати аналіз не потрібно, оскільки в день виписки аналізи вже не проводяться!
         actual_discharge = self.get_actual_discharge_date or self.discharge_date
-        if actual_discharge and due_date > actual_discharge:
+        if actual_discharge and due_date >= actual_discharge:
             return None
 
         return due_date
