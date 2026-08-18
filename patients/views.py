@@ -381,7 +381,7 @@ def update_patient_notes(request, pk):
 @login_required
 def fraction_list(request):
     today = timezone.localdate()
-    active_patients_q = Q(discharge_date__isnull=True) | Q(discharge_date__gte=today)
+    active_patients_q = Q(is_active=True) & (Q(discharge_date__isnull=True) | Q(discharge_date__gte=today))
     
     # АВТОМАТИКА: Пропущені фракції за минулі дні
     overdue_fractions = FractionHistory.objects.filter(
@@ -396,7 +396,7 @@ def fraction_list(request):
             if f.patient_id not in patient_earliest_dates:
                 patient_earliest_dates[f.patient_id] = f.date
         
-        for patient_id, earliest_date in patient_earliest_dates.items():
+        for patient_id in patient_earliest_dates.keys():
             patient = Patient.objects.get(pk=patient_id)
             delivered_count = patient.fractions.filter(status='delivered').count()
             total = patient.total_fractions or 0
@@ -422,18 +422,21 @@ def fraction_list(request):
         'fractions'
     ).order_by('last_name', 'first_name')
     
-    # Групуємо фракції по пацієнтах
+    # ОПТИМІЗАЦІЯ N+1: підраховуємо фракції у пам'яті Python (замість 200+ повторних SQL-запитів)
     patients_data = []
     for patient in patients_with_fractions:
-        fractions = patient.fractions.all().order_by('date')
-        completed_count = fractions.filter(status='delivered').count()
+        all_fractions = sorted(list(patient.fractions.all()), key=lambda f: f.date)
+        completed_count = sum(1 for f in all_fractions if f.status == 'delivered')
+        pending_count = sum(1 for f in all_fractions if f.status == 'scheduled')
+        missed_count = sum(1 for f in all_fractions if f.status == 'missed')
+        
         patients_data.append({
             'patient': patient,
-            'fractions': fractions,
-            'total_fractions': fractions.count(),
+            'fractions': all_fractions,
+            'total_fractions': len(all_fractions),
             'completed_fractions': completed_count,
-            'pending_fractions': fractions.filter(status='scheduled').count(),
-            'missed_fractions': fractions.filter(status='missed').count(),
+            'pending_fractions': pending_count,
+            'missed_fractions': missed_count,
         })
         
     return render(request, 'patients/fraction_list.html', {
