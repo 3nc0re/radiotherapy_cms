@@ -79,14 +79,16 @@ def dashboard(request):
     
     tomorrow = today + timedelta(days=1)
     
-    ct_today_count = Patient.objects.filter(ct_simulation_date=today).count()
-    start_today_count = Patient.objects.filter(treatment_start_date=today).count()
+    ct_today_count = Patient.objects.filter(ct_simulation_date=today, is_active=True).count()
+    start_today_count = Patient.objects.filter(treatment_start_date=today, is_active=True).count()
     
-    active_patients_q = Q(discharge_date__isnull=True) | Q(discharge_date__gte=today)
+    active_patients_q = Q(is_active=True) & (Q(discharge_date__isnull=True) | Q(discharge_date__gte=today))
+    
+    # Виписки (сьогодні/завтра): використовуємо discharge_date як фолбек замість treatment_start_date
     discharge_today_count = Patient.objects.filter(active_patients_q).annotate(
         actual_discharge_date=Coalesce(
             Max('fractions__date'),
-            F('treatment_start_date'),
+            F('discharge_date'),
             output_field=DateField()
         )
     ).filter(
@@ -95,7 +97,7 @@ def dashboard(request):
     
     ct_count = Patient.objects.filter(ct_simulation_date__isnull=False, treatment_start_date__isnull=True, is_active=True).count()
     start_count = Patient.objects.filter(treatment_start_date__isnull=False, treatment_start_date__gt=today, is_active=True).count()
-    in_treatment_count = Patient.objects.filter(treatment_start_date__isnull=False, treatment_start_date__lte=today, is_active=True).count()
+    in_treatment_count = Patient.objects.filter(treatment_start_date__isnull=False, treatment_start_date__lte=today, is_active=True).filter(active_patients_q).count()
     
     notifications = []
     active_patients = Patient.objects.filter(active_patients_q).prefetch_related(
@@ -141,8 +143,11 @@ def dashboard(request):
                 
     notifications.sort(key=lambda n: 0 if n['type'] == 'incapacity_alert' else 1)
     
+    # Виписані цього тижня: тільки ті, чия дата виписки вже минула/сьогодні і припадає на останні 7 днів
     from_date = today - timedelta(days=7)
-    discharged_this_week = Patient.objects.filter(discharge_date__isnull=False, discharge_date__gte=from_date).count()
+    discharged_this_week = Patient.objects.filter(
+        discharge_date__range=[from_date, today]
+    ).filter(Q(is_active=False) | Q(discharge_date=today) | Q(mis_discharged=True)).count()
     
     # Розрахунок запланованої виписки (поточний/наступний тиждень)
     if today.weekday() < 4:  # Понеділок - Четвер
