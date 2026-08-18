@@ -152,6 +152,7 @@ class Patient(models.Model):
     notes = models.TextField(blank=True, null=True, help_text="Примітки")
     raw_diagnosis = models.TextField(blank=True, null=True, help_text="Оригінальний вставлений діагноз")
     has_radiomodification = models.BooleanField(default=False, help_text="Потребує радіомодифікації (щотижневий аналіз крові)")
+    mis_discharged = models.BooleanField(default=False, help_text="Виписано в МІС (eHealth)")
     encrypted_confidential_notes = models.TextField(blank=True, null=True, help_text="Зашифровані конфіденційні примітки")
     
     #  Системні
@@ -509,10 +510,8 @@ class Patient(models.Model):
     def save(self, *args, **kwargs):
         """Перевизначений save для виклику clean та автоматичного оновлення статусу активності"""
         today = timezone.localdate()
-        if self.discharge_date and self.discharge_date < today:
+        if self.mis_discharged or (self.discharge_date and self.discharge_date < today):
             self.is_active = False
-        else:
-            self.is_active = True
         self.full_clean()
         super().save(*args, **kwargs)
 

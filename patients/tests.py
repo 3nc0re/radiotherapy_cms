@@ -2166,6 +2166,64 @@ class BloodTestTabTests(TestCase):
         self.assertContains(response, 'Початок лікування')
 
 
+class MISDischargeTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='doctor_mis',
+            password='testpass123',
+            role='doctor',
+            approved=True
+        )
+        self.client.login(username='doctor_mis', password='testpass123')
+        self.today = timezone.localdate()
+
+    def test_mis_discharge_list_view_and_api(self):
+        # 1. Пацієнт виписується сьогодні (повинен відображатися у списку)
+        patient_today = Patient.objects.create(
+            last_name='Сьогоднішній',
+            first_name='Пацієнт',
+            diagnosis='C34.1',
+            treatment_start_date=self.today - timedelta(days=10),
+            discharge_date=self.today,
+            mis_discharged=False,
+            is_active=True
+        )
+
+        # 2. Пацієнт виписується в майбутньому (НЕ повинен відображатися)
+        patient_future = Patient.objects.create(
+            last_name='Майбутній',
+            first_name='Пацієнт',
+            diagnosis='C50.0',
+            treatment_start_date=self.today - timedelta(days=2),
+            discharge_date=self.today + timedelta(days=10),
+            mis_discharged=False,
+            is_active=True
+        )
+
+        # Перевірка сторінки mis_discharge_list
+        response = self.client.get(reverse('mis_discharge_list'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Контроль виписки в МІС')
+        self.assertContains(response, 'Сьогоднішній Пацієнт')
+        self.assertNotContains(response, 'Майбутній Пацієнт')
+
+        # Підтвердження виписки через API
+        url = reverse('confirm_mis_discharge_api', kwargs={'pk': patient_today.pk})
+        api_response = self.client.post(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(api_response.status_code, 200)
+        data = api_response.json()
+        self.assertTrue(data['success'])
+
+        patient_today.refresh_from_db()
+        self.assertTrue(patient_today.mis_discharged)
+        self.assertFalse(patient_today.is_active)
+
+        # Після підтвердження пацієнт більше не відображається у списку
+        response2 = self.client.get(reverse('mis_discharge_list'))
+        self.assertNotContains(response2, 'Сьогоднішній Пацієнт')
+
+
+
 
 
 

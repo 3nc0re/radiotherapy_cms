@@ -397,6 +397,12 @@
             <a href="{% url 'inpatient_list' %}" class="nav-link">Стаціонар</a>
             <a href="{% url 'fraction_list' %}"><i class="fas fa-radiation"></i> Фракції</a>
             <a href="{% url 'patient_blood_tests' %}" class="nav-link"><i class="fas fa-vial"></i> Аналізи</a>
+            <a href="{% url 'mis_discharge_list' %}" class="nav-link" style="position: relative;">
+                <i class="fas fa-clipboard-check"></i> Виписка в МІС
+                {% if pending_mis_count %}
+                    <span class="badge badge-danger" id="mis-nav-badge" style="background-color: #e74c3c; color: #ffffff; border-radius: 10px; padding: 2px 7px; font-size: 0.75rem; margin-left: 4px; font-weight: 700; display: inline-block; vertical-align: middle;">{{ pending_mis_count }}</span>
+                {% endif %}
+            </a>
         </nav>
         <nav class="user-nav">
             <button id="theme-toggle" class="theme-toggle" title="Перемкнути тему">

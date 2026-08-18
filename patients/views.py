@@ -30,8 +30,8 @@ def splash(request):
 @login_required
 def dashboard(request):
     today = timezone.localdate()
-    # Автоматично деактивуємо пацієнтів, у яких завершилося лікування (звільнення ліжок)
-    Patient.objects.filter(is_active=True, discharge_date__lt=today).update(is_active=False)
+    # Автоматично деактивуємо тільки тих пацієнтів, чиє лікування закінчилося І які вже були виписані в МІС
+    Patient.objects.filter(is_active=True, mis_discharged=True, discharge_date__lt=today).update(is_active=False)
     
     # Список щоденних мотивуючих фраз та медичного гумору (37 цитат)
     quotes = [
@@ -721,8 +721,8 @@ def search_patients(request):
 def inpatient_list(request):
     """Список стаціонарних пацієнтів та ліжкового фонду"""
     today = timezone.localdate()
-    # Автоматично деактивуємо пацієнтів, у яких завершилося лікування (звільнення ліжок)
-    Patient.objects.filter(is_active=True, discharge_date__lt=today).update(is_active=False)
+    # Автоматично деактивуємо тільки тих пацієнтів, чиє лікування закінчилося І які вже були виписані в МІС
+    Patient.objects.filter(is_active=True, mis_discharged=True, discharge_date__lt=today).update(is_active=False)
     
     # Фільтруємо пацієнтів ВИКЛЮЧНО за статусом inpatient та is_active=True
     current_inpatients = Patient.objects.filter(
@@ -1608,6 +1608,75 @@ def patient_blood_tests(request):
         'search_query': search_query,
         'status_filter': status_filter,
     }
-
     return render(request, 'patients/blood_test_list.html', context)
+
+
+def get_pending_mis_discharge_patients(today=None):
+    if today is None:
+        today = timezone.localdate()
+    patients = Patient.objects.filter(mis_discharged=False).prefetch_related('fractions')
+    pending = []
+    for p in patients:
+        actual_discharge = p.get_actual_discharge_date or p.discharge_date
+        if actual_discharge and actual_discharge <= today:
+            pending.append({
+                'patient': p,
+                'actual_discharge': actual_discharge,
+                'is_today': actual_discharge == today,
+                'days_ago': (today - actual_discharge).days,
+            })
+    return pending
+
+
+@login_required
+def mis_discharge_list(request):
+    today = timezone.localdate()
+    search_query = request.GET.get('q', '').strip()
+
+    pending_items = get_pending_mis_discharge_patients(today)
+
+    if search_query:
+        q_lower = search_query.lower()
+        pending_items = [
+            item for item in pending_items
+            if q_lower in item['patient'].full_name.lower() or
+               (item['patient'].ambulatory_card_number and q_lower in item['patient'].ambulatory_card_number.lower()) or
+               (item['patient'].diagnosis and q_lower in item['patient'].diagnosis.lower())
+        ]
+
+    # Сортування: сьогоднішні виписки спочатку, потім за датою
+    pending_items.sort(key=lambda x: (0 if x['is_today'] else 1, x['actual_discharge']))
+
+    today_count = sum(1 for item in pending_items if item['is_today'])
+    past_count = sum(1 for item in pending_items if not item['is_today'])
+
+    context = {
+        'pending_items': pending_items,
+        'today': today,
+        'today_count': today_count,
+        'past_count': past_count,
+        'total_count': len(pending_items),
+        'search_query': search_query,
+    }
+    return render(request, 'patients/mis_discharge_list.html', context)
+
+
+@login_required
+@require_POST
+def confirm_mis_discharge_api(request, pk):
+    patient = get_object_or_404(Patient, pk=pk)
+    patient.mis_discharged = True
+    patient.is_active = False  # Переносимо в Архів
+    patient.save()
+
+    today = timezone.localdate()
+    pending_count = len(get_pending_mis_discharge_patients(today))
+
+    return JsonResponse({
+        'success': True,
+        'message': f'Пацієнта {patient.full_name} виписано в МІС та перенесено в архів.',
+        'patient_id': patient.id,
+        'pending_mis_count': pending_count,
+    })
+
 
