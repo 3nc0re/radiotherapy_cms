@@ -43,7 +43,12 @@ class PatientForm(forms.ModelForm):
     dose_per_fraction = forms.CharField(
         required=False,
         widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'напр. 2.0 або 2.66/3.0 (SIB)'}),
-        help_text="Доза на фракцію (Гр). Для SIB вказуйте через слеш: 2.66/3.0"
+        help_text="Доза на фракцію (Гр). Для SIB вкажуйте через слеш: 2.66/3.0"
+    )
+    received_dose = forms.CharField(
+        required=False,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'напр. 50.0'}),
+        help_text="Отримана доза / СОД (Гр)"
     )
     
     def __init__(self, *args, **kwargs):
@@ -58,6 +63,8 @@ class PatientForm(forms.ModelForm):
                     self.initial[field_name] = date_value.strftime('%d.%m.%Y')
         
         if self.instance.pk:
+            if self.instance.received_dose is not None:
+                self.initial['received_dose'] = f"{self.instance.received_dose:g}"
             if self.instance.dose_per_fraction_raw:
                 self.initial['dose_per_fraction'] = self.instance.dose_per_fraction_raw
             elif self.instance.dose_per_fraction is not None:
@@ -70,9 +77,9 @@ class PatientForm(forms.ModelForm):
         val = self.cleaned_data.get('dose_per_fraction')
         if not val:
             return None
-        val_str = str(val).strip()
+        val_str = str(val).strip().replace(',', '.')
         if '/' in val_str:
-            parts = [p.strip().replace(',', '.') for p in val_str.split('/') if p.strip()]
+            parts = [p.strip() for p in val_str.split('/') if p.strip()]
             if len(parts) != 2:
                 raise ValidationError("Для SIB вкажіть дві дози через слеш (наприклад: 2.66/3.0)")
             try:
@@ -80,18 +87,29 @@ class PatientForm(forms.ModelForm):
                 float(parts[1])
             except ValueError:
                 raise ValidationError("Введіть коректні числові дози (наприклад: 2.66/3.0)")
-            return val_str
+            return f"{parts[0]}/{parts[1]}"
         else:
             try:
-                float(val_str.replace(',', '.'))
+                float(val_str)
                 return val_str
             except ValueError:
-                raise ValidationError("Введіть числову дозу (наприклад: 2.0 або 2.66/3.0)")
+                raise ValidationError("Введіть числову дозу (наприклад: 8.0 або 2.66/3.0)")
+
+    def clean_received_dose(self):
+        val = self.cleaned_data.get('received_dose')
+        if not val:
+            return None
+        val_str = str(val).strip().replace(',', '.')
+        try:
+            return float(val_str)
+        except ValueError:
+            raise ValidationError("Введіть числову дозу СОД (наприклад: 50.0)")
 
     def save(self, commit=True):
         patient = super().save(commit=False)
         raw_dose = self.cleaned_data.get('dose_per_fraction')
         patient.parse_and_set_doses(raw_dose)
+        patient.received_dose = self.cleaned_data.get('received_dose')
         if commit:
             patient.save()
             self.save_m2m()
@@ -104,7 +122,7 @@ class PatientForm(forms.ModelForm):
             'diagnosis', 'tnm_staging', 'disease_stage', 'clinical_group', 
             'treatment_type', 'histology_number', 'histology_date',
             'histology_description', 'ct_simulation_date', 'treatment_start_date',
-            'total_fractions', 'dose_per_fraction', 'received_dose',
+            'total_fractions',
             'discharge_date', 'raw_diagnosis', 'has_radiomodification',
             'irradiation_zone', 'hospitalization_status', 'planned_admission_date',
             'bed_owner', 'ward_number', 'prior_radiation', 

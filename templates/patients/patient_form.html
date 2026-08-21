@@ -134,26 +134,44 @@
                 <div class="form-group">
                     <label for="{{ form.ct_simulation_date.id_for_label }}">Дата КТ-симуляції</label>
                     {{ form.ct_simulation_date }}
+                    {% if form.ct_simulation_date.errors %}
+                        <div class="error" style="color: #e74c3c; font-size: 0.85rem; margin-top: 4px;">{{ form.ct_simulation_date.errors.0 }}</div>
+                    {% endif %}
                 </div>
                 <div class="form-group">
                     <label for="{{ form.treatment_start_date.id_for_label }}">Дата початку лікування</label>
                     {{ form.treatment_start_date }}
+                    {% if form.treatment_start_date.errors %}
+                        <div class="error" style="color: #e74c3c; font-size: 0.85rem; margin-top: 4px;">{{ form.treatment_start_date.errors.0 }}</div>
+                    {% endif %}
                 </div>
                 <div class="form-group">
                     <label for="{{ form.total_fractions.id_for_label }}">Кількість фракцій</label>
                     {{ form.total_fractions }}
+                    {% if form.total_fractions.errors %}
+                        <div class="error" style="color: #e74c3c; font-size: 0.85rem; margin-top: 4px;">{{ form.total_fractions.errors.0 }}</div>
+                    {% endif %}
                 </div>
                 <div class="form-group">
                     <label for="{{ form.dose_per_fraction.id_for_label }}">Доза на фракцію (Гр)</label>
                     {{ form.dose_per_fraction }}
+                    {% if form.dose_per_fraction.errors %}
+                        <div class="error" style="color: #e74c3c; font-size: 0.85rem; margin-top: 4px;">{{ form.dose_per_fraction.errors.0 }}</div>
+                    {% endif %}
                 </div>
                 <div class="form-group">
                     <label for="{{ form.received_dose.id_for_label }}">Отримана доза (Гр)</label>
                     {{ form.received_dose }}
+                    {% if form.received_dose.errors %}
+                        <div class="error" style="color: #e74c3c; font-size: 0.85rem; margin-top: 4px;">{{ form.received_dose.errors.0 }}</div>
+                    {% endif %}
                 </div>
                 <div class="form-group">
                     <label for="{{ form.discharge_date.id_for_label }}">Дата виписки</label>
                     {{ form.discharge_date }}
+                    {% if form.discharge_date.errors %}
+                        <div class="error" style="color: #e74c3c; font-size: 0.85rem; margin-top: 4px;">{{ form.discharge_date.errors.0 }}</div>
+                    {% endif %}
                 </div>
             </div>
         </div>

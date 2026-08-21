@@ -2223,6 +2223,44 @@ class MISDischargeTests(TestCase):
         self.assertNotContains(response2, 'Сьогоднішній Пацієнт')
 
 
+class DoseCommaFormTests(TestCase):
+    """Тестування обробки доз з комами (наприклад 8,0 або 2,66/3,0 Гр) у формах"""
+
+    def test_patient_form_dose_with_comma(self):
+        form_data = {
+            'last_name': 'Хомюк',
+            'first_name': 'Ніна',
+            'middle_name': 'Степанівна',
+            'gender': 'F',
+            'diagnosis': 'C50.8 Інфільтративна карцинома правої молочної залози',
+            'dose_per_fraction': '8,0',
+            'received_dose': '8,0',
+            'hospitalization_status': 'outpatient'
+        }
+        form = PatientForm(data=form_data)
+        self.assertTrue(form.is_valid(), form.errors)
+        patient = form.save()
+        self.assertEqual(patient.dose_per_fraction, 8.0)
+        self.assertEqual(patient.received_dose, 8.0)
+
+    def test_patient_form_sib_dose_with_comma(self):
+        form_data = {
+            'last_name': 'Тестовий',
+            'first_name': 'Пацієнт',
+            'gender': 'M',
+            'diagnosis': 'Тест SIB',
+            'dose_per_fraction': '2,66/3,0',
+            'hospitalization_status': 'outpatient'
+        }
+        form = PatientForm(data=form_data)
+        self.assertTrue(form.is_valid(), form.errors)
+        patient = form.save()
+        self.assertTrue(patient.is_sib)
+        self.assertEqual(patient.dose_per_fraction, 2.66)
+        self.assertEqual(patient.dose_per_fraction_secondary, 3.0)
+
+
+
 
 
 
