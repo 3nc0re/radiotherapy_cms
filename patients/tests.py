@@ -2260,6 +2260,58 @@ class DoseCommaFormTests(TestCase):
         self.assertEqual(patient.dose_per_fraction_secondary, 3.0)
 
 
+class QuickUpdateAPITests(TestCase):
+    """Тести асинхронного швидкого редагування даних пацієнта без перезавантаження сторінки"""
+
+    def setUp(self):
+        self.doctor = User.objects.create_user(
+            username='doctor_quick',
+            password='password123',
+            role='doctor',
+            approved=True
+        )
+        self.client = Client()
+        self.client.login(username='doctor_quick', password='password123')
+
+        self.patient = Patient.objects.create(
+            last_name='Петренко',
+            first_name='Олександр',
+            diagnosis='C34 Рак легені',
+            treatment_start_date=date(2026, 8, 24),
+            total_fractions=10,
+            dose_per_fraction=3.0,
+            hospitalization_status='outpatient'
+        )
+
+    def test_quick_update_dates_and_doses(self):
+        url = reverse('quick_update_patient_api', kwargs={'pk': self.patient.pk})
+        payload = {
+            'ct_simulation_date': '20.08.2026',
+            'treatment_start_date': '25.08.2026',
+            'total_fractions': 12,
+            'dose_per_fraction': '2,66/3,0',
+            'hospitalization_status': 'inpatient',
+            'bed_owner': 'Олег',
+            'ward_number': '405'
+        }
+        response = self.client.post(url, data=payload, content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data['success'])
+
+        self.patient.refresh_from_db()
+        self.assertEqual(self.patient.ct_simulation_date, date(2026, 8, 20))
+        self.assertEqual(self.patient.treatment_start_date, date(2026, 8, 25))
+        self.assertEqual(self.patient.total_fractions, 12)
+        self.assertTrue(self.patient.is_sib)
+        self.assertEqual(self.patient.dose_per_fraction, 2.66)
+        self.assertEqual(self.patient.dose_per_fraction_secondary, 3.0)
+        self.assertEqual(self.patient.hospitalization_status, 'inpatient')
+        self.assertEqual(self.patient.bed_owner, 'Олег')
+        self.assertEqual(str(self.patient.ward_number), '405')
+
+
+
 
 
 

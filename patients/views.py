@@ -1688,3 +1688,127 @@ def confirm_mis_discharge_api(request, pk):
     })
 
 
+@login_required
+@require_POST
+def quick_update_patient_api(request, pk):
+    """
+    Миттєве інлайн-оновлення полів пацієнта (Дати, Дози, Статус госпіталізації, Власник ліжка, Палата тощо)
+    з автоматичним перерахунком фракцій, СОД та дати виписки без перезавантаження сторінки.
+    """
+    patient = get_object_or_404(Patient, pk=pk)
+    
+    try:
+        data = json.loads(request.body)
+    except Exception:
+        data = request.POST
+        
+    from django.utils.dateparse import parse_date
+    
+    def parse_ukrainian_date(val_str):
+        if not val_str or not str(val_str).strip():
+            return None
+        val_str = str(val_str).strip()
+        parsed = parse_date(val_str)
+        if not parsed:
+            try:
+                parts = val_str.split('.')
+                if len(parts) == 3:
+                    parsed = date(int(parts[2]), int(parts[1]), int(parts[0]))
+            except (ValueError, IndexError):
+                parsed = None
+        return parsed
+
+    # 1. Дати
+    if 'ct_simulation_date' in data:
+        patient.ct_simulation_date = parse_ukrainian_date(data.get('ct_simulation_date'))
+        
+    start_date_changed = False
+    if 'treatment_start_date' in data:
+        old_start = patient.treatment_start_date
+        new_start = parse_ukrainian_date(data.get('treatment_start_date'))
+        if old_start != new_start:
+            patient.treatment_start_date = new_start
+            start_date_changed = True
+            
+    # 2. Фракції та дози
+    fractions_changed = False
+    if 'total_fractions' in data:
+        tf_raw = data.get('total_fractions')
+        try:
+            new_tf = int(tf_raw) if tf_raw is not None and str(tf_raw).strip() != '' else None
+            if patient.total_fractions != new_tf:
+                patient.total_fractions = new_tf
+                fractions_changed = True
+        except (ValueError, TypeError):
+            pass
+            
+    if 'dose_per_fraction' in data:
+        raw_dose = data.get('dose_per_fraction')
+        patient.parse_and_set_doses(raw_dose)
+        
+    # 3. Госпіталізація та ліжковий фонд
+    if 'hospitalization_status' in data:
+        hs = data.get('hospitalization_status')
+        if hs in ['outpatient', 'inpatient', 'queue']:
+            patient.hospitalization_status = hs
+            
+    if 'bed_owner' in data:
+        patient.bed_owner = data.get('bed_owner') or None
+        
+    if 'ward_number' in data:
+        patient.ward_number = data.get('ward_number') or None
+        
+    if 'planned_admission_date' in data:
+        patient.planned_admission_date = parse_ukrainian_date(data.get('planned_admission_date'))
+        
+    if 'irradiation_zone' in data:
+        patient.irradiation_zone = data.get('irradiation_zone') or None
+        
+    if 'notes' in data:
+        patient.notes = data.get('notes') or None
+
+    # Якщо фракції ще не згенеровані, але є дата початку та фракції — генеруємо
+    if patient.treatment_start_date and patient.total_fractions and patient.dose_per_fraction:
+        if not patient.fractions.exists():
+            from .services import generate_fractions_for_patient
+            generate_fractions_for_patient(patient)
+        elif start_date_changed or fractions_changed:
+            from .services import shift_patient_schedule
+            shift_patient_schedule(patient)
+            
+    # Перераховуємо СОД та виписку
+    from .services import recalculate_discharge_date
+    patient.recalculate_received_dose()
+    recalculate_discharge_date(patient)
+    patient.save()
+    patient.refresh_from_db()
+    
+    actual_discharge = patient.get_actual_discharge_date
+    actual_discharge_str = actual_discharge.strftime('%d.%m.%Y') if actual_discharge else '—'
+    
+    info = get_patient_treatment_info(patient)
+    
+    return JsonResponse({
+        'success': True,
+        'message': 'Дані пацієнта успішно оновлено!',
+        'display_stage': patient.display_stage,
+        'discharge_date': actual_discharge_str,
+        'ct_simulation_date': patient.ct_simulation_date.strftime('%d.%m.%Y') if patient.ct_simulation_date else '—',
+        'treatment_start_date': patient.treatment_start_date.strftime('%d.%m.%Y') if patient.treatment_start_date else '—',
+        'total_fractions': patient.total_fractions or 0,
+        'dose_per_fraction_display': patient.dose_per_fraction_display,
+        'received_dose_display': patient.received_dose_display,
+        'planned_total_dose_display': patient.planned_total_dose_display,
+        'current_fraction': patient.current_fraction,
+        'hospitalization_status': patient.hospitalization_status,
+        'hospitalization_status_display': patient.get_hospitalization_status_display(),
+        'bed_owner': patient.bed_owner or '—',
+        'ward_number': patient.ward_number or '—',
+        'planned_admission_date': patient.planned_admission_date.strftime('%d.%m.%Y') if patient.planned_admission_date else '—',
+        'irradiation_zone': patient.irradiation_zone or '—',
+        'notes': patient.notes or '',
+        'completed_fractions': info['completed_fractions'],
+        'has_fractions': patient.fractions.exists(),
+    })
+
+

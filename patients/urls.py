@@ -15,6 +15,7 @@ urlpatterns = [
     path('patients/blood-tests/', views.patient_blood_tests, name='patient_blood_tests'),
     path('patients/mis-discharge/', views.mis_discharge_list, name='mis_discharge_list'),
     path('api/patients/<int:pk>/confirm-mis-discharge/', views.confirm_mis_discharge_api, name='confirm_mis_discharge_api'),
+    path('api/patients/<int:pk>/quick-update/', views.quick_update_patient_api, name='quick_update_patient_api'),
     path('patients/filter/<str:filter_type>/', views.patient_list, name='patient_list_filtered'),
     path('patients/<int:pk>/', views.patient_detail, name='patient_detail'),
     path('patients/<int:pk>/edit/', views.patient_update, name='patient_update'),
