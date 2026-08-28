@@ -2162,8 +2162,7 @@ class BloodTestTabTests(TestCase):
 
         response = self.client.get(reverse('patient_blood_tests'))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Майбутній Сергій')
-        self.assertContains(response, 'Початок лікування')
+        self.assertNotContains(response, 'Майбутній Сергій')
 
 
 class MISDischargeTests(TestCase):

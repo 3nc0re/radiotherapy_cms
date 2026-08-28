@@ -1509,9 +1509,13 @@ def patient_blood_tests(request):
     search_query = request.GET.get('q', '').strip()
     status_filter = request.GET.get('status', 'all').strip()
 
-    # Отримуємо активних пацієнтів, які перебувають на лікуванні
+    # Отримуємо активних пацієнтів, які ВЖЕ розпочали лікування (дата початку настала або сьогодні)
     active_patients_q = Q(discharge_date__isnull=True) | Q(discharge_date__gte=today)
-    patients = Patient.objects.filter(is_active=True).filter(active_patients_q)
+    patients = Patient.objects.filter(
+        is_active=True,
+        treatment_start_date__isnull=False,
+        treatment_start_date__lte=today
+    ).filter(active_patients_q)
 
     if search_query:
         patients = patients.filter(
