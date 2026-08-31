@@ -30,8 +30,9 @@ def splash(request):
 
 def get_pending_mvtn_staging_patients(today=None):
     """
-    Повертає список пацієнтів для Контрольного Відстійника МВТН.
-    Умова: пацієнт пройшов КТ або почав лікування, але ще не має підтвердженого статусу МВТН.
+    Повертає список пацієнтів для контролю МВТН:
+    1. Пацієнти, які досягли КТ чи початку лікування, але ще не мають рішення по МВТН (відстійник первинного МВТН).
+    2. Пацієнти, у яких МВТН відкритий, але його дата закінчення не покриває термін виписки (потрібно продовжити в МІС).
     """
     if today is None:
         today = timezone.localdate()
@@ -39,33 +40,93 @@ def get_pending_mvtn_staging_patients(today=None):
     active_q = Q(is_active=True, mis_discharged=False) & (Q(discharge_date__isnull=True) | Q(discharge_date__gte=today))
     stage_q = Q(ct_simulation_date__isnull=False) | Q(treatment_start_date__isnull=False)
     
-    candidates = Patient.objects.filter(active_q).filter(stage_q).prefetch_related('medical_incapacities')
+    candidates = Patient.objects.filter(active_q).filter(stage_q).prefetch_related('medical_incapacities', 'fractions')
     
     pending = []
     for p in candidates:
         incapacities = list(p.medical_incapacities.all())
-        is_confirmed = any(
-            inc.no_employment_relation is True or inc.end_date is not None
-            for inc in incapacities
-        )
-        if not is_confirmed:
+        
+        no_emp = any(inc.no_employment_relation is True for inc in incapacities)
+        if no_emp:
+            continue
+            
+        valid_incapacities = [inc for inc in incapacities if inc.end_date is not None]
+        actual_discharge = p.get_actual_discharge_date or p.discharge_date
+        
+        if not valid_incapacities:
             ref_date = p.treatment_start_date or p.ct_simulation_date
             days_passed = (today - ref_date).days if ref_date else 0
             is_critical = days_passed >= 4
-            
             default_start_date = p.treatment_start_date or p.ct_simulation_date
             
             pending.append({
                 'patient': p,
+                'type': 'new_staging',
                 'ref_date': ref_date,
                 'days_passed': max(0, days_passed),
+                'days_until_exp': None,
                 'is_critical': is_critical,
                 'default_start_date': default_start_date.strftime('%d.%m.%Y') if default_start_date else '',
-                'stage_label': 'Початок лікування' if p.treatment_start_date else 'КТ-симуляція'
+                'stage_label': 'Початок лікування' if p.treatment_start_date else 'КТ-симуляція',
+                'status_title': 'Потребує первинного рішення щодо МВТН',
+                'current_incapacity_end': None,
+                'actual_discharge': actual_discharge
             })
-            
+        else:
+            latest_inc = max(valid_incapacities, key=lambda x: x.end_date)
+            if actual_discharge and actual_discharge > latest_inc.end_date:
+                days_until_exp = (latest_inc.end_date - today).days
+                is_critical = days_until_exp <= 3
+                days_passed = (today - latest_inc.end_date).days if today > latest_inc.end_date else 0
+                
+                pending.append({
+                    'patient': p,
+                    'type': 'extension_needed',
+                    'ref_date': latest_inc.end_date,
+                    'days_passed': max(0, days_passed),
+                    'days_until_exp': days_until_exp,
+                    'is_critical': is_critical,
+                    'default_start_date': (latest_inc.end_date + timedelta(days=1)).strftime('%d.%m.%Y'),
+                    'stage_label': 'МВТН не покриває курс',
+                    'status_title': f'МВТН діє до {latest_inc.end_date.strftime("%d.%m.%Y")}, виписка {actual_discharge.strftime("%d.%m.%Y")}',
+                    'current_incapacity_end': latest_inc.end_date,
+                    'actual_discharge': actual_discharge
+                })
+
     pending.sort(key=lambda x: (0 if x['is_critical'] else 1, -x['days_passed']))
     return pending
+
+
+@login_required
+def mvtn_control_list(request):
+    """Окрема вкладка "Контроль МВТН" із переліком пацієнтів, які потребують відкриття або продовження МВТН"""
+    today = timezone.localdate()
+    search_query = request.GET.get('q', '').strip()
+    
+    items = get_pending_mvtn_staging_patients(today)
+    
+    if search_query:
+        items = [
+            i for i in items if (
+                search_query.lower() in i['patient'].last_name.lower() or
+                search_query.lower() in i['patient'].first_name.lower() or
+                (i['patient'].middle_name and search_query.lower() in i['patient'].middle_name.lower())
+            )
+        ]
+        
+    critical_count = sum(1 for i in items if i['is_critical'])
+    new_staging_count = sum(1 for i in items if i['type'] == 'new_staging')
+    extension_count = sum(1 for i in items if i['type'] == 'extension_needed')
+    
+    return render(request, 'patients/mvtn_control_list.html', {
+        'items': items,
+        'today': today,
+        'search_query': search_query,
+        'total_count': len(items),
+        'critical_count': critical_count,
+        'new_staging_count': new_staging_count,
+        'extension_count': extension_count,
+    })
 
 
 @login_required

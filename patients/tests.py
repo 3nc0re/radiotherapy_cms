@@ -2410,6 +2410,27 @@ class MVTNStagingTests(TestCase):
         pending3 = [item['patient'].id for item in get_pending_mvtn_staging_patients(self.today)]
         self.assertNotIn(p.id, pending3)
 
+    def test_mvtn_control_list_view_and_extension_needed(self):
+        p_ext = Patient.objects.create(
+            last_name='Продовження',
+            first_name='Василь',
+            diagnosis='C50.1',
+            treatment_start_date=self.today - timedelta(days=10),
+            discharge_date=self.today + timedelta(days=10),
+            is_active=True
+        )
+        MedicalIncapacity.objects.create(
+            patient=p_ext,
+            start_date=self.today - timedelta(days=10),
+            end_date=self.today + timedelta(days=2)
+        )
+
+        response = self.client.get(reverse('mvtn_control_list'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Контроль МВТН')
+        self.assertContains(response, 'Продовження Василь')
+        self.assertContains(response, 'МВТН не покриває курс')
+
 
 
 

@@ -1,0 +1,279 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; flex-wrap: wrap; gap: 15px;">
+    <div>
+        <h1 style="margin: 0; display: flex; align-items: center; gap: 10px;">
+            <i class="fas fa-file-medical-alt" style="color: #ff9800;"></i> Контроль МВТН
+            {% if total_count %}
+            <span class="badge" style="background-color: #ff9800; color: white; font-size: 1rem;">{{ total_count }}</span>
+            {% endif %}
+        </h1>
+        <p style="color: var(--text-light-color); margin: 5px 0 0 0;">
+            Пацієнти, які потребують первинного рішення щодо МВТН або продовження лікарняного листка в МІС
+        </p>
+    </div>
+</div>
+
+<!-- Панель статусу та пошуку -->
+<div class="card" style="margin-bottom: 25px; padding: 15px 20px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+        <div style="display: flex; gap: 15px; flex-wrap: wrap; font-size: 0.95rem;">
+            <span><strong>Усього на контролі:</strong> <span class="badge badge-warning" style="background-color: #ff9800; color: white;">{{ total_count }}</span></span>
+            {% if critical_count %}
+            <span><strong>🚨 Критичних:</strong> <span class="badge badge-danger" style="background-color: #dc3545; color: white;">{{ critical_count }}</span></span>
+            {% endif %}
+            <span><strong>Первинний вибір:</strong> {{ new_staging_count }}</span>
+            <span><strong>Потребують продовження:</strong> {{ extension_count }}</span>
+        </div>
+
+        <form method="get" action="{% url 'mvtn_control_list' %}" style="display: flex; gap: 10px; width: 100%; max-width: 350px;">
+            <input type="text" name="q" value="{{ search_query }}" class="form-control" placeholder="Пошук за прізвищем..." style="padding: 6px 12px;">
+            <button type="submit" class="btn btn-primary" style="padding: 6px 15px;"><i class="fas fa-search"></i> Пошук</button>
+            {% if search_query %}
+            <a href="{% url 'mvtn_control_list' %}" class="btn btn-secondary" style="padding: 6px 12px;"><i class="fas fa-times"></i></a>
+            {% endif %}
+        </form>
+    </div>
+</div>
+
+{% if not items %}
+<div class="card" style="text-align: center; padding: 40px 20px;">
+    <i class="fas fa-check-circle" style="font-size: 3rem; color: #2ecc71; margin-bottom: 15px;"></i>
+    <h3>Усі пацієнти під контролем!</h3>
+    <p style="color: var(--text-light-color);">Наразі немає пацієнтів, які потребують відкриття або продовження МВТН.</p>
+</div>
+{% else %}
+<div class="staging-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 20px;">
+    {% for item in items %}
+    <div class="staging-card" id="mvtn-card-{{ item.patient.id }}" style="background-color: var(--card-bg); border: 2px solid {% if item.is_critical %}#dc3545{% else %}var(--border-color){% endif %}; border-radius: 10px; padding: 20px; position: relative; transition: all 0.3s ease; box-shadow: var(--shadow);">
+        
+        {% if item.is_critical %}
+        <div class="critical-badge-pulse" style="position: absolute; top: -12px; right: 12px; background-color: #dc3545; color: white; padding: 4px 12px; border-radius: 12px; font-size: 0.78rem; font-weight: 700; animation: warning-pulse 1.5s infinite; box-shadow: 0 2px 6px rgba(220,53,69,0.4);">
+            🚨 КРИТИЧНО: {% if item.type == 'new_staging' %}{{ item.days_passed }} дн. без рішення{% else %}закінчується через {{ item.days_until_exp }} дн.{% endif %}!
+        </div>
+        {% else %}
+        <div style="position: absolute; top: 12px; right: 12px; background-color: #17a2b8; color: white; padding: 3px 10px; border-radius: 10px; font-size: 0.78rem; font-weight: 600;">
+            {% if item.type == 'new_staging' %}{{ item.days_passed }} дн.{% else %}залишилось {{ item.days_until_exp }} дн.{% endif %}
+        </div>
+        {% endif %}
+
+        <h3 style="margin: 0 0 10px 0; font-size: 1.15rem; padding-right: 70px;">
+            <a href="{% url 'patient_detail' item.patient.id %}" style="color: var(--primary-color); text-decoration: none; font-weight: 700;">
+                {{ item.patient.full_name }}
+            </a>
+        </h3>
+        
+        <div style="margin-bottom: 15px; font-size: 0.9rem; line-height: 1.5; color: var(--text-color);">
+            <p style="margin: 0 0 5px 0;">
+                <span class="badge {% if item.type == 'new_staging' %}badge-warning{% else %}badge-danger{% endif %}" style="padding: 4px 8px;">
+                    {{ item.stage_label }}
+                </span>
+            </p>
+            <p style="margin: 0 0 5px 0; font-size: 0.88rem; color: var(--text-light-color);">
+                <strong>Статус:</strong> {{ item.status_title }}
+            </p>
+            {% if item.actual_discharge %}
+            <p style="margin: 0; font-size: 0.88rem;">
+                <strong>Розрахункова виписка:</strong> {{ item.actual_discharge|date:"d.m.Y" }}
+            </p>
+            {% endif %}
+        </div>
+
+        <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 15px; border-top: 1px solid var(--border-color); padding-top: 12px;">
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="confirmNoMVTN({{ item.patient.id }}, '{{ item.patient.full_name|escapejs }}')" style="font-size: 0.85rem; padding: 6px 12px; border: 1px solid var(--border-color);">
+                ❌ Не потрібен
+            </button>
+            <button type="button" class="btn btn-sm btn-warning" onclick="openMVTNModal({{ item.patient.id }}, '{{ item.patient.full_name|escapejs }}', '{{ item.default_start_date }}')" style="font-size: 0.85rem; padding: 6px 14px; color: black; font-weight: 700;">
+                📝 {% if item.type == 'new_staging' %}Вказати МВТН{% else %}Продовжити МВТН{% endif %}
+            </button>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- Модальне вікно для вводу МВТН -->
+<div id="mvtnStagingModal" class="modal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); backdrop-filter: blur(2px);">
+    <div style="background: var(--card-bg); max-width: 460px; margin: 10% auto; padding: 22px; border-radius: 10px; box-shadow: 0 10px 25px rgba(0,0,0,0.4); color: var(--text-color); animation: fadeIn 0.25s ease;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-bottom: 15px;">
+            <h3 style="margin: 0; color: var(--primary-color); display: flex; align-items: center; gap: 8px;">
+                <i class="fas fa-file-medical-alt"></i> Вказати / Продовжити МВТН
+            </h3>
+            <button type="button" class="btn btn-secondary" onclick="closeMVTNModal()" style="padding: 2px 8px; font-size: 0.85rem;">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <p style="font-size: 0.95rem; margin-bottom: 15px;">
+            Пацієнт: <strong id="mvtnModalPatientName" style="color: var(--primary-color);"></strong>
+        </p>
+        
+        <form id="mvtnStagingForm">
+            <input type="hidden" id="mvtnModalPatientId">
+            <div class="form-group" style="margin-bottom: 15px;">
+                <label for="mvtnModalStartDate" style="font-weight: 600; font-size: 0.9rem;">📅 Дата початку МВТН:</label>
+                <input type="text" id="mvtnModalStartDate" class="form-control" placeholder="дд.мм.рррр">
+                <small style="color: var(--text-light-color); font-size: 0.78rem;">Рекомендовано за розкладом лікування</small>
+            </div>
+            
+            <div class="form-group" style="margin-bottom: 15px;">
+                <label for="mvtnModalEndDate" style="font-weight: 600; font-size: 0.9rem;">📅 Нова дата закінчення МВТН (обов'язково):</label>
+                <input type="text" id="mvtnModalEndDate" class="form-control" placeholder="дд.мм.рррр" required>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 20px;">
+                <label for="mvtnModalNumber" style="font-weight: 600; font-size: 0.9rem;">🔢 Номер МВТН (необов'язково):</label>
+                <input type="text" id="mvtnModalNumber" class="form-control" placeholder="напр. MVT-123456">
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button type="button" class="btn btn-secondary" onclick="closeMVTNModal()">Закрити</button>
+                <button type="button" id="btnSaveMVTNStaging" class="btn btn-warning" onclick="submitMVTNStaging()" style="color: black; font-weight: 700; padding: 8px 20px;">
+                    💾 Зберегти МВТН
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function confirmNoMVTN(patientId, fullName) {
+    fetch(`/api/patients/${patientId}/confirm-no-mvtn/`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            const card = document.getElementById(`mvtn-card-${patientId}`);
+            if (card) {
+                card.style.opacity = '0';
+                card.style.transform = 'scale(0.9)';
+                setTimeout(() => card.remove(), 300);
+            }
+            showUndoToast(`Пацієнта ${fullName} знято з контролю МВТН.`, patientId, fullName);
+        } else {
+            alert('Помилка: ' + (data.error || 'Не вдалося зберегти'));
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        alert('Не вдалося відправити запит');
+    });
+}
+
+function undoNoMVTN(patientId, toastId) {
+    fetch(`/api/patients/${patientId}/undo-no-mvtn/`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            const toast = document.getElementById(toastId);
+            if (toast) toast.remove();
+            location.reload();
+        } else {
+            alert('Не вдалося скасувати дію');
+        }
+    })
+    .catch(err => console.error(err));
+}
+
+function showUndoToast(message, patientId, fullName) {
+    let container = document.getElementById('global-toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'global-toast-container';
+        container.style.cssText = 'position: fixed; bottom: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 10px;';
+        document.body.appendChild(container);
+    }
+    
+    const toastId = 'toast-undo-' + Date.now();
+    const toast = document.createElement('div');
+    toast.id = toastId;
+    toast.style.cssText = 'background: #222; color: #fff; padding: 12px 18px; border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,0.4); display: flex; align-items: center; gap: 15px; border-left: 4px solid #ff9800; animation: fadeIn 0.3s ease;';
+    toast.innerHTML = `
+        <span>${message}</span>
+        <button type="button" class="btn btn-sm btn-warning" onclick="undoNoMVTN(${patientId}, '${toastId}')" style="padding: 4px 10px; font-weight: bold; color: black; border: none; cursor: pointer;">
+            <i class="fas fa-undo"></i> ↩️ Скасувати
+        </button>
+    `;
+    container.appendChild(toast);
+    
+    setTimeout(() => {
+        const el = document.getElementById(toastId);
+        if (el) {
+            el.style.opacity = '0';
+            setTimeout(() => el.remove(), 300);
+        }
+    }, 7000);
+}
+
+function openMVTNModal(patientId, fullName, defaultStartDate) {
+    document.getElementById('mvtnModalPatientId').value = patientId;
+    document.getElementById('mvtnModalPatientName').textContent = fullName;
+    document.getElementById('mvtnModalStartDate').value = defaultStartDate || '';
+    document.getElementById('mvtnModalEndDate').value = '';
+    document.getElementById('mvtnModalNumber').value = '';
+    document.getElementById('mvtnStagingModal').style.display = 'block';
+}
+
+function closeMVTNModal() {
+    document.getElementById('mvtnStagingModal').style.display = 'none';
+}
+
+function submitMVTNStaging() {
+    const patientId = document.getElementById('mvtnModalPatientId').value;
+    const startDate = document.getElementById('mvtnModalStartDate').value;
+    const endDate = document.getElementById('mvtnModalEndDate').value;
+    const mvtNumber = document.getElementById('mvtnModalNumber').value;
+    const btn = document.getElementById('btnSaveMVTNStaging');
+
+    if (!endDate) {
+        alert('Будь ласка, вкажіть дату закінчення МВТН!');
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Збереження...`;
+
+    fetch(`/api/patients/${patientId}/save-mvtn-staging/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({
+            start_date: startDate,
+            end_date: endDate,
+            mvt_number: mvtNumber
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        btn.disabled = false;
+        btn.innerHTML = `💾 Зберегти МВТН`;
+
+        if (data.success) {
+            closeMVTNModal();
+            const card = document.getElementById(`mvtn-card-${patientId}`);
+            if (card) {
+                card.style.opacity = '0';
+                setTimeout(() => card.remove(), 300);
+            }
+            alert(`✅ ${data.message}`);
+            location.reload();
+        } else {
+            alert('Помилка: ' + (data.error || 'Не вдалося зберегти МВТН'));
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        btn.disabled = false;
+        btn.innerHTML = `💾 Зберегти МВТН`;
+        alert('Помилка відправки даних.');
+    });
+}
+</script>
+{% endblock %}
