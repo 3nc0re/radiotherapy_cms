@@ -27,6 +27,47 @@ def splash(request):
     else:
         return redirect('login')
 
+
+def get_pending_mvtn_staging_patients(today=None):
+    """
+    Повертає список пацієнтів для Контрольного Відстійника МВТН.
+    Умова: пацієнт пройшов КТ або почав лікування, але ще не має підтвердженого статусу МВТН.
+    """
+    if today is None:
+        today = timezone.localdate()
+        
+    active_q = Q(is_active=True, mis_discharged=False) & (Q(discharge_date__isnull=True) | Q(discharge_date__gte=today))
+    stage_q = Q(ct_simulation_date__isnull=False) | Q(treatment_start_date__isnull=False)
+    
+    candidates = Patient.objects.filter(active_q).filter(stage_q).prefetch_related('medical_incapacities')
+    
+    pending = []
+    for p in candidates:
+        incapacities = list(p.medical_incapacities.all())
+        is_confirmed = any(
+            inc.no_employment_relation is True or inc.end_date is not None
+            for inc in incapacities
+        )
+        if not is_confirmed:
+            ref_date = p.treatment_start_date or p.ct_simulation_date
+            days_passed = (today - ref_date).days if ref_date else 0
+            is_critical = days_passed >= 4
+            
+            default_start_date = p.treatment_start_date or p.ct_simulation_date
+            
+            pending.append({
+                'patient': p,
+                'ref_date': ref_date,
+                'days_passed': max(0, days_passed),
+                'is_critical': is_critical,
+                'default_start_date': default_start_date.strftime('%d.%m.%Y') if default_start_date else '',
+                'stage_label': 'Початок лікування' if p.treatment_start_date else 'КТ-симуляція'
+            })
+            
+    pending.sort(key=lambda x: (0 if x['is_critical'] else 1, -x['days_passed']))
+    return pending
+
+
 @login_required
 def dashboard(request):
     today = timezone.localdate()
@@ -39,7 +80,11 @@ def dashboard(request):
         "💡 Не записав у картку — отже, пацієнт здоровий, а ти нічого не робив.",
         "💡 Найкраща медична документація — ця, яку не доведеться пояснювати прокурору.",
         "💡 Тиха ніч — це не везіння, це просто черговий ще не дізнався, що ти на зміні.",
-        "💡 Ніщо так не прикрашає історію хвороби, як вчасно підписаний консиліум.",
+        "💡 Лікар не скаржиться. Лікар мовчки пише.",
+        "💡 Променева терапія — це мистецтво точності та терпіння.",
+        "💡 Крок за кроком, фракція за фракцією — до повної ремісії.",
+        "💡 Успіх лікування залежить від майстерності лікаря та волі пацієнта.",
+        "💡 Точність планування КТ — запорука успішної радіотерапії.",
         "💡 OAR — це не просто кольорові плями на КТ, це чиєсь нормальне життя після лікування.",
         "💡 Якщо органу ризику не видно на КТ, це не означає, що лінійник про нього забуде.",
         "💡 Міліметр ліворуч, міліметр праворуч — і замість радикального курсу маємо екстрену зустріч із суміжниками.",
@@ -162,6 +207,8 @@ def dashboard(request):
         discharge_date__range=[start_of_week, end_of_week],
         is_active=True
     ).count()
+
+    pending_mvtn_list = get_pending_mvtn_staging_patients(today)
     
     context = {
         'ct_today_count': ct_today_count,
@@ -1813,6 +1860,111 @@ def quick_update_patient_api(request, pk):
         'notes': patient.notes or '',
         'completed_fractions': info['completed_fractions'],
         'has_fractions': patient.fractions.exists(),
+    })
+
+
+@login_required
+@require_POST
+def confirm_no_mvtn_api(request, pk):
+    """Фіксує, що пацієнту лікарняний не потрібен (пенсіонер, безробітний тощо)"""
+    patient = get_object_or_404(Patient, pk=pk)
+    incapacity, created = MedicalIncapacity.objects.get_or_create(
+        patient=patient,
+        no_employment_relation=True,
+        defaults={'created_at': timezone.now()}
+    )
+    incapacity.no_employment_relation = True
+    incapacity.save()
+    
+    today = timezone.localdate()
+    pending_count = len(get_pending_mvtn_staging_patients(today))
+    
+    return JsonResponse({
+        'success': True,
+        'message': f'Пацієнта {patient.full_name} знято з контролю МВТН.',
+        'patient_id': patient.id,
+        'incapacity_id': incapacity.id,
+        'pending_mvtn_count': pending_count,
+    })
+
+
+@login_required
+@require_POST
+def undo_no_mvtn_api(request, pk):
+    """Скасовує фіксацію "Лікарняний не потрібен", повертаючи пацієнта під контроль МВТН"""
+    patient = get_object_or_404(Patient, pk=pk)
+    MedicalIncapacity.objects.filter(patient=patient, no_employment_relation=True).delete()
+    
+    today = timezone.localdate()
+    pending_count = len(get_pending_mvtn_staging_patients(today))
+    
+    return JsonResponse({
+        'success': True,
+        'message': f'Контроль МВТН відновлено для {patient.full_name}.',
+        'patient_id': patient.id,
+        'pending_mvtn_count': pending_count,
+    })
+
+
+@login_required
+@require_POST
+def save_mvtn_staging_api(request, pk):
+    """Зберігає відкритий МВТН із валідацією дат для відстійника МВТН"""
+    patient = get_object_or_404(Patient, pk=pk)
+    
+    try:
+        data = json.loads(request.body)
+    except Exception:
+        data = request.POST
+        
+    start_date_str = data.get('start_date', '').strip()
+    end_date_str = data.get('end_date', '').strip()
+    mvt_number = data.get('mvt_number', '').strip()
+    
+    from django.utils.dateparse import parse_date
+    def parse_ukrainian_date(val_str):
+        if not val_str:
+            return None
+        parsed = parse_date(val_str)
+        if not parsed:
+            try:
+                parts = val_str.split('.')
+                if len(parts) == 3:
+                    parsed = date(int(parts[2]), int(parts[1]), int(parts[0]))
+            except (ValueError, IndexError):
+                parsed = None
+        return parsed
+
+    start_date = parse_ukrainian_date(start_date_str) or patient.treatment_start_date or patient.ct_simulation_date
+    end_date = parse_ukrainian_date(end_date_str)
+    
+    if not end_date:
+        return JsonResponse({'success': False, 'error': 'Будь ласка, вкажіть дату закінчення МВТН!'}, status=400)
+        
+    today = timezone.localdate()
+    if end_date < today:
+        return JsonResponse({'success': False, 'error': 'Дата закінчення МВТН не може бути в минулому!'}, status=400)
+        
+    if start_date and end_date < start_date:
+        return JsonResponse({'success': False, 'error': 'Дата закінчення МВТН не може бути раніше дати початку!'}, status=400)
+        
+    MedicalIncapacity.objects.create(
+        patient=patient,
+        mvt_number=mvt_number or None,
+        start_date=start_date,
+        end_date=end_date,
+        created_at=timezone.now(),
+        updated_at=timezone.now()
+    )
+    
+    pending_count = len(get_pending_mvtn_staging_patients(today))
+    
+    return JsonResponse({
+        'success': True,
+        'message': f'МВТН для {patient.full_name} успішно збережено дійсним до {end_date.strftime("%d.%m.%Y")}.',
+        'patient_id': patient.id,
+        'end_date': end_date.strftime('%d.%m.%Y'),
+        'pending_mvtn_count': pending_count,
     })
 
 

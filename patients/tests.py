@@ -2310,6 +2310,108 @@ class QuickUpdateAPITests(TestCase):
         self.assertEqual(str(self.patient.ward_number), '405')
 
 
+class MVTNStagingTests(TestCase):
+    """Тести контрольного відстійника МВТН (Checklist Staging Area)"""
+
+    def setUp(self):
+        self.doctor = User.objects.create_user(
+            username='doctor_staging',
+            password='testpass123',
+            role='doctor',
+            approved=True
+        )
+        self.client = Client()
+        self.client.login(username='doctor_staging', password='testpass123')
+        self.today = timezone.localdate()
+
+    def test_ct_patient_enters_staging(self):
+        # Пацієнт тільки після КТ без дати початку лікування
+        p_ct = Patient.objects.create(
+            last_name='КТшник',
+            first_name='Іван',
+            diagnosis='C50.0',
+            ct_simulation_date=self.today - timedelta(days=5),
+            is_active=True
+        )
+        
+        from patients.views import get_pending_mvtn_staging_patients
+        pending = get_pending_mvtn_staging_patients(self.today)
+        pending_ids = [item['patient'].id for item in pending]
+        self.assertIn(p_ct.id, pending_ids)
+
+        # Перевірка підсвічування критичності (>= 4 днів)
+        ct_item = next(item for item in pending if item['patient'].id == p_ct.id)
+        self.assertTrue(ct_item['is_critical'])
+        self.assertEqual(ct_item['days_passed'], 5)
+
+    def test_confirm_no_mvtn_and_undo(self):
+        p = Patient.objects.create(
+            last_name='Безробітний',
+            first_name='Петро',
+            diagnosis='C34.0',
+            treatment_start_date=self.today - timedelta(days=1),
+            is_active=True
+        )
+        
+        # 1. Підтвердження "Лікарняний не потрібен"
+        url_no = reverse('confirm_no_mvtn_api', kwargs={'pk': p.pk})
+        res1 = self.client.post(url_no)
+        self.assertEqual(res1.status_code, 200)
+        self.assertTrue(res1.json()['success'])
+
+        from patients.views import get_pending_mvtn_staging_patients
+        pending1 = [item['patient'].id for item in get_pending_mvtn_staging_patients(self.today)]
+        self.assertNotIn(p.id, pending1)
+
+        # 2. Скасування (Undo)
+        url_undo = reverse('undo_no_mvtn_api', kwargs={'pk': p.pk})
+        res2 = self.client.post(url_undo)
+        self.assertEqual(res2.status_code, 200)
+        self.assertTrue(res2.json()['success'])
+
+        pending2 = [item['patient'].id for item in get_pending_mvtn_staging_patients(self.today)]
+        self.assertIn(p.id, pending2)
+
+    def test_save_mvtn_staging_validation_and_success(self):
+        p = Patient.objects.create(
+            last_name='Працюючий',
+            first_name='Олег',
+            diagnosis='C61',
+            treatment_start_date=self.today,
+            is_active=True
+        )
+
+        url_save = reverse('save_mvtn_staging_api', kwargs={'pk': p.pk})
+        
+        # 1. Помилка: немає дати закінчення
+        res_fail1 = self.client.post(url_save, data={'start_date': self.today.strftime('%d.%m.%Y')}, content_type='application/json')
+        self.assertEqual(res_fail1.status_code, 400)
+
+        # 2. Помилка: дата закінчення в минулому
+        past_end = self.today - timedelta(days=2)
+        res_fail2 = self.client.post(url_save, data={
+            'start_date': self.today.strftime('%d.%m.%Y'),
+            'end_date': past_end.strftime('%d.%m.%Y')
+        }, content_type='application/json')
+        self.assertEqual(res_fail2.status_code, 400)
+
+        # 3. Успіх: коректна дата закінчення
+        future_end = self.today + timedelta(days=20)
+        res_ok = self.client.post(url_save, data={
+            'start_date': self.today.strftime('%d.%m.%Y'),
+            'end_date': future_end.strftime('%d.%m.%Y'),
+            'mvt_number': 'MVT-999888'
+        }, content_type='application/json')
+        self.assertEqual(res_ok.status_code, 200)
+        self.assertTrue(res_ok.json()['success'])
+
+        # Пацієнт зникає з відстійника
+        from patients.views import get_pending_mvtn_staging_patients
+        pending3 = [item['patient'].id for item in get_pending_mvtn_staging_patients(self.today)]
+        self.assertNotIn(p.id, pending3)
+
+
+
 
 
 

@@ -4,16 +4,13 @@ def pending_counts(request):
     if not request.user.is_authenticated:
         return {}
     
-    from patients.models import Patient
+    from patients.views import get_pending_mis_discharge_patients, get_pending_mvtn_staging_patients
     today = timezone.localdate()
     
-    patients = Patient.objects.filter(mis_discharged=False).prefetch_related('fractions')
-    pending_mis_count = 0
-    for p in patients:
-        actual_discharge = p.get_actual_discharge_date or p.discharge_date
-        if actual_discharge and actual_discharge <= today:
-            pending_mis_count += 1
+    pending_mis = len(get_pending_mis_discharge_patients(today))
+    pending_mvtn = len(get_pending_mvtn_staging_patients(today))
             
     return {
-        'pending_mis_count': pending_mis_count
+        'pending_mis_count': pending_mis,
+        'pending_mvtn_count': pending_mvtn,
     }
