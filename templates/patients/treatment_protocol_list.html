@@ -1,0 +1,213 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; flex-wrap: wrap; gap: 15px;">
+    <div>
+        <h1 style="margin: 0; display: flex; align-items: center; gap: 10px;">
+            <i class="fas fa-layer-group" style="color: var(--primary-color);"></i> Шаблони лікування (Протоколи)
+        </h1>
+        <p style="color: var(--text-light-color); margin: 5px 0 0 0;">
+            Клінічні протоколи для 1-клік автозаповнення параметрів лікування нових та існуючих пацієнтів
+        </p>
+    </div>
+    <div>
+        <button type="button" class="btn btn-primary" onclick="openProtocolModal()" style="font-weight: 600; padding: 10px 20px;">
+            <i class="fas fa-plus"></i> + Додати новий шаблон
+        </button>
+    </div>
+</div>
+
+<div class="protocols-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px;">
+    {% for protocol in protocols %}
+    <div class="card" id="protocol-card-{{ protocol.id }}" style="padding: 20px; border: 1px solid var(--border-color); border-radius: 8px; box-shadow: var(--shadow); position: relative;">
+        <h3 style="margin: 0 0 10px 0; font-size: 1.15rem; color: var(--primary-color);">
+            {{ protocol.name }}
+        </h3>
+        
+        <div style="font-size: 0.9rem; line-height: 1.6; color: var(--text-color); margin-bottom: 15px;">
+            <p style="margin: 0;"><strong>Зона опромінення:</strong> {{ protocol.irradiation_zone|default:"—" }}</p>
+            <p style="margin: 0;"><strong>Тип лікування:</strong> {{ protocol.treatment_type|default:"—" }}</p>
+            <p style="margin: 0;"><strong>Кількість фракцій:</strong> <span class="badge" style="background-color: var(--primary-color); color: white;">{{ protocol.total_fractions }} фр.</span></p>
+            <p style="margin: 0;"><strong>РОД:</strong> <strong>{{ protocol.dose_per_fraction_raw }} Гр</strong></p>
+            {% if protocol.has_radiomodification %}
+            <p style="margin: 0;"><span class="badge" style="background-color: #dc3545; color: white;">Радіомодифікація</span></p>
+            {% endif %}
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--border-color); padding-top: 12px;">
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="editProtocol({{ protocol.id }}, '{{ protocol.name|escapejs }}', '{{ protocol.irradiation_zone|default:''|escapejs }}', '{{ protocol.treatment_type|default:''|escapejs }}', {{ protocol.total_fractions }}, '{{ protocol.dose_per_fraction_raw|escapejs }}', {{ protocol.has_radiomodification|yesno:'true,false' }})" style="padding: 5px 12px;">
+                <i class="fas fa-edit"></i> Редагувати
+            </button>
+            <button type="button" class="btn btn-sm btn-danger" onclick="deleteProtocol({{ protocol.id }}, '{{ protocol.name|escapejs }}')" style="padding: 5px 12px;">
+                <i class="fas fa-trash"></i> Видалити
+            </button>
+        </div>
+    </div>
+    {% empty %}
+    <div class="card" style="grid-column: 1 / -1; text-align: center; padding: 40px 20px;">
+        <p style="color: var(--text-light-color);">Шаблонів поки що немає. Натисніть «+ Додати новий шаблон», щоб створити перший.</p>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Модальне вікно створення/редагування шаблону -->
+<div id="protocolModal" class="modal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); backdrop-filter: blur(2px);">
+    <div style="background: var(--card-bg); max-width: 500px; margin: 8% auto; padding: 25px; border-radius: 10px; box-shadow: 0 10px 25px rgba(0,0,0,0.4); color: var(--text-color); animation: fadeIn 0.25s ease;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-bottom: 20px;">
+            <h3 id="protocolModalTitle" style="margin: 0; color: var(--primary-color); display: flex; align-items: center; gap: 8px;">
+                <i class="fas fa-layer-group"></i> Створити шаблон лікування
+            </h3>
+            <button type="button" class="btn btn-secondary" onclick="closeProtocolModal()" style="padding: 2px 8px; font-size: 0.85rem;">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <form id="protocolForm">
+            <input type="hidden" id="protocolId">
+            <div class="form-group" style="margin-bottom: 15px;">
+                <label for="protocolName" style="font-weight: 600; font-size: 0.9rem;">🏷️ Назва шаблону (обов'язково):</label>
+                <input type="text" id="protocolName" class="form-control" placeholder="напр. Молочна залоза (15 фр × 2.67 Гр)" required>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                <div class="form-group">
+                    <label for="protocolZone" style="font-weight: 600; font-size: 0.9rem;">🎯 Зона опромінення:</label>
+                    <input type="text" id="protocolZone" class="form-control" placeholder="напр. Молочна залоза">
+                </div>
+                <div class="form-group">
+                    <label for="protocolType" style="font-weight: 600; font-size: 0.9rem;">🩺 Тип лікування:</label>
+                    <input type="text" id="protocolType" class="form-control" placeholder="напр. Ад'ювантний">
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                <div class="form-group">
+                    <label for="protocolFractions" style="font-weight: 600; font-size: 0.9rem;">⚛️ Кількість фракцій:</label>
+                    <input type="number" id="protocolFractions" class="form-control" placeholder="напр. 15" required>
+                </div>
+                <div class="form-group">
+                    <label for="protocolDose" style="font-weight: 600; font-size: 0.9rem;">⚛️ РОД (Гр):</label>
+                    <input type="text" id="protocolDose" class="form-control" placeholder="напр. 2.67 або 2.0/2.2" required>
+                </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 20px; display: flex; align-items: center; gap: 10px;">
+                <input type="checkbox" id="protocolRadiomod" style="width: 18px; height: 18px; cursor: pointer;">
+                <label for="protocolRadiomod" style="font-weight: 600; font-size: 0.9rem; cursor: pointer;">Радіомодифікація (хіміопроменева терапія)</label>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button type="button" class="btn btn-secondary" onclick="closeProtocolModal()">Скасувати</button>
+                <button type="button" id="btnSaveProtocol" class="btn btn-primary" onclick="submitProtocol()" style="font-weight: 700; padding: 8px 20px;">
+                    💾 Зберегти шаблон
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openProtocolModal() {
+    document.getElementById('protocolId').value = '';
+    document.getElementById('protocolModalTitle').innerHTML = `<i class="fas fa-layer-group"></i> Створити шаблон лікування`;
+    document.getElementById('protocolName').value = '';
+    document.getElementById('protocolZone').value = '';
+    document.getElementById('protocolType').value = '';
+    document.getElementById('protocolFractions').value = '';
+    document.getElementById('protocolDose').value = '';
+    document.getElementById('protocolRadiomod').checked = false;
+    document.getElementById('protocolModal').style.display = 'block';
+}
+
+function editProtocol(id, name, zone, type, fractions, dose, radiomod) {
+    document.getElementById('protocolId').value = id;
+    document.getElementById('protocolModalTitle').innerHTML = `<i class="fas fa-edit"></i> Редагувати шаблон`;
+    document.getElementById('protocolName').value = name;
+    document.getElementById('protocolZone').value = zone;
+    document.getElementById('protocolType').value = type;
+    document.getElementById('protocolFractions').value = fractions;
+    document.getElementById('protocolDose').value = dose;
+    document.getElementById('protocolRadiomod').checked = radiomod;
+    document.getElementById('protocolModal').style.display = 'block';
+}
+
+function closeProtocolModal() {
+    document.getElementById('protocolModal').style.display = 'none';
+}
+
+function submitProtocol() {
+    const id = document.getElementById('protocolId').value;
+    const name = document.getElementById('protocolName').value.trim();
+    const zone = document.getElementById('protocolZone').value.trim();
+    const type = document.getElementById('protocolType').value.trim();
+    const fractions = document.getElementById('protocolFractions').value;
+    const dose = document.getElementById('protocolDose').value.trim();
+    const radiomod = document.getElementById('protocolRadiomod').checked;
+
+    if (!name || !fractions || !dose) {
+        alert('Будь ласка, заповніть назву, кількість фракцій та РОД!');
+        return;
+    }
+
+    const btn = document.getElementById('btnSaveProtocol');
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Збереження...`;
+
+    fetch('/api/protocols/save/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({
+            id: id || null,
+            name: name,
+            irradiation_zone: zone,
+            treatment_type: type,
+            total_fractions: fractions,
+            dose_per_fraction_raw: dose,
+            has_radiomodification: radiomod
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        btn.disabled = false;
+        btn.innerHTML = `💾 Зберегти шаблон`;
+        if (data.success) {
+            closeProtocolModal();
+            alert(`✅ ${data.message}`);
+            location.reload();
+        } else {
+            alert('Помилка: ' + (data.error || 'Не вдалося зберегти'));
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        btn.disabled = false;
+        btn.innerHTML = `💾 Зберегти шаблон`;
+        alert('Помилка відправки даних.');
+    });
+}
+
+function deleteProtocol(id, name) {
+    if (!confirm(`Ви впевнені, що хочете видалити шаблон "${name}"?`)) return;
+    
+    fetch(`/api/protocols/${id}/delete/`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            const card = document.getElementById(`protocol-card-${id}`);
+            if (card) {
+                card.style.opacity = '0';
+                setTimeout(() => card.remove(), 300);
+            }
+            alert(`✅ ${data.message}`);
+        } else {
+            alert('Помилка видалення');
+        }
+    });
+}
+</script>
+{% endblock %}

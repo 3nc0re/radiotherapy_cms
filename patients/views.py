@@ -1,5 +1,5 @@
 from django.shortcuts import render, get_object_or_404, redirect
-from .models import Patient, FractionHistory, MedicalIncapacity, User
+from .models import Patient, FractionHistory, MedicalIncapacity, User, TreatmentProtocol
 from .forms import PatientForm, FractionHistoryForm, MedicalIncapacityForm, UserRegistrationForm, UserLoginForm, FractionEditForm
 from django.http import JsonResponse
 from datetime import date, timedelta
@@ -1804,8 +1804,9 @@ def confirm_mis_discharge_api(request, pk):
 @require_POST
 def quick_update_patient_api(request, pk):
     """
-    Миттєве інлайн-оновлення полів пацієнта (Дати, Дози, Статус госпіталізації, Власник ліжка, Палата тощо)
-    з автоматичним перерахунком фракцій, СОД та дати виписки без перезавантаження сторінки.
+    Повне миттєве інлайн-оновлення ВСІХ полів пацієнта прямо в картці
+    (ПІБ, Діагноз, Стадія, Гістологія, Лікування, Дати, Госпіталізація, Нотатки тощо)
+    з автоматичним перерахунком фракцій, СОД та дати виписки без переходів на інші сторінки.
     """
     patient = get_object_or_404(Patient, pk=pk)
     
@@ -1830,7 +1831,37 @@ def quick_update_patient_api(request, pk):
                 parsed = None
         return parsed
 
-    # 1. Дати
+    # 1. Особисті дані
+    if 'last_name' in data and data.get('last_name'):
+        patient.last_name = data.get('last_name').strip()
+    if 'first_name' in data and data.get('first_name'):
+        patient.first_name = data.get('first_name').strip()
+    if 'middle_name' in data:
+        patient.middle_name = data.get('middle_name', '').strip() or None
+    if 'birth_date' in data:
+        patient.birth_date = parse_ukrainian_date(data.get('birth_date'))
+    if 'gender' in data and data.get('gender') in ['M', 'F']:
+        patient.gender = data.get('gender')
+    if 'ambulatory_card_id' in data:
+        patient.ambulatory_card_id = data.get('ambulatory_card_id', '').strip() or None
+    if 'has_radiomodification' in data:
+        patient.has_radiomodification = bool(data.get('has_radiomodification'))
+
+    # 2. Діагноз та стадіювання
+    if 'diagnosis' in data and data.get('diagnosis'):
+        patient.diagnosis = data.get('diagnosis').strip()
+    if 'tnm_staging' in data:
+        patient.tnm_staging = data.get('tnm_staging', '').strip() or None
+    if 'disease_stage' in data:
+        patient.disease_stage = data.get('disease_stage', '').strip() or None
+    if 'clinical_group' in data:
+        patient.clinical_group = data.get('clinical_group', '').strip() or None
+    if 'prior_radiation' in data:
+        patient.prior_radiation = data.get('prior_radiation', '').strip() or None
+    if 'raw_diagnosis' in data:
+        patient.raw_diagnosis = data.get('raw_diagnosis', '').strip() or None
+
+    # 3. Дати
     if 'ct_simulation_date' in data:
         patient.ct_simulation_date = parse_ukrainian_date(data.get('ct_simulation_date'))
         
@@ -1842,7 +1873,7 @@ def quick_update_patient_api(request, pk):
             patient.treatment_start_date = new_start
             start_date_changed = True
             
-    # 2. Фракції та дози
+    # 4. Фракції та дози
     fractions_changed = False
     if 'total_fractions' in data:
         tf_raw = data.get('total_fractions')
@@ -1858,7 +1889,10 @@ def quick_update_patient_api(request, pk):
         raw_dose = data.get('dose_per_fraction')
         patient.parse_and_set_doses(raw_dose)
         
-    # 3. Госпіталізація та ліжковий фонд
+    if 'treatment_type' in data:
+        patient.treatment_type = data.get('treatment_type', '').strip() or None
+
+    # 5. Госпіталізація та ліжковий фонд
     if 'hospitalization_status' in data:
         hs = data.get('hospitalization_status')
         if hs in ['outpatient', 'inpatient', 'queue']:
@@ -1875,11 +1909,20 @@ def quick_update_patient_api(request, pk):
         
     if 'irradiation_zone' in data:
         patient.irradiation_zone = data.get('irradiation_zone') or None
+
+    # 6. Гістологія
+    if 'histology_number' in data:
+        patient.histology_number = data.get('histology_number', '').strip() or None
+    if 'histology_date' in data:
+        patient.histology_date = parse_ukrainian_date(data.get('histology_date'))
+    if 'histology_description' in data:
+        patient.histology_description = data.get('histology_description', '').strip() or None
         
+    # 7. Нотатки
     if 'notes' in data:
         patient.notes = data.get('notes') or None
 
-    # Якщо фракції ще не згенеровані, але є дата початку та фракції — генеруємо
+    # Авто-генерація або зсув фракцій
     if patient.treatment_start_date and patient.total_fractions and patient.dose_per_fraction:
         if not patient.fractions.exists():
             from .services import generate_fractions_for_patient
@@ -1888,7 +1931,6 @@ def quick_update_patient_api(request, pk):
             from .services import shift_patient_schedule
             shift_patient_schedule(patient)
             
-    # Перераховуємо СОД та виписку
     from .services import recalculate_discharge_date
     patient.recalculate_received_dose()
     recalculate_discharge_date(patient)
@@ -1902,7 +1944,20 @@ def quick_update_patient_api(request, pk):
     
     return JsonResponse({
         'success': True,
-        'message': 'Дані пацієнта успішно оновлено!',
+        'message': 'Дані пацієнта успішно збережено!',
+        'full_name': patient.full_name,
+        'last_name': patient.last_name,
+        'first_name': patient.first_name,
+        'middle_name': patient.middle_name or '',
+        'birth_date': patient.birth_date.strftime('%d.%m.%Y') if patient.birth_date else '—',
+        'gender_display': patient.get_gender_display(),
+        'ambulatory_card_id': patient.ambulatory_card_id or '—',
+        'has_radiomodification': patient.has_radiomodification,
+        'diagnosis': patient.diagnosis,
+        'tnm_staging': patient.tnm_staging or '—',
+        'disease_stage': patient.disease_stage or '—',
+        'clinical_group': patient.clinical_group or '—',
+        'treatment_type': patient.treatment_type or '—',
         'display_stage': patient.display_stage,
         'discharge_date': actual_discharge_str,
         'ct_simulation_date': patient.ct_simulation_date.strftime('%d.%m.%Y') if patient.ct_simulation_date else '—',
@@ -1918,10 +1973,205 @@ def quick_update_patient_api(request, pk):
         'ward_number': patient.ward_number or '—',
         'planned_admission_date': patient.planned_admission_date.strftime('%d.%m.%Y') if patient.planned_admission_date else '—',
         'irradiation_zone': patient.irradiation_zone or '—',
+        'prior_radiation': patient.prior_radiation or '—',
+        'histology_number': patient.histology_number or '—',
+        'histology_date': patient.histology_date.strftime('%d.%m.%Y') if patient.histology_date else '—',
+        'histology_description': patient.histology_description or '—',
         'notes': patient.notes or '',
         'completed_fractions': info['completed_fractions'],
         'has_fractions': patient.fractions.exists(),
     })
+
+
+@login_required
+def treatment_protocol_list(request):
+    """Сторінка управління клінічними протоколами / шаблонами лікування"""
+    protocols = TreatmentProtocol.objects.all()
+    return render(request, 'patients/treatment_protocol_list.html', {
+        'protocols': protocols,
+    })
+
+
+@login_required
+@require_POST
+def save_protocol_api(request):
+    """Створення або редагування шаблону протоколу лікування"""
+    try:
+        data = json.loads(request.body)
+    except Exception:
+        data = request.POST
+        
+    pk = data.get('id')
+    name = data.get('name', '').strip()
+    if not name:
+        return JsonResponse({'success': False, 'error': 'Вкажіть назву шаблону!'}, status=400)
+        
+    raw_dose = data.get('dose_per_fraction_raw', '').strip().replace(',', '.')
+    if not raw_dose:
+        return JsonResponse({'success': False, 'error': 'Вкажіть РОД (Гр)!'}, status=400)
+        
+    try:
+        total_fractions = int(data.get('total_fractions', 0))
+    except (ValueError, TypeError):
+        return JsonResponse({'success': False, 'error': 'Вкажіть коректну кількість фракцій!'}, status=400)
+        
+    if pk:
+        protocol = get_object_or_404(TreatmentProtocol, pk=pk)
+    else:
+        protocol = TreatmentProtocol()
+        
+    protocol.name = name
+    protocol.irradiation_zone = data.get('irradiation_zone', '').strip() or None
+    protocol.treatment_type = data.get('treatment_type', '').strip() or None
+    protocol.total_fractions = total_fractions
+    protocol.dose_per_fraction_raw = raw_dose
+    protocol.has_radiomodification = bool(data.get('has_radiomodification', False))
+    protocol.save()
+    
+    return JsonResponse({
+        'success': True,
+        'message': f'Шаблон "{protocol.name}" успішно збережено!',
+        'id': protocol.id,
+        'name': protocol.name,
+    })
+
+
+@login_required
+@require_POST
+def delete_protocol_api(request, pk):
+    protocol = get_object_or_404(TreatmentProtocol, pk=pk)
+    name = protocol.name
+    protocol.delete()
+    return JsonResponse({'success': True, 'message': f'Шаблон "{name}" успішно видалено!'})
+
+
+@login_required
+def get_protocols_api(request):
+    protocols = list(TreatmentProtocol.objects.values(
+        'id', 'name', 'irradiation_zone', 'treatment_type',
+        'total_fractions', 'dose_per_fraction_raw', 'has_radiomodification'
+    ))
+    return JsonResponse({'success': True, 'protocols': protocols})
+
+
+@login_required
+@require_POST
+def pause_patient_treatment_api(request, pk):
+    """Індивідуальна пауза курсу пацієнта на N робочих днів"""
+    patient = get_object_or_404(Patient, pk=pk)
+    try:
+        data = json.loads(request.body)
+    except Exception:
+        data = request.POST
+        
+    days = int(data.get('days', 1))
+    reason = data.get('reason', 'Пауза лікування за клінічними показами').strip()
+    
+    today = timezone.localdate()
+    future_fractions = patient.fractions.filter(date__gte=today, status='scheduled').order_by('date')
+    
+    if not future_fractions.exists():
+        return JsonResponse({'success': False, 'error': 'Немає запланованих фракцій для зсуву!'}, status=400)
+        
+    from .services import recalculate_discharge_date
+    for fr in future_fractions:
+        new_date = fr.date
+        added = 0
+        while added < days:
+            new_date += timedelta(days=1)
+            if new_date.weekday() < 5:
+                added += 1
+        fr.date = new_date
+        fr.reason = reason
+        fr.save()
+        
+    patient.recalculate_received_dose()
+    recalculate_discharge_date(patient)
+    patient.save()
+    patient.refresh_from_db()
+    
+    actual_discharge = patient.get_actual_discharge_date
+    actual_discharge_str = actual_discharge.strftime('%d.%m.%Y') if actual_discharge else '—'
+    
+    return JsonResponse({
+        'success': True,
+        'message': f'Лікування пацієнта {patient.full_name} призупинено на {days} дн. Нова дата виписки: {actual_discharge_str}',
+        'discharge_date': actual_discharge_str,
+    })
+
+
+@login_required
+@require_POST
+def machine_pause_fractions_api(request):
+    """Масова технічна перерва лінійника на N робочих днів для всіх активних пацієнтів"""
+    try:
+        data = json.loads(request.body)
+    except Exception:
+        data = request.POST
+        
+    days = int(data.get('days', 1))
+    reason = data.get('reason', 'Технічне обслуговування апарата / перерва').strip()
+    
+    today = timezone.localdate()
+    active_patients = Patient.objects.filter(is_active=True, fractions__date__gte=today, fractions__status='scheduled').distinct()
+    
+    affected_count = 0
+    from .services import recalculate_discharge_date
+    for patient in active_patients:
+        future_fractions = patient.fractions.filter(date__gte=today, status='scheduled').order_by('date')
+        if future_fractions.exists():
+            affected_count += 1
+            for fr in future_fractions:
+                new_date = fr.date
+                added = 0
+                while added < days:
+                    new_date += timedelta(days=1)
+                    if new_date.weekday() < 5:
+                        added += 1
+                fr.date = new_date
+                fr.reason = reason
+                fr.save()
+            patient.recalculate_received_dose()
+            recalculate_discharge_date(patient)
+            patient.save()
+            
+    return JsonResponse({
+        'success': True,
+        'message': f'Масову перерву на {days} дн. успішно застосовано для {affected_count} пацієнтів!',
+        'affected_count': affected_count,
+    })
+
+
+@login_required
+@require_POST
+def bulk_confirm_blood_tests_api(request):
+    """Масове підтвердження здачі аналізів крові для вибраних пацієнтів за сьогодні"""
+    try:
+        data = json.loads(request.body)
+    except Exception:
+        data = request.POST
+        
+    patient_ids = data.get('patient_ids', [])
+    if not patient_ids:
+        return JsonResponse({'success': False, 'error': 'Виберіть хоча б одного пацієнта!'}, status=400)
+        
+    today = timezone.localdate()
+    updated_count = 0
+    for pid in patient_ids:
+        try:
+            patient = Patient.objects.get(pk=pid)
+            patient.last_blood_test_date = today
+            patient.save()
+            updated_count += 1
+        except Patient.DoesNotExist:
+            continue
+            
+    return JsonResponse({
+        'success': True,
+        'message': f'Успішно підтверджено аналізи для {updated_count} пацієнтів!',
+        'updated_count': updated_count,
+    })
+
 
 
 @login_required

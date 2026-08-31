@@ -5,10 +5,46 @@
         <h1 style="margin: 0;">Фракції пацієнтів</h1>
         <p class="today-date" style="margin: 5px 0 0 0;"><i class="fas fa-calendar-day"></i> Сьогодні: {{ today|date:"d.m.Y" }}</p>
     </div>
-    <div>
+    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+        <button type="button" class="btn btn-warning" onclick="openMachinePauseModal()" style="padding: 10px 18px; font-weight: 600; color: black; box-shadow: 0 4px 10px rgba(255, 152, 0, 0.3);">
+            <i class="fas fa-tools" style="margin-right: 6px;"></i> ⚙️ Технічна перерва лінійника (пауза)
+        </button>
         <button type="button" class="btn btn-primary" onclick="openBulkConfirmModal()" style="padding: 10px 18px; font-weight: 600; box-shadow: 0 4px 10px rgba(52, 152, 219, 0.3);">
             <i class="fas fa-plane-departure" style="margin-right: 6px;"></i> Масове підтвердження за період (відпустка)
         </button>
+    </div>
+</div>
+
+<!-- МОДАЛЬНЕ ВІКНО: Масова технічна перерва на апараті -->
+<div id="machinePauseModal" class="modal" style="display: none; position: fixed; z-index: 1050; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); overflow-y: auto;">
+    <div class="modal-content" style="background: var(--card-bg-color); color: var(--text-color); margin: 8% auto; padding: 25px; border-radius: 12px; max-width: 500px; border: 1px solid var(--border-color); box-shadow: var(--shadow);">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 15px; margin-bottom: 20px;">
+            <h2 style="margin: 0; font-size: 1.3rem; color: #ff9800;"><i class="fas fa-tools" style="margin-right: 8px;"></i> Масова перерва / ТО лінійника</h2>
+            <span onclick="closeMachinePauseModal()" style="font-size: 1.8rem; cursor: pointer; color: var(--text-light-color); line-height: 1;">&times;</span>
+        </div>
+
+        <p style="font-size: 0.95rem; line-height: 1.5; color: var(--text-color); margin-bottom: 20px;">
+            Ця дія <strong>зсуне всі майбутні заплановані фракції для всіх активних пацієнтів</strong> на вказану кількість робочих днів вперед (з автоматичним перерахунком виписки).
+        </p>
+
+        <form id="machinePauseForm">
+            <div class="form-group" style="margin-bottom: 15px;">
+                <label style="font-weight: 600; font-size: 0.9rem;">⚙️ Кількість робочих днів простою / паузи:</label>
+                <input type="number" id="machinePauseDays" class="form-control" value="1" min="1" max="30" required style="padding: 8px 12px; width: 100%;">
+            </div>
+
+            <div class="form-group" style="margin-bottom: 20px;">
+                <label style="font-weight: 600; font-size: 0.9rem;">📝 Причина перерви:</label>
+                <input type="text" id="machinePauseReason" class="form-control" value="Технічне обслуговування лінійного прискорювача" placeholder="напр. Аварійне ТО апарата" style="padding: 8px 12px; width: 100%;">
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button type="button" class="btn btn-secondary" onclick="closeMachinePauseModal()">Скасувати</button>
+                <button type="button" id="btnSubmitMachinePause" class="btn btn-warning" onclick="submitMachinePause()" style="color: black; font-weight: 700; padding: 8px 20px;">
+                    ⚙️ Застосувати для всіх пацієнтів
+                </button>
+            </div>
+        </form>
     </div>
 </div>
 
@@ -916,6 +952,61 @@ function executeBulkConfirm() {
         alert('Помилка при підтвердженні фракцій');
         submitBtn.disabled = false;
         submitBtn.innerHTML = `<i class="fas fa-check-double"></i> Підтвердити всі фракції`;
+    });
+}
+
+function openMachinePauseModal() {
+    document.getElementById('machinePauseDays').value = 1;
+    document.getElementById('machinePauseReason').value = 'Технічне обслуговування лінійного прискорювача';
+    document.getElementById('machinePauseModal').style.display = 'block';
+}
+
+function closeMachinePauseModal() {
+    document.getElementById('machinePauseModal').style.display = 'none';
+}
+
+function submitMachinePause() {
+    const days = parseInt(document.getElementById('machinePauseDays').value, 10);
+    const reason = document.getElementById('machinePauseReason').value.trim();
+    const btn = document.getElementById('btnSubmitMachinePause');
+
+    if (!days || days < 1) {
+        alert('Вкажіть коректну кількість днів паузи (від 1)!');
+        return;
+    }
+
+    if (!confirm(`Ви впевнені, що хочете перенести розклад ВСІХ пацієнтів на ${days} дн.?`)) {
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Зсув розкладу...`;
+
+    fetch('/api/fractions/machine-pause/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({ days: days, reason: reason })
+    })
+    .then(res => res.json())
+    .then(data => {
+        btn.disabled = false;
+        btn.innerHTML = `⚙️ Застосувати для всіх пацієнтів`;
+        if (data.success) {
+            closeMachinePauseModal();
+            alert(`✅ ${data.message}`);
+            location.reload();
+        } else {
+            alert('Помилка: ' + (data.error || 'Не вдалося перенести'));
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        btn.disabled = false;
+        btn.innerHTML = `⚙️ Застосувати для всіх пацієнтів`;
+        alert('Помилка з\'єднання.');
     });
 }
 </script>

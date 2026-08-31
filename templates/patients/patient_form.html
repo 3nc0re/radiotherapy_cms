@@ -118,16 +118,16 @@
             <h3>Лікування</h3>
             
             <div class="form-group" style="margin-bottom: 20px;">
-                <label for="id_fraction_template">Швидкий вибір схеми лікування</label>
-                <select id="id_fraction_template" style="width: 100%; max-width: 400px; padding: 8px; border-radius: 4px; border: 1px solid var(--border-color); background-color: var(--input-bg); color: var(--text-color);">
-                    <option value="">-- Оберіть шаблон (опціонально) --</option>
-                    <option value="radical_50">Радикальний курс (25 фр. по 2.0 Гр = 50.0 Гр)</option>
-                    <option value="radical_60">Радикальний курс (30 фр. по 2.0 Гр = 60.0 Гр)</option>
-                    <option value="radical_70">Радикальний курс (35 фр. по 2.0 Гр = 70.0 Гр)</option>
-                    <option value="palliative_20">Паліативний курс (5 фр. по 4.0 Гр = 20.0 Гр)</option>
-                    <option value="palliative_30">Паліативний курс (10 фр. по 3.0 Гр = 30.0 Гр)</option>
+                <div style="display: flex; justify-content: space-between; align-items: center; max-width: 500px;">
+                    <label for="id_fraction_template" style="font-weight: 600;">🎯 Застосувати шаблон лікування (протокол)</label>
+                    <a href="{% url 'treatment_protocol_list' %}" target="_blank" style="font-size: 0.85rem; color: var(--primary-color); text-decoration: none;">
+                        <i class="fas fa-cog"></i> Керувати шаблонами
+                    </a>
+                </div>
+                <select id="id_fraction_template" style="width: 100%; max-width: 500px; padding: 9px; border-radius: 6px; border: 1px solid var(--border-color); background-color: var(--input-bg); color: var(--text-color); font-weight: 500;">
+                    <option value="">-- Оберіть клінічний протокол для автозаповнення --</option>
                 </select>
-                <span class="form-text text-muted" style="margin-top: 4px; font-size: 0.85rem;">При виборі значення поля кількості фракцій та РОД заповняться автоматично. Ручний ввід залишається доступним.</span>
+                <span class="form-text text-muted" style="margin-top: 4px; font-size: 0.85rem;">При виборі автоматично заповнюються: зона, фракції, РОД, радіомодифікація та тип лікування.</span>
             </div>
 
             <div class="form-grid">
@@ -173,6 +173,13 @@
                         <div class="error" style="color: #e74c3c; font-size: 0.85rem; margin-top: 4px;">{{ form.discharge_date.errors.0 }}</div>
                     {% endif %}
                 </div>
+            </div>
+            
+            <div class="form-group full-width" style="display: flex; align-items: center; gap: 10px; background-color: var(--hover-bg); padding: 12px 16px; border-radius: 6px; border: 1px solid var(--border-color); margin-top: 15px;">
+                {{ form.auto_confirm_past_fractions }}
+                <label for="{{ form.auto_confirm_past_fractions.id_for_label }}" style="margin: 0; font-weight: 600; cursor: pointer;">
+                    ☑️ Вважати минулі фракції до сьогодні отриманими (якщо дата початку лікування в минулому)
+                </label>
             </div>
         </div>
 
@@ -437,41 +444,48 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Схеми фракціонування - автозаповнення доз
+    // Схеми фракціонування / Протоколи лікування
     const templateSelect = document.getElementById('id_fraction_template');
+    let protocolList = [];
+
     if (templateSelect) {
+        fetch('/api/protocols/')
+            .then(res => res.json())
+            .then(data => {
+                if (data.success && data.protocols) {
+                    protocolList = data.protocols;
+                    data.protocols.forEach(p => {
+                        const opt = document.createElement('option');
+                        opt.value = p.id;
+                        opt.textContent = `${p.name} (${p.total_fractions} фр. × ${p.dose_per_fraction_raw} Гр)`;
+                        templateSelect.appendChild(opt);
+                    });
+                }
+            })
+            .catch(err => console.error(err));
+
         templateSelect.addEventListener('change', function() {
             const val = this.value;
+            if (!val) return;
+            const p = protocolList.find(item => item.id == val);
+            if (!p) return;
+
             const totalFractionsInput = document.getElementById('id_total_fractions');
             const doseInput = document.getElementById('id_dose_per_fraction');
-            const receivedDoseInput = document.getElementById('id_received_dose');
-            
-            if (val === 'radical_50') {
-                if (totalFractionsInput) totalFractionsInput.value = 25;
-                if (doseInput) doseInput.value = '2.0';
-                if (receivedDoseInput) receivedDoseInput.value = '50.0';
-            } else if (val === 'radical_60') {
-                if (totalFractionsInput) totalFractionsInput.value = 30;
-                if (doseInput) doseInput.value = '2.0';
-                if (receivedDoseInput) receivedDoseInput.value = '60.0';
-            } else if (val === 'radical_70') {
-                if (totalFractionsInput) totalFractionsInput.value = 35;
-                if (doseInput) doseInput.value = '2.0';
-                if (receivedDoseInput) receivedDoseInput.value = '70.0';
-            } else if (val === 'palliative_20') {
-                if (totalFractionsInput) totalFractionsInput.value = 5;
-                if (doseInput) doseInput.value = '4.0';
-                if (receivedDoseInput) receivedDoseInput.value = '20.0';
-            } else if (val === 'palliative_30') {
-                if (totalFractionsInput) totalFractionsInput.value = 10;
-                if (doseInput) doseInput.value = '3.0';
-                if (receivedDoseInput) receivedDoseInput.value = '30.0';
-            }
-            
+            const zoneInput = document.getElementById('id_irradiation_zone');
+            const typeInput = document.getElementById('id_treatment_type');
+            const radiomodInput = document.getElementById('id_has_radiomodification');
+
+            if (totalFractionsInput) totalFractionsInput.value = p.total_fractions;
+            if (doseInput) doseInput.value = p.dose_per_fraction_raw;
+            if (zoneInput && p.irradiation_zone) zoneInput.value = p.irradiation_zone;
+            if (typeInput && p.treatment_type) typeInput.value = p.treatment_type;
+            if (radiomodInput) radiomodInput.checked = p.has_radiomodification;
+
             // Анімація успіху на полях
-            const fields = [totalFractionsInput, doseInput, receivedDoseInput];
+            const fields = [totalFractionsInput, doseInput, zoneInput, typeInput];
             fields.forEach(el => {
-                if (el && el.value) {
+                if (el) {
                     el.style.transition = 'background-color 0.5s ease';
                     el.style.backgroundColor = 'rgba(40, 167, 69, 0.15)';
                     setTimeout(() => {

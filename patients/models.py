@@ -607,3 +607,23 @@ class PatientAIDiary(models.Model):
     class Meta:
         db_table = 'patient_ai_diary'
         ordering = ['date', 'fraction_number']
+
+
+class TreatmentProtocol(models.Model):
+    """Клінічний шаблон (протокол) лікування для швидкого автозаповнення"""
+    name = models.CharField(max_length=200, help_text="Назва шаблону / протоколу")
+    irradiation_zone = models.CharField(max_length=200, blank=True, null=True, help_text="Зона опромінення")
+    treatment_type = models.CharField(max_length=100, blank=True, null=True, help_text="Тип лікування")
+    total_fractions = models.IntegerField(help_text="Загальна кількість фракцій")
+    dose_per_fraction_raw = models.CharField(max_length=50, help_text="РОД (Гр), наприклад 2.0 або 2.66/3.0")
+    has_radiomodification = models.BooleanField(default=False, help_text="Радіомодифікація (Так/Ні)")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'treatment_protocols'
+        ordering = ['name']
+
+    def __str__(self):
+        return f"{self.name} ({self.total_fractions} фр. × {self.dose_per_fraction_raw} Гр)"
+

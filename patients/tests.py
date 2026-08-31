@@ -2432,6 +2432,176 @@ class MVTNStagingTests(TestCase):
         self.assertContains(response, 'МВТН не покриває курс')
 
 
+class ClinicalWorkflowAuditTests(TestCase):
+    """Тести нового клінічного функціоналу: Протоколи лікування, повне інлайн-редагування, паузи та масові аналізи"""
+
+    def setUp(self):
+        self.doctor = User.objects.create_user(
+            username='doctor_workflow',
+            password='testpass123',
+            role='doctor',
+            approved=True
+        )
+        self.client = Client()
+        self.client.login(username='doctor_workflow', password='testpass123')
+        self.today = timezone.localdate()
+
+    def test_treatment_protocol_crud_and_api(self):
+        # 1. Створення протоколу
+        res_create = self.client.post(reverse('save_protocol_api'), data={
+            'name': 'Тестовий протокол легень',
+            'irradiation_zone': 'Легені',
+            'treatment_type': 'Радикальний',
+            'total_fractions': 30,
+            'dose_per_fraction_raw': '2.0',
+            'has_radiomodification': True
+        }, content_type='application/json')
+        self.assertEqual(res_create.status_code, 200)
+        protocol_id = res_create.json()['id']
+
+        # 2. Отримання списку через API
+        res_list = self.client.get(reverse('get_protocols_api'))
+        self.assertEqual(res_list.status_code, 200)
+        self.assertTrue(any(p['id'] == protocol_id for p in res_list.json()['protocols']))
+
+        # 3. Видалення протоколу
+        res_del = self.client.post(reverse('delete_protocol_api', kwargs={'pk': protocol_id}))
+        self.assertEqual(res_del.status_code, 200)
+        from patients.models import TreatmentProtocol
+        self.assertFalse(TreatmentProtocol.objects.filter(pk=protocol_id).exists())
+
+    def test_full_quick_update_all_fields(self):
+        p = Patient.objects.create(
+            last_name='Початковий',
+            first_name='Іван',
+            diagnosis='C50',
+            is_active=True
+        )
+
+        res = self.client.post(reverse('quick_update_patient_api', kwargs={'pk': p.pk}), data={
+            'last_name': 'Оновлений',
+            'first_name': 'Петро',
+            'middle_name': 'Сергійович',
+            'birth_date': '15.05.1975',
+            'gender': 'M',
+            'ambulatory_card_id': '228435/2026',
+            'has_radiomodification': True,
+            'diagnosis': 'C61 Рак простати',
+            'tnm_staging': 'T3N0M0',
+            'disease_stage': 'III',
+            'clinical_group': '2',
+            'prior_radiation': 'Не було',
+            'treatment_type': 'Радикальний',
+            'irradiation_zone': 'Малий таз',
+            'total_fractions': 20,
+            'dose_per_fraction': '2.5',
+            'ct_simulation_date': (self.today - timedelta(days=2)).strftime('%d.%m.%Y'),
+            'treatment_start_date': self.today.strftime('%d.%m.%Y'),
+            'hospitalization_status': 'inpatient',
+            'bed_owner': 'Олег',
+            'ward_number': '302',
+            'histology_number': '555/26',
+            'histology_date': (self.today - timedelta(days=5)).strftime('%d.%m.%Y'),
+            'histology_description': 'Аденокарцинома',
+        }, content_type='application/json')
+
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertTrue(data['success'])
+        self.assertEqual(data['full_name'], 'Оновлений Петро Сергійович')
+        self.assertEqual(data['total_fractions'], 20)
+        self.assertEqual(data['dose_per_fraction_display'], '2.5 Гр')
+        self.assertEqual(data['bed_owner'], 'Олег')
+
+        p.refresh_from_db()
+        self.assertEqual(p.last_name, 'Оновлений')
+        self.assertEqual(p.ambulatory_card_id, '228435/2026')
+        self.assertEqual(p.total_fractions, 20)
+
+    def test_auto_confirm_past_fractions_when_backdated(self):
+        from patients.forms import PatientForm
+        past_date = self.today - timedelta(days=4)
+        form = PatientForm(data={
+            'last_name': 'ЗаднійЧисло',
+            'first_name': 'Тест',
+            'gender': 'M',
+            'diagnosis': 'C50',
+            'treatment_start_date': past_date.strftime('%d.%m.%Y'),
+            'total_fractions': '10',
+            'dose_per_fraction': '2.0',
+            'auto_confirm_past_fractions': True,
+        })
+        self.assertTrue(form.is_valid(), form.errors)
+        saved_p = form.save()
+        
+        delivered_fractions = saved_p.fractions.filter(date__lte=self.today, status='delivered')
+        self.assertTrue(delivered_fractions.exists())
+        self.assertGreater(saved_p.received_dose, 0)
+
+    def test_pause_patient_treatment(self):
+        p = Patient.objects.create(
+            last_name='Пауза',
+            first_name='Іван',
+            diagnosis='C50',
+            treatment_start_date=self.today,
+            total_fractions=10,
+            dose_per_fraction=2.0,
+            is_active=True
+        )
+        from patients.services import generate_fractions_for_patient
+        generate_fractions_for_patient(p)
+
+        first_fraction_date = p.fractions.first().date
+        res = self.client.post(reverse('pause_patient_treatment_api', kwargs={'pk': p.pk}), data={
+            'days': 2,
+            'reason': 'Лейкопенія 2 ст.'
+        }, content_type='application/json')
+
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.json()['success'])
+        p.refresh_from_db()
+        new_first_fraction_date = p.fractions.first().date
+        self.assertGreater(new_first_fraction_date, first_fraction_date)
+
+    def test_machine_pause_fractions(self):
+        p1 = Patient.objects.create(
+            last_name='Апарат1',
+            first_name='Олег',
+            diagnosis='C50',
+            treatment_start_date=self.today,
+            total_fractions=5,
+            dose_per_fraction=2.0,
+            is_active=True
+        )
+        from patients.services import generate_fractions_for_patient
+        generate_fractions_for_patient(p1)
+
+        res = self.client.post(reverse('machine_pause_fractions_api'), data={
+            'days': 1,
+            'reason': 'Планове ТО прискорювача'
+        }, content_type='application/json')
+
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.json()['success'])
+
+    def test_bulk_confirm_blood_tests(self):
+        p1 = Patient.objects.create(last_name='Аналіз1', first_name='А', diagnosis='C50', is_active=True)
+        p2 = Patient.objects.create(last_name='Аналіз2', first_name='Б', diagnosis='C50', is_active=True)
+
+        res = self.client.post(reverse('bulk_confirm_blood_tests_api'), data={
+            'patient_ids': [p1.pk, p2.pk]
+        }, content_type='application/json')
+
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()['updated_count'], 2)
+
+        p1.refresh_from_db()
+        p2.refresh_from_db()
+        self.assertEqual(p1.last_blood_test_date, self.today)
+        self.assertEqual(p2.last_blood_test_date, self.today)
+
+
+
 
 
 

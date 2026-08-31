@@ -73,6 +73,13 @@ class PatientForm(forms.ModelForm):
                 else:
                     self.initial['dose_per_fraction'] = f"{self.instance.dose_per_fraction:g}"
 
+    auto_confirm_past_fractions = forms.BooleanField(
+        required=False,
+        initial=True,
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        help_text="Автоматично відмітити фракції до сьогодні як отримані (якщо дата початку лікування в минулому)"
+    )
+
     def clean_dose_per_fraction(self):
         val = self.cleaned_data.get('dose_per_fraction')
         if not val:
@@ -113,6 +120,16 @@ class PatientForm(forms.ModelForm):
         if commit:
             patient.save()
             self.save_m2m()
+            # Якщо дата старту в минулому і стоїть галочка автопідтвердження
+            if self.cleaned_data.get('auto_confirm_past_fractions') and patient.treatment_start_date:
+                from django.utils import timezone
+                from .services import generate_fractions_for_patient
+                if not patient.fractions.exists() and patient.total_fractions and patient.dose_per_fraction:
+                    generate_fractions_for_patient(patient)
+                today = timezone.localdate()
+                patient.fractions.filter(date__lte=today, status='scheduled').update(status='delivered')
+                patient.recalculate_received_dose()
+                patient.save()
         return patient
     
     class Meta:
@@ -327,8 +344,26 @@ class UserRegistrationForm(UserCreationForm):
 
 class UserLoginForm(forms.Form):
     username = forms.CharField(
-        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Логін'})
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ім\'я користувача'})
     )
     password = forms.CharField(
         widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'Пароль'})
-    ) 
+    )
+
+
+class TreatmentProtocolForm(forms.ModelForm):
+    class Meta:
+        from .models import TreatmentProtocol
+        model = TreatmentProtocol
+        fields = [
+            'name', 'irradiation_zone', 'treatment_type',
+            'total_fractions', 'dose_per_fraction_raw', 'has_radiomodification'
+        ]
+        widgets = {
+            'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'напр. Молочна залоза (15 фр × 2.67 Гр)'}),
+            'irradiation_zone': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'напр. Молочна залоза'}),
+            'treatment_type': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'напр. Ад\'ювантний'}),
+            'total_fractions': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': 'напр. 15'}),
+            'dose_per_fraction_raw': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'напр. 2.67 або 2.0/2.2'}),
+            'has_radiomodification': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }

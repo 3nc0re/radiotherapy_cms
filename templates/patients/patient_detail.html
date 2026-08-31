@@ -4,30 +4,50 @@
 <a href="{% url 'patient_list' %}" class="back-link">← До списку пацієнтів</a>
 <div class="patient-header">
     <div class="header-top">
-        <h1>{{ patient.full_name }}</h1>
-        <div class="header-actions">
+        <h1 id="patient-name-title">{{ patient.full_name }}</h1>
+        <div class="header-actions" style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button type="button" class="btn btn-secondary" onclick="copyForMIS()" style="background-color: #4a5568; color: white;" title="Скопіювати готову клінічну виписку для Helsi/eHealth">
+                <i class="fas fa-clipboard-check"></i> 📋 Для МІС
+            </button>
+            <button type="button" class="btn btn-warning" onclick="openPauseModal()" style="background-color: #ff9800; color: black; font-weight: 600;" title="Призупинити лікування на N днів (зсунути розклад)">
+                <i class="fas fa-pause-circle"></i> ⏸️ Пауза курсу
+            </button>
+            <button type="button" id="btn-toggle-quick-edit" class="btn btn-info" style="background-color: #17a2b8; color: white; font-weight: 600;">
+                <i class="fas fa-bolt"></i> ⚡ Редагувати картку
+            </button>
             {% if patient.display_stage != 'Архів' %}
             <form method="post" action="{% url 'archive_patient' patient.pk %}" style="display: inline;" onsubmit="return confirm('Ви впевнені, що хочете завершити лікування та перевести пацієнта в архів?');">
                 {% csrf_token %}
-                <button type="submit" class="btn btn-warning" style="color: black;"><i class="fas fa-archive"></i> В архів</button>
+                <button type="submit" class="btn btn-outline-secondary" style="border: 1px solid var(--border-color);"><i class="fas fa-archive"></i> В архів</button>
             </form>
             {% endif %}
-            <button type="button" id="btn-toggle-quick-edit" class="btn btn-info" style="background-color: #17a2b8; color: white;"><i class="fas fa-bolt"></i> ⚡ Швидке редагування</button>
-            <a href="{% url 'patient_update' patient.pk %}" class="btn btn-primary"><i class="fas fa-edit"></i> Редагувати</a>
-            <a href="{% url 'patient_delete' patient.pk %}" class="btn btn-danger"><i class="fas fa-trash-alt"></i> Видалити</a>
+            <a href="{% url 'patient_delete' patient.pk %}" class="btn btn-danger" style="padding: 6px 12px;"><i class="fas fa-trash-alt"></i></a>
         </div>
     </div>
-        <div style="display: flex; justify-content: space-between; font-size: 0.9em; margin-bottom: 5px; font-weight: bold; color: var(--primary-color);">
-            <span>Пройдено: <span id="current-fraction-val">{{ patient.current_fraction }}</span>/<span id="total-fractions-val">{{ patient.total_fractions }}</span> фр. (СОД/СВД: <span id="received-dose-val">{{ patient.received_dose_display }}</span>)</span>
-        </div>
-        <progress id="treatment-progress-bar" value="{{ patient.current_fraction }}" max="{{ patient.total_fractions|default:1 }}" style="width: 100%; height: 12px; border-radius: 6px;"></progress>
+
+    <!-- Таймер очікування ліжка для пацієнтів у черзі -->
+    {% if patient.hospitalization_status == 'queue' and patient.planned_admission_date %}
+    <div id="queue-waiting-alert" style="margin-top: 10px; margin-bottom: 12px; background-color: rgba(255, 152, 0, 0.12); border: 1px solid #ff9800; padding: 10px 15px; border-radius: 6px; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+        <span style="font-weight: 600; color: #d97706; display: flex; align-items: center; gap: 8px;">
+            <i class="fas fa-clock"></i> 🛏️ Перебуває в черзі на госпіталізацію: очікує звільнення ліжка до <strong>{{ patient.planned_admission_date|date:"d.m.Y" }}</strong>
+        </span>
+        <a href="{% url 'admit_patient' patient.pk %}" class="btn btn-sm btn-success" style="padding: 4px 12px; font-weight: 600;">
+            <i class="fas fa-bed"></i> Госпіталізувати зараз
+        </a>
+    </div>
+    {% endif %}
+
+    <div style="display: flex; justify-content: space-between; font-size: 0.9em; margin-bottom: 5px; font-weight: bold; color: var(--primary-color);">
+        <span>Пройдено: <span id="current-fraction-val">{{ patient.current_fraction }}</span>/<span id="total-fractions-val">{{ patient.total_fractions }}</span> фр. (СОД/СВД: <span id="received-dose-val">{{ patient.received_dose_display }}</span>)</span>
+    </div>
+    <progress id="treatment-progress-bar" value="{{ patient.current_fraction }}" max="{{ patient.total_fractions|default:1 }}" style="width: 100%; height: 12px; border-radius: 6px;"></progress>
 </div>
 
-<!-- Панель Інтерактивного Швидкого Редагування -->
-<div id="quick-edit-panel" class="card" style="display: none; margin-bottom: 25px; border: 2px solid var(--primary-color); background-color: var(--hover-bg); animation: fadeIn 0.3s ease; box-shadow: var(--shadow);">
+<!-- Панель Повного Інтерактивного Інлайн-Редагування прямо в картці -->
+<div id="quick-edit-panel" class="card" style="display: none; margin-bottom: 25px; border: 2px solid var(--primary-color); background-color: var(--hover-bg); animation: fadeIn 0.3s ease; box-shadow: var(--shadow); padding: 22px;">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">
         <h3 style="margin: 0; color: var(--primary-color); display: flex; align-items: center; gap: 8px;">
-            <i class="fas fa-bolt"></i> ⚡ Швидке редагування даних пацієнта
+            <i class="fas fa-bolt"></i> ⚡ Повне редагування даних пацієнта (на місці)
         </h3>
         <button type="button" id="btn-close-quick-edit" class="btn btn-secondary" style="padding: 4px 10px; font-size: 0.85rem;">
             <i class="fas fa-times"></i> Закрити
@@ -36,28 +56,117 @@
 
     <form id="quick-edit-form">
         {% csrf_token %}
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-bottom: 20px;">
+        
+        <!-- Секція 1: Особисті дані -->
+        <h4 style="margin: 0 0 10px 0; color: var(--text-color); font-size: 0.95rem; border-bottom: 1px dashed var(--border-color); padding-bottom: 4px;">
+            <i class="fas fa-user-circle"></i> Особисті дані
+        </h4>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 15px;">
             <div class="form-group">
-                <label for="quick-ct-simulation-date">📅 Дата КТ-симуляції</label>
-                <input type="text" id="quick-ct-simulation-date" class="form-control datepicker-input" value="{{ patient.ct_simulation_date|date:'d.m.Y'|default:'' }}" placeholder="дд.мм.рррр">
+                <label for="quick-last-name">Прізвище</label>
+                <input type="text" id="quick-last-name" class="form-control" value="{{ patient.last_name }}" required>
             </div>
-
             <div class="form-group">
-                <label for="quick-treatment-start-date">📅 Дата початку лікування</label>
-                <input type="text" id="quick-treatment-start-date" class="form-control datepicker-input" value="{{ patient.treatment_start_date|date:'d.m.Y'|default:'' }}" placeholder="дд.мм.рррр">
+                <label for="quick-first-name">Ім'я</label>
+                <input type="text" id="quick-first-name" class="form-control" value="{{ patient.first_name }}" required>
             </div>
+            <div class="form-group">
+                <label for="quick-middle-name">По батькові</label>
+                <input type="text" id="quick-middle-name" class="form-control" value="{{ patient.middle_name|default:'' }}">
+            </div>
+            <div class="form-group">
+                <label for="quick-birth-date">Дата народження</label>
+                <input type="text" id="quick-birth-date" class="form-control datepicker-input" value="{{ patient.birth_date|date:'d.m.Y'|default:'' }}" placeholder="дд.мм.рррр">
+            </div>
+            <div class="form-group">
+                <label for="quick-gender">Стать</label>
+                <select id="quick-gender" class="form-control">
+                    <option value="M" {% if patient.gender == 'M' %}selected{% endif %}>Чоловіча</option>
+                    <option value="F" {% if patient.gender == 'F' %}selected{% endif %}>Жіноча</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="quick-ambulatory-card-id">ID амбулаторної карти</label>
+                <input type="text" id="quick-ambulatory-card-id" class="form-control" value="{{ patient.ambulatory_card_id|default:'' }}" placeholder="напр. 228435/2025">
+            </div>
+            <div class="form-group" style="display: flex; align-items: center; gap: 8px; margin-top: auto; padding-bottom: 8px;">
+                <input type="checkbox" id="quick-has-radiomodification" {% if patient.has_radiomodification %}checked{% endif %} style="width: 18px; height: 18px; cursor: pointer;">
+                <label for="quick-has-radiomodification" style="margin: 0; cursor: pointer; font-weight: 600; color: #d9534f;">⚠️ Радіомодифікація</label>
+            </div>
+        </div>
 
+        <!-- Секція 2: Діагноз та стадія -->
+        <h4 style="margin: 15px 0 10px 0; color: var(--text-color); font-size: 0.95rem; border-bottom: 1px dashed var(--border-color); padding-bottom: 4px;">
+            <i class="fas fa-stethoscope"></i> Діагноз та стадія
+        </h4>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 15px;">
+            <div class="form-group" style="grid-column: 1 / -1;">
+                <label for="quick-diagnosis">Діагноз (МКХ / Текст)</label>
+                <input type="text" id="quick-diagnosis" class="form-control" value="{{ patient.diagnosis }}" required>
+            </div>
+            <div class="form-group">
+                <label for="quick-tnm-staging">TNM стадіювання</label>
+                <input type="text" id="quick-tnm-staging" class="form-control" value="{{ patient.tnm_staging|default:'' }}" placeholder="напр. T2N1M0">
+            </div>
+            <div class="form-group">
+                <label for="quick-disease-stage">Стадія</label>
+                <input type="text" id="quick-disease-stage" class="form-control" value="{{ patient.disease_stage|default:'' }}" placeholder="напр. IIB">
+            </div>
+            <div class="form-group">
+                <label for="quick-clinical-group">Клінічна група</label>
+                <input type="text" id="quick-clinical-group" class="form-control" value="{{ patient.clinical_group|default:'' }}" placeholder="напр. 2">
+            </div>
+            <div class="form-group">
+                <label for="quick-prior-radiation">Попереднє опромінення</label>
+                <input type="text" id="quick-prior-radiation" class="form-control" value="{{ patient.prior_radiation|default:'' }}" placeholder="напр. Не проводилось">
+            </div>
+        </div>
+
+        <!-- Секція 3: Параметри лікування та клінічний шаблон -->
+        <h4 style="margin: 15px 0 10px 0; color: var(--text-color); font-size: 0.95rem; border-bottom: 1px dashed var(--border-color); padding-bottom: 4px;">
+            <i class="fas fa-radiation"></i> Параметри лікування
+        </h4>
+        
+        <div class="form-group" style="margin-bottom: 15px; background: var(--input-bg); padding: 10px; border-radius: 6px; border: 1px solid var(--border-color);">
+            <label for="quick-protocol-select" style="font-weight: 600; color: var(--primary-color);">🎯 1-Клік: Застосувати клінічний шаблон (протокол)</label>
+            <select id="quick-protocol-select" class="form-control" style="font-weight: 500;">
+                <option value="">-- Оберіть шаблон для автозаповнення параметрів --</option>
+            </select>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 15px;">
+            <div class="form-group">
+                <label for="quick-treatment-type">Тип лікування</label>
+                <input type="text" id="quick-treatment-type" class="form-control" value="{{ patient.treatment_type|default:'' }}" placeholder="напр. Радикальний">
+            </div>
+            <div class="form-group">
+                <label for="quick-irradiation-zone">Зона опромінення</label>
+                <input type="text" id="quick-irradiation-zone" class="form-control" value="{{ patient.irradiation_zone|default:'' }}" placeholder="напр. Малий таз">
+            </div>
             <div class="form-group">
                 <label for="quick-total-fractions">⚛️ Кількість фракцій</label>
                 <input type="number" id="quick-total-fractions" class="form-control" value="{{ patient.total_fractions|default:'' }}" placeholder="напр. 25">
             </div>
-
             <div class="form-group">
                 <label for="quick-dose-per-fraction">⚛️ РОД (Гр)</label>
                 <input type="text" id="quick-dose-per-fraction" class="form-control" value="{{ patient.dose_per_fraction_raw|default:patient.dose_per_fraction|default:'' }}" placeholder="напр. 2.0 або 2.66/3.0">
                 <small class="form-text text-muted" style="font-size: 0.75rem;">Підтримує 8,0 або 2,66/3,0 (SIB)</small>
             </div>
+            <div class="form-group">
+                <label for="quick-ct-simulation-date">📅 Дата КТ-симуляції</label>
+                <input type="text" id="quick-ct-simulation-date" class="form-control datepicker-input" value="{{ patient.ct_simulation_date|date:'d.m.Y'|default:'' }}" placeholder="дд.мм.рррр">
+            </div>
+            <div class="form-group">
+                <label for="quick-treatment-start-date">📅 Дата початку лікування</label>
+                <input type="text" id="quick-treatment-start-date" class="form-control datepicker-input" value="{{ patient.treatment_start_date|date:'d.m.Y'|default:'' }}" placeholder="дд.мм.рррр">
+            </div>
+        </div>
 
+        <!-- Секція 4: Госпіталізація та стаціонар -->
+        <h4 style="margin: 15px 0 10px 0; color: var(--text-color); font-size: 0.95rem; border-bottom: 1px dashed var(--border-color); padding-bottom: 4px;">
+            <i class="fas fa-bed"></i> Статус перебування
+        </h4>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 15px;">
             <div class="form-group">
                 <label for="quick-hospitalization-status">🏥 Статус госпіталізації</label>
                 <select id="quick-hospitalization-status" class="form-control">
@@ -66,7 +175,6 @@
                     <option value="queue" {% if patient.hospitalization_status == 'queue' %}selected{% endif %}>Черга на госпіталізацію</option>
                 </select>
             </div>
-
             <div class="form-group" id="quick-group-bed-owner" style="{% if patient.hospitalization_status != 'inpatient' %}display: none;{% endif %}">
                 <label for="quick-bed-owner">🛌 Власник ліжка</label>
                 <select id="quick-bed-owner" class="form-control">
@@ -76,44 +184,91 @@
                     <option value="Дмитро" {% if patient.bed_owner == 'Дмитро' %}selected{% endif %}>Дмитро</option>
                 </select>
             </div>
-
             <div class="form-group" id="quick-group-ward-number" style="{% if patient.hospitalization_status != 'inpatient' %}display: none;{% endif %}">
                 <label for="quick-ward-number">🚪 Номер палати</label>
                 <input type="text" id="quick-ward-number" class="form-control" value="{{ patient.ward_number|default:'' }}" placeholder="напр. 402">
             </div>
-
             <div class="form-group" id="quick-group-planned-admission" style="{% if patient.hospitalization_status != 'queue' %}display: none;{% endif %}">
                 <label for="quick-planned-admission-date">📅 Планова дата госпіталізації</label>
                 <input type="text" id="quick-planned-admission-date" class="form-control datepicker-input" value="{{ patient.planned_admission_date|date:'d.m.Y'|default:'' }}" placeholder="дд.мм.рррр">
             </div>
+        </div>
 
+        <!-- Секція 5: Гістологія -->
+        <h4 style="margin: 15px 0 10px 0; color: var(--text-color); font-size: 0.95rem; border-bottom: 1px dashed var(--border-color); padding-bottom: 4px;">
+            <i class="fas fa-microscope"></i> Гістологія
+        </h4>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 15px;">
             <div class="form-group">
-                <label for="quick-irradiation-zone">🎯 Зона опромінення</label>
-                <input type="text" id="quick-irradiation-zone" class="form-control" value="{{ patient.irradiation_zone|default:'' }}" placeholder="напр. Малий таз">
+                <label for="quick-histology-number">Номер гістології</label>
+                <input type="text" id="quick-histology-number" class="form-control" value="{{ patient.histology_number|default:'' }}" placeholder="напр. 1234/26">
+            </div>
+            <div class="form-group">
+                <label for="quick-histology-date">Дата гістології</label>
+                <input type="text" id="quick-histology-date" class="form-control datepicker-input" value="{{ patient.histology_date|date:'d.m.Y'|default:'' }}" placeholder="дд.мм.рррр">
+            </div>
+            <div class="form-group" style="grid-column: 1 / -1;">
+                <label for="quick-histology-description">Опис гістології</label>
+                <input type="text" id="quick-histology-description" class="form-control" value="{{ patient.histology_description|default:'' }}" placeholder="напр. Інфільтруюча протокова карцинома G2">
             </div>
         </div>
 
-        <div style="display: flex; justify-content: flex-end; gap: 10px;">
-            <button type="button" id="btn-save-quick-edit" class="btn btn-success" style="padding: 10px 25px; font-weight: 600;">
+        <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; border-top: 1px solid var(--border-color); padding-top: 15px;">
+            <button type="button" class="btn btn-secondary" onclick="document.getElementById('quick-edit-panel').style.display='none'">Скасувати</button>
+            <button type="button" id="btn-save-quick-edit" class="btn btn-success" style="padding: 10px 30px; font-weight: 700;">
                 <i class="fas fa-save"></i> 💾 Зберегти зміни
             </button>
         </div>
     </form>
 </div>
 
+<!-- Модальне вікно паузи лікування -->
+<div id="pauseTreatmentModal" class="modal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); backdrop-filter: blur(2px);">
+    <div style="background: var(--card-bg); max-width: 450px; margin: 10% auto; padding: 22px; border-radius: 10px; box-shadow: 0 10px 25px rgba(0,0,0,0.4); color: var(--text-color); animation: fadeIn 0.25s ease;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-bottom: 15px;">
+            <h3 style="margin: 0; color: #ff9800; display: flex; align-items: center; gap: 8px;">
+                <i class="fas fa-pause-circle"></i> Призупинити курс лікування
+            </h3>
+            <button type="button" class="btn btn-secondary" onclick="closePauseModal()" style="padding: 2px 8px; font-size: 0.85rem;">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <p style="font-size: 0.95rem; margin-bottom: 15px;">
+            Пацієнт: <strong style="color: var(--primary-color);">{{ patient.full_name }}</strong>
+        </p>
+
+        <form id="pauseTreatmentForm">
+            <div class="form-group" style="margin-bottom: 15px;">
+                <label for="pauseDaysInput" style="font-weight: 600; font-size: 0.9rem;">⏸️ Кількість робочих днів паузи:</label>
+                <input type="number" id="pauseDaysInput" class="form-control" value="1" min="1" max="30" required>
+                <small style="color: var(--text-light-color); font-size: 0.78rem;">Усі майбутні фракції та дата виписки зсунуться на вказану кількість робочих днів.</small>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 20px;">
+                <label for="pauseReasonInput" style="font-weight: 600; font-size: 0.9rem;">📝 Причина перерви:</label>
+                <input type="text" id="pauseReasonInput" class="form-control" value="Пауза за клінічними показами" placeholder="напр. Лейкопенія / свята">
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button type="button" class="btn btn-secondary" onclick="closePauseModal()">Скасувати</button>
+                <button type="button" id="btnSubmitPause" class="btn btn-warning" onclick="submitPauseTreatment()" style="color: black; font-weight: 700; padding: 8px 20px;">
+                    ⏸️ Застосувати паузу
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <div class="details-grid">
     <!-- Особиста інформація -->
     <div class="card patient-info">
         <h3><i class="fas fa-user-circle"></i> Особиста інформація</h3>
-        {% if patient.ambulatory_card_id %}
-        <p><strong>ID амбулаторної картки:</strong> <span class="badge badge-info">{{ patient.ambulatory_card_id }}</span></p>
-        {% endif %}
-        <p><strong>Дата народження:</strong> {{ patient.birth_date|date:"d.m.Y"|default:"—" }}</p>
-        <p><strong>Стать:</strong> {{ patient.get_gender_display|default:"—" }}</p>
+        <p><strong>ID амбулаторної картки:</strong> <span class="badge badge-info" id="val-ambulatory-card-id">{{ patient.ambulatory_card_id|default:"—" }}</span></p>
+        <p><strong>Дата народження:</strong> <span id="val-birth-date">{{ patient.birth_date|date:"d.m.Y"|default:"—" }}</span></p>
+        <p><strong>Стать:</strong> <span id="val-gender">{{ patient.get_gender_display|default:"—" }}</span></p>
         <p><strong>Поточний етап:</strong> <span class="badge" id="val-display-stage">{{ patient.display_stage|default:"—" }}</span></p>
-        {% if patient.has_radiomodification %}
-        <p><strong>Радіомодифікація:</strong> <span class="badge" style="background-color: #d9534f; color: white;">Так</span></p>
-        {% endif %}
+        <p id="row-has-radiomodification" style="{% if not patient.has_radiomodification %}display: none;{% endif %}"><strong>Радіомодифікація:</strong> <span class="badge" style="background-color: #d9534f; color: white;">Так</span></p>
         <p><strong>Статус госпіталізації:</strong> <span id="val-hospitalization-status">{{ patient.get_hospitalization_status_display|default:"—" }}</span></p>
         <p id="row-planned-admission-date" style="{% if patient.hospitalization_status != 'queue' %}display: none;{% endif %}"><strong>Планова дата госпіталізації:</strong> <span id="val-planned-admission-date">{{ patient.planned_admission_date|date:"d.m.Y"|default:"—" }}</span></p>
         <p id="row-bed-owner" style="{% if patient.hospitalization_status != 'inpatient' %}display: none;{% endif %}"><strong>Власник ліжка:</strong> <span id="val-bed-owner">{{ patient.bed_owner|default:"—" }}</span></p>
@@ -123,11 +278,11 @@
     <!-- Діагноз та стадіювання -->
     <div class="card diagnosis-info">
         <h3><i class="fas fa-stethoscope"></i> Діагноз та стадіювання</h3>
-        <p><strong>Діагноз:</strong> {{ patient.diagnosis|default:"—" }}</p>
-        <p><strong>TNM стадіювання:</strong> {{ patient.tnm_staging|default:"—" }}</p>
-        <p><strong>Стадія захворювання:</strong> {{ patient.disease_stage|default:"—" }}</p>
-        <p><strong>Клінічна група:</strong> {{ patient.clinical_group|default:"—" }}</p>
-        <p><strong>Попереднє опромінення:</strong> {{ patient.prior_radiation|default:"—" }}</p>
+        <p><strong>Діагноз:</strong> <span id="val-diagnosis">{{ patient.diagnosis|default:"—" }}</span></p>
+        <p><strong>TNM стадіювання:</strong> <span id="val-tnm-staging">{{ patient.tnm_staging|default:"—" }}</span></p>
+        <p><strong>Стадія захворювання:</strong> <span id="val-disease-stage">{{ patient.disease_stage|default:"—" }}</span></p>
+        <p><strong>Клінічна група:</strong> <span id="val-clinical-group">{{ patient.clinical_group|default:"—" }}</span></p>
+        <p><strong>Попереднє опромінення:</strong> <span id="val-prior-radiation">{{ patient.prior_radiation|default:"—" }}</span></p>
         {% if patient.raw_diagnosis %}
         <div style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border-color);">
             <strong style="display: block; margin-bottom: 5px; font-size: 0.9em; color: var(--text-light-color);">Вставлений текст діагнозу:</strong>
@@ -139,7 +294,7 @@
     <!-- Інформація про лікування -->
     <div class="card treatment-info">
         <h3><i class="fas fa-radiation"></i> Інформація про лікування</h3>
-        <p><strong>Тип лікування:</strong> {{ patient.treatment_type|default:"—" }}</p>
+        <p><strong>Тип лікування:</strong> <span id="val-treatment-type">{{ patient.treatment_type|default:"—" }}</span></p>
         <p><strong>Зона опромінення:</strong> <span id="val-irradiation-zone">{{ patient.irradiation_zone|default:"—" }}</span></p>
         <p><strong>Загальна кількість фракцій:</strong> <span id="val-total-fractions">{{ patient.total_fractions|default:"—" }}</span></p>
         <p><strong>РОД:</strong> <span id="val-dose-per-fraction">{{ patient.dose_per_fraction_display }}</span></p>
@@ -178,12 +333,10 @@
     <!-- Гістологія -->
     <div class="card histology-info">
         <h3><i class="fas fa-microscope"></i> Гістологія</h3>
-        <p><strong>Номер гістології:</strong> {{ patient.histology_number|default:"—" }}</p>
-        <p><strong>Дата гістології:</strong> {{ patient.histology_date|date:"d.m.Y"|default:"—" }}</p>
-        {% if patient.histology_description %}
+        <p><strong>Номер гістології:</strong> <span id="val-histology-number">{{ patient.histology_number|default:"—" }}</span></p>
+        <p><strong>Дата гістології:</strong> <span id="val-histology-date">{{ patient.histology_date|date:"d.m.Y"|default:"—" }}</span></p>
         <p><strong>Опис гістології:</strong></p>
-        <div class="histology-description">{{ patient.histology_description }}</div>
-        {% endif %}
+        <div class="histology-description" id="val-histology-description">{{ patient.histology_description|default:"—" }}</div>
     </div>
 
     <!-- Сповіщення -->
@@ -1794,21 +1947,70 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // Завантаження протоколів у селект швидкого редагування
+    const quickProtocolSelect = document.getElementById('quick-protocol-select');
+    let quickProtocolList = [];
+    if (quickProtocolSelect) {
+        fetch('/api/protocols/')
+            .then(res => res.json())
+            .then(data => {
+                if (data.success && data.protocols) {
+                    quickProtocolList = data.protocols;
+                    data.protocols.forEach(p => {
+                        const opt = document.createElement('option');
+                        opt.value = p.id;
+                        opt.textContent = `${p.name} (${p.total_fractions} фр. × ${p.dose_per_fraction_raw} Гр)`;
+                        quickProtocolSelect.appendChild(opt);
+                    });
+                }
+            })
+            .catch(err => console.error(err));
+
+        quickProtocolSelect.addEventListener('change', function() {
+            const val = this.value;
+            if (!val) return;
+            const p = quickProtocolList.find(item => item.id == val);
+            if (!p) return;
+
+            if (p.total_fractions) document.getElementById('quick-total-fractions').value = p.total_fractions;
+            if (p.dose_per_fraction_raw) document.getElementById('quick-dose-per-fraction').value = p.dose_per_fraction_raw;
+            if (p.irradiation_zone) document.getElementById('quick-irradiation-zone').value = p.irradiation_zone;
+            if (p.treatment_type) document.getElementById('quick-treatment-type').value = p.treatment_type;
+            if (p.has_radiomodification !== undefined) document.getElementById('quick-has-radiomodification').checked = p.has_radiomodification;
+        });
+    }
+
     if (btnSaveQuickEdit) {
         btnSaveQuickEdit.addEventListener('click', function() {
             btnSaveQuickEdit.disabled = true;
             btnSaveQuickEdit.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Збереження...`;
 
             const payload = {
-                ct_simulation_date: document.getElementById('quick-ct-simulation-date')?.value || '',
-                treatment_start_date: document.getElementById('quick-treatment-start-date')?.value || '',
+                last_name: document.getElementById('quick-last-name')?.value || '',
+                first_name: document.getElementById('quick-first-name')?.value || '',
+                middle_name: document.getElementById('quick-middle-name')?.value || '',
+                birth_date: document.getElementById('quick-birth-date')?.value || '',
+                gender: document.getElementById('quick-gender')?.value || '',
+                ambulatory_card_id: document.getElementById('quick-ambulatory-card-id')?.value || '',
+                has_radiomodification: document.getElementById('quick-has-radiomodification')?.checked || false,
+                diagnosis: document.getElementById('quick-diagnosis')?.value || '',
+                tnm_staging: document.getElementById('quick-tnm-staging')?.value || '',
+                disease_stage: document.getElementById('quick-disease-stage')?.value || '',
+                clinical_group: document.getElementById('quick-clinical-group')?.value || '',
+                prior_radiation: document.getElementById('quick-prior-radiation')?.value || '',
+                treatment_type: document.getElementById('quick-treatment-type')?.value || '',
+                irradiation_zone: document.getElementById('quick-irradiation-zone')?.value || '',
                 total_fractions: document.getElementById('quick-total-fractions')?.value || '',
                 dose_per_fraction: document.getElementById('quick-dose-per-fraction')?.value || '',
+                ct_simulation_date: document.getElementById('quick-ct-simulation-date')?.value || '',
+                treatment_start_date: document.getElementById('quick-treatment-start-date')?.value || '',
                 hospitalization_status: document.getElementById('quick-hospitalization-status')?.value || '',
                 bed_owner: document.getElementById('quick-bed-owner')?.value || '',
                 ward_number: document.getElementById('quick-ward-number')?.value || '',
                 planned_admission_date: document.getElementById('quick-planned-admission-date')?.value || '',
-                irradiation_zone: document.getElementById('quick-irradiation-zone')?.value || '',
+                histology_number: document.getElementById('quick-histology-number')?.value || '',
+                histology_date: document.getElementById('quick-histology-date')?.value || '',
+                histology_description: document.getElementById('quick-histology-description')?.value || '',
             };
 
             fetch("{% url 'quick_update_patient_api' patient.pk %}", {
@@ -1825,9 +2027,21 @@ document.addEventListener('DOMContentLoaded', function() {
                 btnSaveQuickEdit.innerHTML = `<i class="fas fa-save"></i> 💾 Зберегти зміни`;
 
                 if (data.success) {
+                    if (document.getElementById('patient-name-title')) document.getElementById('patient-name-title').textContent = data.full_name;
+                    if (document.getElementById('val-ambulatory-card-id')) document.getElementById('val-ambulatory-card-id').textContent = data.ambulatory_card_id;
+                    if (document.getElementById('val-birth-date')) document.getElementById('val-birth-date').textContent = data.birth_date;
+                    if (document.getElementById('val-gender')) document.getElementById('val-gender').textContent = data.gender_display;
+                    if (document.getElementById('val-diagnosis')) document.getElementById('val-diagnosis').textContent = data.diagnosis;
+                    if (document.getElementById('val-tnm-staging')) document.getElementById('val-tnm-staging').textContent = data.tnm_staging;
+                    if (document.getElementById('val-disease-stage')) document.getElementById('val-disease-stage').textContent = data.disease_stage;
+                    if (document.getElementById('val-clinical-group')) document.getElementById('val-clinical-group').textContent = data.clinical_group;
+                    if (document.getElementById('val-prior-radiation')) document.getElementById('val-prior-radiation').textContent = data.prior_radiation;
+                    if (document.getElementById('val-treatment-type')) document.getElementById('val-treatment-type').textContent = data.treatment_type;
+                    if (document.getElementById('val-irradiation-zone')) document.getElementById('val-irradiation-zone').textContent = data.irradiation_zone;
                     if (document.getElementById('val-ct-simulation-date')) document.getElementById('val-ct-simulation-date').textContent = data.ct_simulation_date;
                     if (document.getElementById('val-treatment-start-date')) document.getElementById('val-treatment-start-date').textContent = data.treatment_start_date;
                     if (document.getElementById('val-total-fractions')) document.getElementById('val-total-fractions').textContent = data.total_fractions;
+                    if (document.getElementById('total-fractions-val')) document.getElementById('total-fractions-val').textContent = data.total_fractions;
                     if (document.getElementById('val-dose-per-fraction')) document.getElementById('val-dose-per-fraction').textContent = data.dose_per_fraction_display;
                     if (document.getElementById('treatment-sod-val')) document.getElementById('treatment-sod-val').textContent = data.received_dose_display;
                     if (document.getElementById('received-dose-val')) document.getElementById('received-dose-val').textContent = data.received_dose_display;
@@ -1839,9 +2053,13 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (document.getElementById('val-bed-owner')) document.getElementById('val-bed-owner').textContent = data.bed_owner;
                     if (document.getElementById('val-ward-number')) document.getElementById('val-ward-number').textContent = data.ward_number;
                     if (document.getElementById('val-planned-admission-date')) document.getElementById('val-planned-admission-date').textContent = data.planned_admission_date;
-                    if (document.getElementById('val-irradiation-zone')) document.getElementById('val-irradiation-zone').textContent = data.irradiation_zone;
-                    if (document.getElementById('total-fractions-val')) document.getElementById('total-fractions-val').textContent = data.total_fractions;
-                    
+                    if (document.getElementById('val-histology-number')) document.getElementById('val-histology-number').textContent = data.histology_number;
+                    if (document.getElementById('val-histology-date')) document.getElementById('val-histology-date').textContent = data.histology_date;
+                    if (document.getElementById('val-histology-description')) document.getElementById('val-histology-description').textContent = data.histology_description;
+
+                    const rowRadiomod = document.getElementById('row-has-radiomodification');
+                    if (rowRadiomod) rowRadiomod.style.display = data.has_radiomodification ? 'block' : 'none';
+
                     const progressBar = document.getElementById('treatment-progress-bar');
                     if (progressBar) progressBar.max = data.total_fractions || 1;
 
@@ -1864,5 +2082,95 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+// Скопіювати текст виписки для МІС
+function copyForMIS() {
+    const pName = document.getElementById('patient-name-title')?.textContent || '{{ patient.full_name|escapejs }}';
+    const pBirth = document.getElementById('val-birth-date')?.textContent || '{{ patient.birth_date|date:"d.m.Y"|default:"" }}';
+    const pDiag = document.getElementById('val-diagnosis')?.textContent || '{{ patient.diagnosis|escapejs }}';
+    const pTnm = document.getElementById('val-tnm-staging')?.textContent || '{{ patient.tnm_staging|default:""|escapejs }}';
+    const pZone = document.getElementById('val-irradiation-zone')?.textContent || '{{ patient.irradiation_zone|default:""|escapejs }}';
+    const pDose = document.getElementById('val-dose-per-fraction')?.textContent || '{{ patient.dose_per_fraction_display }}';
+    const pFractions = (document.getElementById('current-fraction-val')?.textContent || '{{ patient.current_fraction }}') + '/' + (document.getElementById('total-fractions-val')?.textContent || '{{ patient.total_fractions }}');
+    const pSod = document.getElementById('received-dose-val')?.textContent || '{{ patient.received_dose_display }}';
+    const pStart = document.getElementById('val-treatment-start-date')?.textContent || '{{ patient.treatment_start_date|date:"d.m.Y"|default:"" }}';
+    const pDischarge = document.getElementById('val-discharge-date')?.textContent || '{{ patient.get_actual_discharge_date|date:"d.m.Y"|default:"" }}';
+
+    let text = `Пацієнт: ${pName}${pBirth && pBirth !== '—' ? ' (' + pBirth + ' р.н.)' : ''}\n`;
+    text += `Діагноз: ${pDiag}${pTnm && pTnm !== '—' ? ' ' + pTnm : ''}\n`;
+    text += `Проведено курс дистанційної променевої терапії${pZone && pZone !== '—' ? ' на ділянку: ' + pZone : ''}.\n`;
+    text += `Режим фракціонування: РОД ${pDose} Гр, проведено ${pFractions} фракцій, сумарна вогнищева доза (СОД) ${pSod}.\n`;
+    text += `Період лікування: ${pStart} — ${pDischarge}.\n`;
+    text += `Курс лікування завершено в повному обсязі, без променевих ускладнень. Загальний стан задовільний.`;
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+            if (typeof showToast === 'function') {
+                showToast('📋 Готовий текст для МІС скопійовано в буфер обміну!', 'success');
+            } else {
+                alert('📋 Готовий текст для МІС скопійовано!');
+            }
+        }).catch(err => alert('Помилка: ' + err));
+    } else {
+        alert(text);
+    }
+}
+
+// Модальне вікно паузи лікування
+function openPauseModal() {
+    document.getElementById('pauseDaysInput').value = 1;
+    document.getElementById('pauseReasonInput').value = 'Пауза за клінічними показами';
+    document.getElementById('pauseTreatmentModal').style.display = 'block';
+}
+
+function closePauseModal() {
+    document.getElementById('pauseTreatmentModal').style.display = 'none';
+}
+
+function submitPauseTreatment() {
+    const days = parseInt(document.getElementById('pauseDaysInput').value, 10);
+    const reason = document.getElementById('pauseReasonInput').value.trim();
+    const btn = document.getElementById('btnSubmitPause');
+
+    if (!days || days < 1) {
+        alert('Вкажіть коректну кількість днів паузи (від 1)!');
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Зсув...`;
+
+    fetch("{% url 'pause_patient_treatment_api' patient.pk %}", {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({ days: days, reason: reason })
+    })
+    .then(res => res.json())
+    .then(data => {
+        btn.disabled = false;
+        btn.innerHTML = `⏸️ Застосувати паузу`;
+        if (data.success) {
+            closePauseModal();
+            if (document.getElementById('val-discharge-date')) document.getElementById('val-discharge-date').textContent = data.discharge_date;
+            if (typeof showToast === 'function') {
+                showToast(`✅ ${data.message}`, 'success', 5000);
+            } else {
+                alert(`✅ ${data.message}`);
+            }
+            setTimeout(() => location.reload(), 1200);
+        } else {
+            alert('Помилка: ' + (data.error || 'Не вдалося зсунути лікування'));
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        btn.disabled = false;
+        btn.innerHTML = `⏸️ Застосувати паузу`;
+        alert('Помилка з\'єднання.');
+    });
+}
 </script>
 {% endblock %}
