@@ -80,10 +80,10 @@
         </div>
 
         <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 15px; border-top: 1px solid var(--border-color); padding-top: 12px;">
-            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="confirmNoMVTN({{ item.patient.id }}, '{{ item.patient.full_name|escapejs }}')" style="font-size: 0.85rem; padding: 6px 12px; border: 1px solid var(--border-color);">
+            <button type="button" class="btn btn-sm btn-secondary" onclick="confirmNoMVTN({{ item.patient.id }}, '{{ item.patient.full_name|escapejs }}')" style="font-size: 0.85rem; padding: 6px 14px; background-color: #4a5568; border-color: #2d3748; color: #ffffff; font-weight: 600;">
                 ❌ Не потрібен
             </button>
-            <button type="button" class="btn btn-sm btn-warning" onclick="openMVTNModal({{ item.patient.id }}, '{{ item.patient.full_name|escapejs }}', '{{ item.default_start_date }}')" style="font-size: 0.85rem; padding: 6px 14px; color: black; font-weight: 700;">
+            <button type="button" class="btn btn-sm btn-warning" onclick="openMVTNModal({{ item.patient.id }}, '{{ item.patient.full_name|escapejs }}', '{{ item.default_start_date }}')" style="font-size: 0.85rem; padding: 6px 16px; background-color: #d97706; border-color: #b45309; color: #ffffff; font-weight: 700;">
                 📝 {% if item.type == 'new_staging' %}Вказати МВТН{% else %}Продовжити МВТН{% endif %}
             </button>
         </div>

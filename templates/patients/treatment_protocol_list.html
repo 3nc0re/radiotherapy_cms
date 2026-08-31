@@ -34,10 +34,10 @@
         </div>
 
         <div style="display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--border-color); padding-top: 12px;">
-            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="editProtocol({{ protocol.id }}, '{{ protocol.name|escapejs }}', '{{ protocol.irradiation_zone|default:''|escapejs }}', '{{ protocol.treatment_type|default:''|escapejs }}', {{ protocol.total_fractions }}, '{{ protocol.dose_per_fraction_raw|escapejs }}', {{ protocol.has_radiomodification|yesno:'true,false' }})" style="padding: 5px 12px;">
+            <button type="button" class="btn btn-sm btn-primary" onclick="editProtocol({{ protocol.id }}, '{{ protocol.name|escapejs }}', '{{ protocol.irradiation_zone|default:''|escapejs }}', '{{ protocol.treatment_type|default:''|escapejs }}', {{ protocol.total_fractions }}, '{{ protocol.dose_per_fraction_raw|escapejs }}', {{ protocol.has_radiomodification|yesno:'true,false' }})" style="padding: 6px 14px; font-weight: 600; background-color: #3182ce; border-color: #2b6cb0; color: #ffffff;">
                 <i class="fas fa-edit"></i> Редагувати
             </button>
-            <button type="button" class="btn btn-sm btn-danger" onclick="deleteProtocol({{ protocol.id }}, '{{ protocol.name|escapejs }}')" style="padding: 5px 12px;">
+            <button type="button" class="btn btn-sm btn-danger" onclick="deleteProtocol({{ protocol.id }}, '{{ protocol.name|escapejs }}')" style="padding: 6px 14px; font-weight: 600; background-color: #e53e3e; border-color: #c53030; color: #ffffff;">
                 <i class="fas fa-trash"></i> Видалити
             </button>
         </div>
