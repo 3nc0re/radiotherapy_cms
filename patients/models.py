@@ -351,11 +351,19 @@ class Patient(models.Model):
 
     @property
     def planned_total_dose_display(self):
-        """Повертає форматовану планову СОД/СВД (наприклад '42.56/48.0 Гр' або '50.0 Гр')"""
+        """Повертає форматовану планову СОД/СВД (наприклад '42.56/48.0 Гр' або '50.0 Гр' або '52.56 Гр')"""
         tf = self.total_fractions or 0
         if tf <= 0:
             return "—"
             
+        fractions = list(self.fractions.all())
+        if fractions and any(f.dose is not None for f in fractions):
+            total_planned = sum(f.dose for f in fractions if f.dose is not None)
+            if self.is_sib and self.dose_per_fraction_secondary is not None:
+                tot2 = round(tf * self.dose_per_fraction_secondary, 2)
+                return f"{round(total_planned, 2):g}/{tot2:g} Гр"
+            return f"{round(total_planned, 2):g} Гр"
+
         if self.is_sib and self.dose_per_fraction is not None and self.dose_per_fraction_secondary is not None:
             tot1 = round(tf * self.dose_per_fraction, 2)
             tot2 = round(tf * self.dose_per_fraction_secondary, 2)
@@ -381,10 +389,15 @@ class Patient(models.Model):
 
     def recalculate_received_dose(self):
         """Перераховує отриману дозу на основі виконаних фракцій"""
-        delivered_count = self.fractions.filter(status='delivered').count()
-        dose1 = self.dose_per_fraction or 0.0
-        self.received_dose = round(delivered_count * dose1, 2)
-        
+        delivered = self.fractions.filter(status='delivered')
+        if delivered.exists():
+            total_dose = sum(f.dose for f in delivered if f.dose is not None)
+            self.received_dose = round(total_dose, 2)
+            delivered_count = delivered.count()
+        else:
+            delivered_count = 0
+            self.received_dose = 0.0
+            
         if self.is_sib and self.dose_per_fraction_secondary is not None:
             dose2 = self.dose_per_fraction_secondary or 0.0
             self.received_dose_secondary = round(delivered_count * dose2, 2)

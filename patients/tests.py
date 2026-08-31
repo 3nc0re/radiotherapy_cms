@@ -2600,6 +2600,56 @@ class ClinicalWorkflowAuditTests(TestCase):
         self.assertEqual(p1.last_blood_test_date, self.today)
         self.assertEqual(p2.last_blood_test_date, self.today)
 
+    def test_add_boost_phase_api(self):
+        # Пацієнтка з 16 фракціями по 2.66 Гр (СОД 42.56 Гр)
+        p = Patient.objects.create(
+            last_name='Ковальчук',
+            first_name='Олена',
+            diagnosis='C50.9 Рак молочної залози',
+            treatment_start_date=self.today,
+            total_fractions=16,
+            dose_per_fraction=2.66,
+            is_active=True
+        )
+        from patients.services import generate_fractions_for_patient
+        generate_fractions_for_patient(p)
+
+        self.assertEqual(p.fractions.count(), 16)
+        initial_discharge = p.discharge_date
+
+        # Додаємо буст 5 фракцій по 2.0 Гр (10.0 Гр)
+        res = self.client.post(reverse('add_boost_phase_api', kwargs={'pk': p.pk}), data={
+            'boost_fractions': 5,
+            'boost_dose': '2.0',
+            'boost_zone': 'Ложе пухлини (буст)'
+        }, content_type='application/json')
+
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertTrue(data['success'])
+        self.assertEqual(data['total_fractions'], 21)
+        self.assertIn('52.56', data['planned_total_dose_display'])
+
+        p.refresh_from_db()
+        self.assertEqual(p.total_fractions, 21)
+        self.assertGreater(p.discharge_date, initial_discharge)
+
+        # Перевіряємо перші 16 фракцій (2.66 Гр) та останні 5 фракцій (2.0 Гр)
+        fractions = list(p.fractions.order_by('date'))
+        self.assertEqual(len(fractions), 21)
+        for f in fractions[:16]:
+            self.assertEqual(f.dose, 2.66)
+        for f in fractions[16:]:
+            self.assertEqual(f.dose, 2.0)
+            self.assertIn('Буст', f.note)
+
+        # Імітуємо доставку всіх 21 фракцій
+        p.fractions.all().update(status='delivered')
+        p.recalculate_received_dose()
+        self.assertEqual(p.received_dose, 52.56)
+        self.assertEqual(p.received_dose_display, '52.56 Гр')
+
+
 
 
 

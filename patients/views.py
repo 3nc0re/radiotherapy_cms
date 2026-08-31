@@ -2279,3 +2279,95 @@ def save_mvtn_staging_api(request, pk):
     })
 
 
+@login_required
+@require_POST
+def add_boost_phase_api(request, pk):
+    """
+    Додає послідовний буст / 2-й етап лікування до існуючого курсу пацієнта:
+    - Зберігає всі попередні фракції (пройдені та заплановані) без змін.
+    - Додає N нових фракцій з вказаною РОД бусту (наприклад 2.0 Гр) на наступні робочі дні.
+    - Оновлює загальну кількість фракцій (total_fractions), планову СОД та дату виписки.
+    """
+    patient = get_object_or_404(Patient, pk=pk)
+    
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'error': 'Невірний JSON'}, status=400)
+        
+    try:
+        boost_fractions = int(data.get('boost_fractions', 5))
+        if boost_fractions <= 0:
+            return JsonResponse({'success': False, 'error': 'Кількість фракцій повинна бути більше 0'}, status=400)
+    except (ValueError, TypeError):
+        return JsonResponse({'success': False, 'error': 'Некоректна кількість фракцій'}, status=400)
+        
+    try:
+        boost_dose = float(str(data.get('boost_dose', 2.0)).replace(',', '.'))
+        if boost_dose <= 0:
+            return JsonResponse({'success': False, 'error': 'РОД бусту повинна бути більше 0'}, status=400)
+    except (ValueError, TypeError):
+        return JsonResponse({'success': False, 'error': 'Некоректна доза бусту'}, status=400)
+        
+    boost_zone = data.get('boost_zone', 'Ложе пухлини (буст)').strip()
+    custom_start_date_str = data.get('boost_start_date', '').strip()
+    
+    # Визначаємо дату початку бусту
+    start_date = None
+    if custom_start_date_str:
+        start_date = parse_ukrainian_date(custom_start_date_str)
+        
+    if not start_date:
+        latest_fraction = patient.fractions.order_by('date').last()
+        if latest_fraction:
+            next_date = latest_fraction.date + timedelta(days=1)
+            while next_date.weekday() >= 5:  # skip Sat/Sun
+                next_date += timedelta(days=1)
+            start_date = next_date
+        elif patient.treatment_start_date:
+            start_date = patient.treatment_start_date
+        else:
+            start_date = timezone.localdate()
+            
+    # Генеруємо нові фракції бусту
+    new_fractions = []
+    current_date = start_date
+    for i in range(boost_fractions):
+        while current_date.weekday() >= 5:
+            current_date += timedelta(days=1)
+            
+        fraction = FractionHistory(
+            patient=patient,
+            date=current_date,
+            dose=boost_dose,
+            note=f"Буст: {boost_zone}" if boost_zone else "Буст",
+            status='scheduled'
+        )
+        new_fractions.append(fraction)
+        current_date += timedelta(days=1)
+        
+    FractionHistory.objects.bulk_create(new_fractions)
+    
+    # Оновлюємо загальну кількість фракцій пацієнта
+    patient.total_fractions = patient.fractions.count()
+    
+    # Оновлюємо дату виписки
+    latest_frac = patient.fractions.order_by('date').last()
+    if latest_frac:
+        patient.discharge_date = latest_frac.date
+        
+    patient.recalculate_received_dose()
+    patient.save()
+    
+    return JsonResponse({
+        'success': True,
+        'message': f'Успішно додано буст: {boost_fractions} фр. × {boost_dose} Гр. Загальний курс: {patient.total_fractions} фр. (СОД: {patient.planned_total_dose_display}). Дата виписки: {patient.discharge_date.strftime("%d.%m.%Y") if patient.discharge_date else "—"}',
+        'total_fractions': patient.total_fractions,
+        'planned_total_dose_display': patient.planned_total_dose_display,
+        'received_dose_display': patient.received_dose_display,
+        'discharge_date': patient.discharge_date.strftime('%d.%m.%Y') if patient.discharge_date else '—',
+        'next_boost_start': start_date.strftime('%d.%m.%Y'),
+    })
+
+
+

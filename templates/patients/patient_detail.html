@@ -9,6 +9,9 @@
             <button type="button" class="btn btn-secondary" onclick="copyForMIS()" style="background-color: #4a5568; color: white;" title="Скопіювати готову клінічну виписку для Helsi/eHealth">
                 <i class="fas fa-clipboard-check"></i> 📋 Для МІС
             </button>
+            <button type="button" class="btn btn-primary" onclick="openAddBoostModal()" style="background-color: #8e44ad; border-color: #8e44ad; color: white; font-weight: 600;" title="Додати 2-й етап лікування / послідовний буст">
+                <i class="fas fa-plus-circle"></i> 🎯 Додати буст
+            </button>
             <button type="button" class="btn btn-warning" onclick="openPauseModal()" style="background-color: #ff9800; color: black; font-weight: 600;" title="Призупинити лікування на N днів (зсунути розклад)">
                 <i class="fas fa-pause-circle"></i> ⏸️ Пауза курсу
             </button>
@@ -254,6 +257,56 @@
                 <button type="button" class="btn btn-secondary" onclick="closePauseModal()">Скасувати</button>
                 <button type="button" id="btnSubmitPause" class="btn btn-warning" onclick="submitPauseTreatment()" style="color: black; font-weight: 700; padding: 8px 20px;">
                     ⏸️ Застосувати паузу
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Модальне вікно додавання бусту / 2-го етапу -->
+<div id="addBoostModal" class="modal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); backdrop-filter: blur(2px);">
+    <div style="background: var(--card-bg); max-width: 480px; margin: 8% auto; padding: 22px; border-radius: 10px; box-shadow: 0 10px 25px rgba(0,0,0,0.4); color: var(--text-color); animation: fadeIn 0.25s ease;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-bottom: 15px;">
+            <h3 style="margin: 0; color: #8e44ad; display: flex; align-items: center; gap: 8px;">
+                <i class="fas fa-plus-circle"></i> 🎯 Додати буст / 2-й етап
+            </h3>
+            <button type="button" class="btn btn-secondary" onclick="closeAddBoostModal()" style="padding: 2px 8px; font-size: 0.85rem;">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <p style="font-size: 0.92rem; margin-bottom: 15px; background: var(--hover-bg); padding: 10px; border-radius: 6px; border-left: 3px solid #8e44ad;">
+            Пацієнт: <strong style="color: var(--primary-color);">{{ patient.full_name }}</strong><br>
+            Вже призначено: <strong id="modal-boost-current-tf">{{ patient.total_fractions|default:0 }} фр.</strong> (поточна виписка: <strong id="modal-boost-current-discharge">{{ patient.get_actual_discharge_date|date:"d.m.Y"|default:"—" }}</strong>)
+        </p>
+
+        <form id="addBoostForm">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                <div class="form-group">
+                    <label for="boostFractionsInput" style="font-weight: 600; font-size: 0.9rem;">⚛️ Кількість фр. бусту:</label>
+                    <input type="number" id="boostFractionsInput" class="form-control" value="5" min="1" max="50" required>
+                </div>
+                <div class="form-group">
+                    <label for="boostDoseInput" style="font-weight: 600; font-size: 0.9rem;">⚛️ РОД бусту (Гр):</label>
+                    <input type="text" id="boostDoseInput" class="form-control" value="2.0" required placeholder="2.0">
+                </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 12px;">
+                <label for="boostZoneInput" style="font-weight: 600; font-size: 0.9rem;">🎯 Зона опромінення бусту:</label>
+                <input type="text" id="boostZoneInput" class="form-control" value="Ложе пухлини (буст)" placeholder="напр. Ложе пухлини">
+            </div>
+
+            <div class="form-group" style="margin-bottom: 18px;">
+                <label for="boostStartDateInput" style="font-weight: 600; font-size: 0.9rem;">📅 Дата початку бусту (перша фр. 2-го етапу):</label>
+                <input type="text" id="boostStartDateInput" class="form-control datepicker-input" placeholder="дд.мм.рррр (за замовчуванням: наступний робочий день)">
+                <small style="color: var(--text-light-color); font-size: 0.78rem;">Залиште порожнім, щоб розпочати на наступний робочий день після основного етапу.</small>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button type="button" class="btn btn-secondary" onclick="closeAddBoostModal()">Скасувати</button>
+                <button type="button" id="btnSubmitAddBoost" class="btn btn-primary" onclick="submitAddBoost()" style="background-color: #8e44ad; border-color: #8e44ad; color: white; font-weight: 700; padding: 8px 20px;">
+                    🎯 Додати буст до курсу
                 </button>
             </div>
         </form>
@@ -706,7 +759,11 @@
                             </div>
                         </td>
                         <td>
-                            <span class="fraction-note-text">{{ fraction.note|default:"—" }}</span>
+                            {% if fraction.note and "Буст" in fraction.note %}
+                                <span class="badge" style="background-color: #8e44ad; color: white;"><i class="fas fa-bullseye"></i> {{ fraction.note }}</span>
+                            {% else %}
+                                <span class="fraction-note-text">{{ fraction.note|default:"—" }}</span>
+                            {% endif %}
                             {% if fraction.reason %}
                                 <br><small class="text-warning"><i>Причина: {{ fraction.reason }}</i></small>
                             {% endif %}
@@ -2169,6 +2226,75 @@ function submitPauseTreatment() {
         console.error(err);
         btn.disabled = false;
         btn.innerHTML = `⏸️ Застосувати паузу`;
+        alert('Помилка з\'єднання.');
+    });
+}
+
+// Модальне вікно додавання бусту / 2-го етапу
+function openAddBoostModal() {
+    document.getElementById('boostFractionsInput').value = 5;
+    document.getElementById('boostDoseInput').value = '2.0';
+    document.getElementById('boostZoneInput').value = 'Ложе пухлини (буст)';
+    document.getElementById('boostStartDateInput').value = '';
+    document.getElementById('addBoostModal').style.display = 'block';
+}
+
+function closeAddBoostModal() {
+    document.getElementById('addBoostModal').style.display = 'none';
+}
+
+function submitAddBoost() {
+    const fractions = parseInt(document.getElementById('boostFractionsInput').value, 10);
+    const dose = document.getElementById('boostDoseInput').value.trim();
+    const zone = document.getElementById('boostZoneInput').value.trim();
+    const startDate = document.getElementById('boostStartDateInput').value.trim();
+    const btn = document.getElementById('btnSubmitAddBoost');
+
+    if (!fractions || fractions < 1) {
+        alert('Вкажіть кількість фракцій бусту!');
+        return;
+    }
+    if (!dose) {
+        alert('Вкажіть разову дозу бусту (напр. 2.0)!');
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Додавання...`;
+
+    fetch("{% url 'add_boost_phase_api' patient.pk %}", {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({
+            boost_fractions: fractions,
+            boost_dose: dose,
+            boost_zone: zone,
+            boost_start_date: startDate
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        btn.disabled = false;
+        btn.innerHTML = `🎯 Додати буст до курсу`;
+        if (data.success) {
+            closeAddBoostModal();
+            if (typeof showToast === 'function') {
+                showToast(`✅ ${data.message}`, 'success', 5000);
+            } else {
+                alert(`✅ ${data.message}`);
+            }
+            setTimeout(() => location.reload(), 1200);
+        } else {
+            alert('Помилка: ' + (data.error || 'Не вдалося додати буст'));
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        btn.disabled = false;
+        btn.innerHTML = `🎯 Додати буст до курсу`;
         alert('Помилка з\'єднання.');
     });
 }

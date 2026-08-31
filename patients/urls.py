@@ -25,6 +25,7 @@ urlpatterns = [
     path('api/patients/<int:pk>/save-mvtn-staging/', views.save_mvtn_staging_api, name='save_mvtn_staging_api'),
     path('api/patients/<int:pk>/quick-update/', views.quick_update_patient_api, name='quick_update_patient_api'),
     path('api/patients/<int:pk>/pause-treatment/', views.pause_patient_treatment_api, name='pause_patient_treatment_api'),
+    path('api/patients/<int:pk>/add-boost/', views.add_boost_phase_api, name='add_boost_phase_api'),
     path('api/fractions/machine-pause/', views.machine_pause_fractions_api, name='machine_pause_fractions_api'),
     path('api/patients/bulk-confirm-blood-tests/', views.bulk_confirm_blood_tests_api, name='bulk_confirm_blood_tests_api'),
     path('patients/filter/<str:filter_type>/', views.patient_list, name='patient_list_filtered'),
