@@ -15,7 +15,7 @@
             <button type="button" class="btn btn-warning" onclick="openPauseModal()" style="background-color: #ff9800; color: black; font-weight: 600;" title="Призупинити лікування на N днів (зсунути розклад)">
                 <i class="fas fa-pause-circle"></i> ⏸️ Пауза курсу
             </button>
-            <button type="button" id="btn-toggle-quick-edit" class="btn btn-info" style="background-color: #17a2b8; color: white; font-weight: 600;">
+            <button type="button" id="btn-toggle-quick-edit" onclick="toggleQuickEditPanel()" class="btn btn-info" style="background-color: #17a2b8; color: white; font-weight: 600;">
                 <i class="fas fa-bolt"></i> ⚡ Редагувати картку
             </button>
             {% if patient.display_stage != 'Архів' %}
@@ -1942,6 +1942,16 @@ function executePatientBulkConfirm(patientId) {
         btn.innerHTML = `<i class="fas fa-check"></i> Підтвердити`;
     });
 }
+
+function toggleQuickEditPanel() {
+    const quickEditPanel = document.getElementById('quick-edit-panel');
+    if (!quickEditPanel) return;
+    if (quickEditPanel.style.display === 'none' || !quickEditPanel.style.display) {
+        quickEditPanel.style.display = 'block';
+        quickEditPanel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else {
+        quickEditPanel.style.display = 'none';
+    }
 }
 
 document.addEventListener('DOMContentLoaded', function() {
