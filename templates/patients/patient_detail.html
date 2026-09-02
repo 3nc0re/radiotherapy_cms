@@ -21,7 +21,7 @@
             {% if patient.display_stage != 'Архів' %}
             <form method="post" action="{% url 'archive_patient' patient.pk %}" style="display: inline;" onsubmit="return confirm('Ви впевнені, що хочете завершити лікування та перевести пацієнта в архів?');">
                 {% csrf_token %}
-                <button type="submit" class="btn btn-outline-secondary" style="border: 1px solid var(--border-color);"><i class="fas fa-archive"></i> В архів</button>
+                <button type="submit" class="btn btn-warning" style="background-color: #d97706; border-color: #b45309; color: #ffffff; font-weight: 600;"><i class="fas fa-archive"></i> В архів</button>
             </form>
             {% endif %}
             <a href="{% url 'patient_delete' patient.pk %}" class="btn btn-danger" style="padding: 6px 12px;"><i class="fas fa-trash-alt"></i></a>
@@ -1955,22 +1955,10 @@ function toggleQuickEditPanel() {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    const btnToggleQuickEdit = document.getElementById('btn-toggle-quick-edit');
     const btnCloseQuickEdit = document.getElementById('btn-close-quick-edit');
     const quickEditPanel = document.getElementById('quick-edit-panel');
     const quickStatusSelect = document.getElementById('quick-hospitalization-status');
     const btnSaveQuickEdit = document.getElementById('btn-save-quick-edit');
-
-    if (btnToggleQuickEdit && quickEditPanel) {
-        btnToggleQuickEdit.addEventListener('click', function() {
-            if (quickEditPanel.style.display === 'none' || !quickEditPanel.style.display) {
-                quickEditPanel.style.display = 'block';
-                quickEditPanel.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            } else {
-                quickEditPanel.style.display = 'none';
-            }
-        });
-    }
 
     if (btnCloseQuickEdit && quickEditPanel) {
         btnCloseQuickEdit.addEventListener('click', function() {
