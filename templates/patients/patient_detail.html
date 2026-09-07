@@ -60,6 +60,22 @@
     <form id="quick-edit-form">
         {% csrf_token %}
         
+        <!-- Блок вставки повного діагнозу для швидкого розпаршування -->
+        <div class="diagnosis-paste-zone" style="padding: 16px; margin-bottom: 20px; background-color: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; box-shadow: var(--shadow);">
+            <h4 style="color: var(--primary-color); margin-top: 0; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; font-size: 1rem;">
+                <i class="fas fa-magic"></i> ⚡ Розумне автозаповнення / Розпаршування діагнозу
+            </h4>
+            <p style="margin-top: 0; margin-bottom: 10px; font-size: 0.88rem; color: var(--text-light-color);">
+                Вставте повний текст медичного висновку або діагнозу нижче та натисніть «Розпарсити» — система автоматично розпізнає та заповнить коди МКХ, TNM, стадію, клінічну групу, номер та дату гістології, а текст збережеться в картці:
+            </p>
+            <div class="form-group" style="margin-bottom: 10px;">
+                <textarea id="quick-raw-diagnosis-input" class="form-control" rows="3" placeholder="Наприклад: C50.9 Рак лівої молочної залози T2N1M0, стадія IIB, кл. гр. 2. ПГЗ № 4567/23 від 10.05.2023 - інфільтруюча карцинома." style="min-height: 75px; width: 100%; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 6px; background-color: var(--input-bg); color: var(--text-color); font-size: 0.9rem;">{{ patient.raw_diagnosis|default:'' }}</textarea>
+            </div>
+            <button type="button" id="btn-quick-parse-diagnosis" onclick="parseQuickDiagnosis()" class="btn btn-primary" style="padding: 8px 18px; font-weight: 600; font-size: 0.9rem; display: inline-flex; align-items: center; gap: 6px;">
+                <i class="fas fa-bolt"></i> Розпарсити та заповнити поля
+            </button>
+        </div>
+        
         <!-- Секція 1: Особисті дані -->
         <h4 style="margin: 0 0 10px 0; color: var(--text-color); font-size: 0.95rem; border-bottom: 1px dashed var(--border-color); padding-bottom: 4px;">
             <i class="fas fa-user-circle"></i> Особисті дані
@@ -336,12 +352,10 @@
         <p><strong>Стадія захворювання:</strong> <span id="val-disease-stage">{{ patient.disease_stage|default:"—" }}</span></p>
         <p><strong>Клінічна група:</strong> <span id="val-clinical-group">{{ patient.clinical_group|default:"—" }}</span></p>
         <p><strong>Попереднє опромінення:</strong> <span id="val-prior-radiation">{{ patient.prior_radiation|default:"—" }}</span></p>
-        {% if patient.raw_diagnosis %}
-        <div style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border-color);">
+        <div id="block-raw-diagnosis" style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border-color); {% if not patient.raw_diagnosis %}display: none;{% endif %}">
             <strong style="display: block; margin-bottom: 5px; font-size: 0.9em; color: var(--text-light-color);">Вставлений текст діагнозу:</strong>
-            <div class="raw-diagnosis-text" style="font-family: monospace; white-space: pre-wrap; font-size: 0.85em; padding: 8px; background-color: var(--hover-bg); border-radius: 4px; border: 1px solid var(--border-color); color: var(--text-color);">{{ patient.raw_diagnosis }}</div>
+            <div class="raw-diagnosis-text" id="val-raw-diagnosis" style="font-family: monospace; white-space: pre-wrap; font-size: 0.85em; padding: 8px; background-color: var(--hover-bg); border-radius: 4px; border: 1px solid var(--border-color); color: var(--text-color);">{{ patient.raw_diagnosis|default:'' }}</div>
         </div>
-        {% endif %}
     </div>
 
     <!-- Інформація про лікування -->
@@ -1954,6 +1968,137 @@ function toggleQuickEditPanel() {
     }
 }
 
+function parseQuickDiagnosis() {
+    const rawInput = document.getElementById('quick-raw-diagnosis-input');
+    if (!rawInput) return;
+    const text = rawInput.value.trim();
+    if (!text) {
+        alert('Будь ласка, вставте текст діагнозу в поле.');
+        return;
+    }
+
+    // 1. Пошук коду МКХ-10 (наприклад: C61, C50.9, D05)
+    const icdRegex = /\b([A-Z][0-9]{2}(?:\.[0-9])?)\b/i;
+    const icdMatch = text.match(icdRegex);
+    let icdCode = '';
+    if (icdMatch) {
+        icdCode = icdMatch[1].toUpperCase();
+    }
+
+    // 2. Опис діагнозу
+    let diagnosisDesc = '';
+    if (icdCode) {
+        const icdIdx = text.toUpperCase().indexOf(icdCode);
+        let textAfterIcd = text.substring(icdIdx);
+        const endIdx = textAfterIcd.search(/(?:(?:[cp]|yc|yp)?[TТ][0-4a-dхxіІ]|(?:[cp]|yc|yp)?[NН][0-3]|(?:[cp]|yc|yp)?[MМ][0-1]|стадія|ст\.|кл\.\s*гр\.|ПГЗ|гістологія|\n\n)/i);
+        if (endIdx > 0) {
+            diagnosisDesc = textAfterIcd.substring(0, endIdx).trim();
+        } else {
+            diagnosisDesc = textAfterIcd.trim();
+        }
+    } else {
+        const sentences = text.split(/[.\n]/);
+        diagnosisDesc = sentences[0] ? sentences[0].trim() : text;
+    }
+    diagnosisDesc = diagnosisDesc.replace(/^[,\s\.\-]+|[,\s\.\-]+$/g, '').trim();
+    if (diagnosisDesc) {
+        document.getElementById('quick-diagnosis').value = diagnosisDesc;
+    }
+
+    // 3. Пошук TNM
+    const tnmRegex = /\b((?:[cp]|yc|yp)?[TТtт][0-4a-dхxіІ]*)\s*((?:[cp]|yc|yp)?[NНnн][0-3a-cхxіІ]*)\s*((?:[cp]|yc|yp)?[MМmм][0-1a-cхxіІ]*)\b/i;
+    const tnmMatch = text.match(tnmRegex);
+    if (tnmMatch) {
+        let tnm = tnmMatch[0].replace(/[Тт]/g, 'T').replace(/[Нн]/g, 'N').replace(/[Мм]/g, 'M');
+        let prefix = '';
+        let remainder = tnm;
+        const prefixMatch = tnm.match(/^(yc|yp|c|p)/i);
+        if (prefixMatch) {
+            prefix = prefixMatch[0].toLowerCase();
+            remainder = tnm.substring(prefix.length);
+        }
+        tnm = prefix + remainder.toUpperCase();
+        document.getElementById('quick-tnm-staging').value = tnm;
+    } else {
+        const partialTnmRegex = /\b((?:[cp]|yc|yp)?[TТtт][0-4a-dхxіІ]*)\s*((?:[cp]|yc|yp)?[NНnн][0-3a-cхxіІ]*)\b/i;
+        const partialMatch = text.match(partialTnmRegex);
+        if (partialMatch) {
+            let tnm = partialMatch[0].replace(/[Тт]/g, 'T').replace(/[Нн]/g, 'N');
+            let prefix = '';
+            let remainder = tnm;
+            const prefixMatch = tnm.match(/^(yc|yp|c|p)/i);
+            if (prefixMatch) {
+                prefix = prefixMatch[0].toLowerCase();
+                remainder = tnm.substring(prefix.length);
+            }
+            tnm = prefix + remainder.toUpperCase();
+            document.getElementById('quick-tnm-staging').value = tnm;
+        }
+    }
+
+    // 4. Стадія захворювання
+    const stageRegex = /(?:стадія|ст\.?|stage)\s*([IVX1-4]{1,4}[A-CА-Сa-cа-с]?)\b/i;
+    const stageMatch = text.match(stageRegex);
+    if (stageMatch) {
+        let stage = stageMatch[1].toUpperCase().replace(/[Аа]/g, 'A').replace(/[Вв]/g, 'B').replace(/[Сс]/g, 'C');
+        document.getElementById('quick-disease-stage').value = stage;
+    }
+
+    // 5. Клінічна група
+    const clGroupRegex = /(?:кл\.?\s*гр\.?|клінічна\s+група|клгр)\s*([IVX1-4]{1,4}|\d+)/i;
+    const clGroupMatch = text.match(clGroupRegex);
+    if (clGroupMatch) {
+        let clGroup = clGroupMatch[1].toUpperCase();
+        if (clGroup === '1') clGroup = 'I';
+        else if (clGroup === '2') clGroup = 'II';
+        else if (clGroup === '3') clGroup = 'III';
+        else if (clGroup === '4') clGroup = 'IV';
+        document.getElementById('quick-clinical-group').value = clGroup;
+    }
+
+    // 6. Номер гістології
+    const histNumRegex = /(?:ПГЗ|гістологія|гіст\.?|гістологічне\s+дослідження)\s*(?:№|номер)?\s*([0-9\-\/\\іІa-zA-Zа-яА-Я]+)/i;
+    const histNumMatch = text.match(histNumRegex);
+    if (histNumMatch) {
+        document.getElementById('quick-histology-number').value = histNumMatch[1];
+    }
+
+    // 7. Дата гістології
+    const dateRegex = /\b(\d{1,2})\.(\d{1,2})\.(\d{2,4})\b/;
+    const dateMatch = text.match(dateRegex);
+    if (dateMatch) {
+        let day = dateMatch[1].padStart(2, '0');
+        let month = dateMatch[2].padStart(2, '0');
+        let year = dateMatch[3];
+        if (year.length === 2) year = '20' + year;
+        document.getElementById('quick-histology-date').value = `${day}.${month}.${year}`;
+    }
+
+    // 8. Опис гістології
+    const histDescRegex = /(?:ПГЗ|гістологія|гіст\.?)\s*(?:№\s*[^\s]+)?\s*(?:від\s*\d{1,2}\.\d{1,2}\.\d{2,4})?\s+[-\—\–:]\s+([^.\n]+)/i;
+    const histDescMatch = text.match(histDescRegex);
+    if (histDescMatch) {
+        document.getElementById('quick-histology-description').value = histDescMatch[1].trim();
+    }
+
+    // Анімація підсвічування оновлених полів
+    const animatedFields = ['quick-diagnosis', 'quick-tnm-staging', 'quick-disease-stage', 'quick-clinical-group', 'quick-histology-number', 'quick-histology-date', 'quick-histology-description'];
+    animatedFields.forEach(id => {
+        const el = document.getElementById(id);
+        if (el && el.value) {
+            el.style.transition = 'background-color 0.5s ease';
+            el.style.backgroundColor = 'rgba(40, 167, 69, 0.2)';
+            setTimeout(() => {
+                el.style.backgroundColor = 'var(--input-bg)';
+            }, 1000);
+        }
+    });
+
+    if (typeof showToast === 'function') {
+        showToast('⚡ Текст розпарсено! Поля успішно заповнено.', 'success');
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     const btnCloseQuickEdit = document.getElementById('btn-close-quick-edit');
     const quickEditPanel = document.getElementById('quick-edit-panel');
@@ -2066,6 +2211,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 histology_number: document.getElementById('quick-histology-number')?.value || '',
                 histology_date: document.getElementById('quick-histology-date')?.value || '',
                 histology_description: document.getElementById('quick-histology-description')?.value || '',
+                raw_diagnosis: document.getElementById('quick-raw-diagnosis-input')?.value || '',
             };
 
             fetch("{% url 'quick_update_patient_api' patient.pk %}", {
@@ -2111,6 +2257,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (document.getElementById('val-histology-number')) document.getElementById('val-histology-number').textContent = data.histology_number;
                     if (document.getElementById('val-histology-date')) document.getElementById('val-histology-date').textContent = data.histology_date;
                     if (document.getElementById('val-histology-description')) document.getElementById('val-histology-description').textContent = data.histology_description;
+                    if (data.raw_diagnosis) {
+                        if (document.getElementById('val-raw-diagnosis')) document.getElementById('val-raw-diagnosis').textContent = data.raw_diagnosis;
+                        if (document.getElementById('block-raw-diagnosis')) document.getElementById('block-raw-diagnosis').style.display = 'block';
+                    } else {
+                        if (document.getElementById('block-raw-diagnosis')) document.getElementById('block-raw-diagnosis').style.display = 'none';
+                    }
 
                     const rowRadiomod = document.getElementById('row-has-radiomodification');
                     if (rowRadiomod) rowRadiomod.style.display = data.has_radiomodification ? 'block' : 'none';

@@ -1977,6 +1977,7 @@ def quick_update_patient_api(request, pk):
         'histology_number': patient.histology_number or '—',
         'histology_date': patient.histology_date.strftime('%d.%m.%Y') if patient.histology_date else '—',
         'histology_description': patient.histology_description or '—',
+        'raw_diagnosis': patient.raw_diagnosis or '',
         'notes': patient.notes or '',
         'completed_fractions': info['completed_fractions'],
         'has_fractions': patient.fractions.exists(),
