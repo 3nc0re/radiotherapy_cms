@@ -525,6 +525,8 @@ class Patient(models.Model):
         today = timezone.localdate()
         if self.mis_discharged or (self.discharge_date and self.discharge_date < today):
             self.is_active = False
+        elif not self.mis_discharged and (self.discharge_date is None or self.discharge_date >= today):
+            self.is_active = True
         self.full_clean()
         super().save(*args, **kwargs)
 

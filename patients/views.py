@@ -37,10 +37,12 @@ def get_pending_mvtn_staging_patients(today=None):
     if today is None:
         today = timezone.localdate()
         
-    active_q = Q(is_active=True, mis_discharged=False) & (Q(discharge_date__isnull=True) | Q(discharge_date__gte=today))
+    active_q = Q(is_active=True, mis_discharged=False) & (
+        Q(discharge_date__isnull=True) | Q(discharge_date__gte=today) | Q(fractions__date__gte=today)
+    )
     stage_q = Q(ct_simulation_date__isnull=False) | Q(treatment_start_date__isnull=False)
     
-    candidates = Patient.objects.filter(active_q).filter(stage_q).prefetch_related('medical_incapacities', 'fractions')
+    candidates = Patient.objects.filter(active_q).filter(stage_q).distinct().prefetch_related('medical_incapacities', 'fractions')
     
     pending = []
     for p in candidates:
@@ -283,6 +285,7 @@ def dashboard(request):
         'planned_discharge_label': planned_discharge_label,
         'notifications': notifications,
         'quote_of_the_day': quote_of_the_day,
+        'pending_mvtn_list': pending_mvtn_list,
     }
     return render(request, 'patients/dashboard.html', context)
 
