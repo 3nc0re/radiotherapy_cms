@@ -2649,6 +2649,42 @@ class ClinicalWorkflowAuditTests(TestCase):
         self.assertEqual(p.received_dose, 52.56)
         self.assertEqual(p.received_dose_display, '52.56 Гр')
 
+    def test_standardize_diagnosis_api_fallback_and_schema(self):
+        sample_text = (
+            "Гліобластома (WHO Grade 4) тім'яно-потиличної частки головного мозку справа. "
+            "Стан після КПТЧ, видалення пухлини по перифокальній зоні справа (04.08.26). "
+            "кл.гр.ІІ ПГЗ №7243-54 від 07.08.26 - гліобластома (WHO Grade 4)."
+        )
+        res = self.client.post(reverse('standardize_diagnosis_api'), data={
+            'raw_text': sample_text
+        }, content_type='application/json')
+
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertTrue(data['success'])
+        self.assertIn('standardized_diagnosis', data)
+        self.assertEqual(data['clinical_group'], 'II')
+        self.assertEqual(data['histology_number'], '7243-54')
+        self.assertEqual(data['histology_date'], '07.08.2026')
+        self.assertIn('гліобластома', data['histology_description'].lower())
+
+    def test_standardize_diagnosis_api_breast_cancer(self):
+        sample_breast = "C50.4 Інфільтруюча карцинома протоків верхньо-зовнішнього квадранта правої молочної залози, T2N1M0, G2, стадія IIB, кл. гр. 2. ПГЗ № 4567 від 10.05.2025"
+        res = self.client.post(reverse('standardize_diagnosis_api'), data={
+            'raw_text': sample_breast
+        }, content_type='application/json')
+
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertTrue(data['success'])
+        self.assertEqual(data['icd10_code'], 'C50.4')
+        self.assertIn('T2N1M0', data['tnm_staging'])
+        self.assertEqual(data['disease_stage'], 'IIB')
+        self.assertEqual(data['clinical_group'], 'II')
+        self.assertEqual(data['histology_number'], '4567')
+        self.assertEqual(data['histology_date'], '10.05.2025')
+
+
 
 
 

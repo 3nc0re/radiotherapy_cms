@@ -1985,6 +1985,32 @@ def quick_update_patient_api(request, pk):
 
 
 @login_required
+@require_POST
+def standardize_diagnosis_api(request):
+    """
+    API стандартизації та кодування онкологічного діагнозу згідно з
+    Наказом МОЗ України № 473 від 07.04.2026 та класифікатором ICD-O-4.
+    """
+    try:
+        data = json.loads(request.body)
+    except Exception:
+        data = request.POST
+        
+    raw_text = data.get('raw_text', '').strip()
+    if not raw_text:
+        return JsonResponse({'success': False, 'error': 'Введіть текст діагнозу для стандартизації!'}, status=400)
+        
+    from .ai_service import standardize_oncology_diagnosis_ai
+    try:
+        result = standardize_oncology_diagnosis_ai(raw_text)
+        result['success'] = True
+        return JsonResponse(result)
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+
+@login_required
 def treatment_protocol_list(request):
     """Сторінка управління клінічними протоколами / шаблонами лікування"""
     protocols = TreatmentProtocol.objects.all()

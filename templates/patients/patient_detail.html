@@ -68,12 +68,17 @@
             <p style="margin-top: 0; margin-bottom: 10px; font-size: 0.88rem; color: var(--text-light-color);">
                 Вставте повний текст медичного висновку або діагнозу нижче та натисніть «Розпарсити» — система автоматично розпізнає та заповнить коди МКХ, TNM, стадію, клінічну групу, номер та дату гістології, а текст збережеться в картці:
             </p>
-            <div class="form-group" style="margin-bottom: 10px;">
-                <textarea id="quick-raw-diagnosis-input" class="form-control" rows="3" placeholder="Наприклад: C50.9 Рак лівої молочної залози T2N1M0, стадія IIB, кл. гр. 2. ПГЗ № 4567/23 від 10.05.2023 - інфільтруюча карцинома." style="min-height: 75px; width: 100%; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 6px; background-color: var(--input-bg); color: var(--text-color); font-size: 0.9rem;">{{ patient.raw_diagnosis|default:'' }}</textarea>
+            <div class="form-group" style="margin-bottom: 12px;">
+                <textarea id="quick-raw-diagnosis-input" class="form-control" rows="3" placeholder="Наприклад: Гліобластома (WHO Grade 4) тім'яно-потиличної частки головного мозку справа. Стан після КПТЧ, видалення пухлини по перифокальній зоні справа (04.08.26). кл.гр.ІІ ПГЗ №7243-54 від 07.08.26 - гліобластома (WHO Grade 4)." style="min-height: 75px; width: 100%; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 6px; background-color: var(--input-bg); color: var(--text-color); font-size: 0.9rem;">{{ patient.raw_diagnosis|default:'' }}</textarea>
             </div>
-            <button type="button" id="btn-quick-parse-diagnosis" onclick="parseQuickDiagnosis()" class="btn btn-primary" style="padding: 8px 18px; font-weight: 600; font-size: 0.9rem; display: inline-flex; align-items: center; gap: 6px;">
-                <i class="fas fa-bolt"></i> Розпарсити та заповнити поля
-            </button>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <button type="button" id="btn-quick-standardize-diagnosis" onclick="standardizeQuickDiagnosis()" class="btn btn-primary" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; padding: 8px 18px; font-weight: 600; font-size: 0.9rem; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 12px rgba(118,75,162,0.3);">
+                    <i class="fas fa-wand-magic-sparkles"></i> 🪄 Стандартизувати (Кодувальник МОЗ 473 / ICD-O-4)
+                </button>
+                <button type="button" id="btn-quick-parse-diagnosis" onclick="parseQuickDiagnosis()" class="btn btn-secondary" style="padding: 8px 16px; font-weight: 500; font-size: 0.9rem; display: inline-flex; align-items: center; gap: 6px;">
+                    <i class="fas fa-bolt"></i> ⚡ Звичайний розпарсинг
+                </button>
+            </div>
         </div>
         
         <!-- Секція 1: Особисті дані -->
@@ -1966,6 +1971,90 @@ function toggleQuickEditPanel() {
     } else {
         quickEditPanel.style.display = 'none';
     }
+}
+
+function standardizeQuickDiagnosis() {
+    const rawInput = document.getElementById('quick-raw-diagnosis-input');
+    if (!rawInput) return;
+    const text = rawInput.value.trim();
+    if (!text) {
+        alert('Будь ласка, вставте текст діагнозу для стандартизації!');
+        return;
+    }
+
+    const btn = document.getElementById('btn-quick-standardize-diagnosis');
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Кодування за МОЗ 473...`;
+
+    fetch('/api/patients/standardize-diagnosis/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({ raw_text: text })
+    })
+    .then(res => res.json())
+    .then(data => {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+
+        if (data.success) {
+            if (data.standardized_diagnosis && document.getElementById('quick-diagnosis')) {
+                document.getElementById('quick-diagnosis').value = data.standardized_diagnosis;
+            }
+            if (data.tnm_staging && document.getElementById('quick-tnm-staging')) {
+                document.getElementById('quick-tnm-staging').value = data.tnm_staging;
+            }
+            if (data.disease_stage && document.getElementById('quick-disease-stage')) {
+                document.getElementById('quick-disease-stage').value = data.disease_stage;
+            }
+            if (data.clinical_group && document.getElementById('quick-clinical-group')) {
+                document.getElementById('quick-clinical-group').value = data.clinical_group;
+            }
+            if (data.histology_number && document.getElementById('quick-histology-number')) {
+                document.getElementById('quick-histology-number').value = data.histology_number;
+            }
+            if (data.histology_date && document.getElementById('quick-histology-date')) {
+                document.getElementById('quick-histology-date').value = data.histology_date;
+            }
+            if (data.histology_description && document.getElementById('quick-histology-description')) {
+                document.getElementById('quick-histology-description').value = data.histology_description;
+            }
+            if (data.surgical_treatment && document.getElementById('quick-prior-radiation') && !document.getElementById('quick-prior-radiation').value) {
+                document.getElementById('quick-prior-radiation').value = data.surgical_treatment;
+            }
+
+            const animatedFields = ['quick-diagnosis', 'quick-tnm-staging', 'quick-disease-stage', 'quick-clinical-group', 'quick-histology-number', 'quick-histology-date', 'quick-histology-description', 'quick-prior-radiation'];
+            animatedFields.forEach(id => {
+                const el = document.getElementById(id);
+                if (el && el.value) {
+                    el.style.transition = 'background-color 0.5s ease, box-shadow 0.5s ease';
+                    el.style.backgroundColor = 'rgba(46, 204, 113, 0.25)';
+                    el.style.boxShadow = '0 0 10px rgba(46, 204, 113, 0.4)';
+                    setTimeout(() => {
+                        el.style.backgroundColor = 'var(--input-bg)';
+                        el.style.boxShadow = 'none';
+                    }, 1500);
+                }
+            });
+
+            if (typeof showToast === 'function') {
+                showToast('🪄 Діагноз успішно закодовано за Наказом МОЗ № 473 та ICD-O-4!', 'success', 5000);
+            } else {
+                alert('🪄 Діагноз успішно закодовано за Наказом МОЗ № 473 та ICD-O-4!');
+            }
+        } else {
+            alert('Помилка кодування: ' + (data.error || 'Не вдалося стандартизувати діагноз'));
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+        alert('Помилка з\'єднання з сервером кодування.');
+    });
 }
 
 function parseQuickDiagnosis() {

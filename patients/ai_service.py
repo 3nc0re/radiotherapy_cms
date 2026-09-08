@@ -229,3 +229,205 @@ def generate_discharge_summary(gender, diagnosis, total_fractions, dose_per_frac
         )
     )
     return response.text
+
+
+def standardize_oncology_diagnosis_ai(raw_text):
+    """
+    Кодувальник онкологічного діагнозу за Наказом МОЗ України № 473 від 07.04.2026,
+    класифікатором НК 025:2021 (МКХ-10), Міжнародною класифікацією хвороб для онкології
+    4-го видання (ICD-O-4 / МКХ-О-4) та Довідником стадіювання UICC TNM (9-те видання) / AJCC.
+    
+    Приймає довільний клінічний текст діагнозу/виписки та повертає структурований словник.
+    """
+    import json
+    import re
+    
+    if not raw_text or not raw_text.strip():
+        raise ValueError("Вхідний текст діагнозу порожній.")
+        
+    client = None
+    try:
+        client = get_gemini_client()
+    except Exception as e:
+        client = None
+
+    if client:
+        prompt = f"""
+Ти — провідний експерт з медичної інформатики, онкологічної нозології та офіційного кодування захворювань.
+Твоє завдання — перетворити будь-який сирий, скорочений або неструктурований текст онкологічного діагнозу пацієнта у СУВОРО СТАНДАРТИЗОВАНИЙ ОНКОЛОГІЧНИЙ ДІАГНОЗ відповідно до:
+1. НАКАЗУ МІНІСТЕРСТВА ОХОРОНИ ЗДОРОВ'Я УКРАЇНИ № 473 від 07.04.2026 ("Методичні рекомендації щодо кодування та формування онкологічного діагнозу").
+2. Національного класифікатора НК 025:2021 (МКХ-10: C00–C96, вторинні/метастази C77–C79).
+3. Міжнародної класифікації хвороб для онкології 4-го видання (ICD-O-4 / МКХ-О-4) — 5-значний морфологічний код гістогенезу з поведінковим кодом /3 (наприклад 94400/3 для гліобластоми, 85000/3 для інфільтруючої карциноми протоків, 81400/3 для аденокарциноми тощо).
+4. Довідника стадіювання злоякісних новоутворень на основі UICC TNM 9-го видання (cTNM, pTNM, ypTNM, rTNM, стадії 0, I–IV, Grade G1-G4, Gleason score для простати, Nottingham для молочної залози, WHO Grade для пухлин ЦНС).
+
+СУВОРІ ПРАВИЛА ТА ПОСЛІДОВНІСТЬ (Розділ III, п. 5 Наказу МОЗ № 473):
+Формуй поле "standardized_diagnosis" у такій точній послідовності:
+1) Код МКХ-10 / ICD-O-4 (наприклад C71.8, C50.4, C18.7, C61.9).
+2) Морфологічний тип новоутворення (словесна назва українською мовою: Внутрішньомозкове новоутворення, Інфільтруюча карцинома протоків, Аденокарцинома тощо).
+3) Словесна назва анатомічної локалізації із зазначенням латеральності/сегмента для парних або багатокомпонентних органів (наприклад: правої тім'яно-потиличної частки головного мозку; верхньо-зовнішнього квадранта правої молочної залози; сигмоподібної ободової кишки тощо).
+4) Код морфологічного розділу ICD-O-4 у круглих дужках: (XXXXX/3). Словесна назва локалізації ОБОВ'ЯЗКОВО передує коду ICD-O-4!
+5) Показники стадіювання TNM із відповідними префіксами (cTNM, pTNM, ypTNM, rTNM) АБО ступінь злоякісності для пухлин без TNM (наприклад WHO Grade 4 для гліобластоми).
+6) Ступінь диференціювання Grade (G1, G2, G3, G4, Gleason, Nottingham, WHO Grade).
+7) Біологічні (молекулярні) маркери скорочено: ER(+), PR(+), HER2(0), Ki-67 - 25 %, MSI-H, BRAF mut(+) тощо (якщо є в тексті).
+8) Стадія захворювання (наприклад: стадія IIb, стадія IIA, клінічна група II).
+9) Метод підтвердження та дата: "морфологічно підтверджено ДД.ММ.РРРР" (з номером ПГЗ, якщо є: "(ПГЗ № ...)") АБО "клінічно підтверджено (МРТ/КТ) ДД.ММ.РРРР".
+10) Додаткова інформація про проведене лікування: ПОВНЕ РОЗГОРТАННЯ АБРЕВІАТУР хірургів (КПТЧ -> кістково-пластична трепанація черепа, ПМЕ -> мастектомія, ТУР -> трансуретральна резекція, ЛАЕ -> лімфаденектомія тощо) та нормалізація дат до чотиризначного року (наприклад: "Стан після хірургічного лікування (04.08.2026: кістково-пластична трепанація черепа, видалення пухлини по перифокальній зоні справа)").
+11) Інформація про рецидиви / метастази (якщо зазначено).
+
+Категорично заборонено неофіційні скорочення: "Ca", "аденокарц", "кл.гр." (пиши "клінічна група").
+Мова формулювання: українська, латинські літери лише для міжнародних індексів (TNM, G, ICD-O-4, Grade, біомаркерів).
+
+ВХІДНИЙ ТЕКСТ ДЛЯ СТАНДАРТИЗАЦІЇ ТА КОДУВАННЯ:
+\"\"\"{raw_text}\"\"\"
+
+Поверни виключно валідний JSON-об'єкт строго з такими ключами:
+{{
+  "standardized_diagnosis": "повний сформований діагноз згідно з наказом МОЗ 473 та ICD-O-4",
+  "icd10_code": "код МКХ-10, напр. C71.8",
+  "icd_o_code": "код ICD-O-4, напр. 94400/3",
+  "morphology_title": "словесна назва морфологічного типу, напр. Гліобластома / Внутрішньомозкове новоутворення",
+  "anatomical_site": "анатомічна ділянка з латеральністю",
+  "tnm_staging": "TNM код з префіксом (якщо є) або порожньо",
+  "disease_stage": "стадія, напр. IIB або WHO Grade 4",
+  "clinical_group": "клінічна група римськими, напр. II",
+  "grade": "ступінь диференціювання, напр. WHO Grade 4 або G2",
+  "biomarkers": "біомаркери скорочено або порожньо",
+  "verification_method": "наприклад, морфологічно підтверджено 07.08.2026 (ПГЗ № 7243-54)",
+  "histology_number": "номер ПГЗ/гістології або порожньо",
+  "histology_date": "дата гістології у форматі ДД.ММ.РРРР або порожньо",
+  "histology_description": "опис гістологічного висновку або порожньо",
+  "surgical_treatment": "розшифрований хірургічний та комбінований анамнез з датами або порожньо"
+}}
+"""
+        try:
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    temperature=0.1
+                )
+            )
+            result = json.loads(response.text)
+            if isinstance(result, dict) and result.get('standardized_diagnosis'):
+                return result
+        except Exception as err:
+            import logging
+            logging.getLogger(__name__).warning(f"Gemini diagnosis standardization failed: {err}. Fallback to rule-based parser.")
+
+    # Локальний fallback-парсер (якщо немає ключа чи інтернет-з'єднання)
+    return _fallback_diagnosis_standardizer(raw_text)
+
+
+def _fallback_diagnosis_standardizer(text):
+    """
+    Локальний евристичний алгоритм для розпаршування та стандартизації діагнозу,
+    коли Gemini API недоступний.
+    """
+    import re
+    text = text.strip()
+    
+    # 1. МКХ-10
+    icd10_match = re.search(r'\b([A-Z][0-9]{2}(?:\.[0-9])?)\b', text, re.IGNORECASE)
+    icd10_code = icd10_match.group(1).upper() if icd10_match else ''
+    if not icd10_code:
+        # Евристичне визначення поширених онкологічних локалізацій
+        text_lower = text.lower()
+        if 'гліобластом' in text_lower or 'головного мозку' in text_lower:
+            icd10_code = 'C71.8' if any(w in text_lower for w in ['тім\'яно-потилич', 'тім\'яно', 'потилич', 'лобн', 'скроне']) else 'C71.9'
+        elif 'молочн' in text_lower:
+            icd10_code = 'C50.9'
+        elif 'простат' in text_lower or 'передміхур' in text_lower:
+            icd10_code = 'C61'
+        elif 'прямої кишки' in text_lower or 'пряма кишка' in text_lower:
+            icd10_code = 'C20'
+        elif 'сигмопод' in text_lower:
+            icd10_code = 'C18.7'
+        elif 'леген' in text_lower:
+            icd10_code = 'C34.9'
+        elif 'шийк' in text_lower and 'матк' in text_lower:
+            icd10_code = 'C53.9'
+    
+    # 2. TNM
+    tnm_match = re.search(r'\b((?:[cp]|yc|yp|r)?[TТtт][0-4a-dхxіІ]*\s*(?:[cp]|yc|yp|r)?[NНnн][0-3a-cхxіІ]*\s*(?:[cp]|yc|yp|r)?[MМmм][0-1a-cхxіІ]*)\b', text, re.IGNORECASE)
+    tnm_staging = ''
+    if tnm_match:
+        tnm_staging = tnm_match.group(0).replace('Т', 'T').replace('т', 'T').replace('Н', 'N').replace('н', 'N').replace('М', 'M').replace('м', 'M')
+        
+    # 3. Стадія
+    stage_match = re.search(r'(?:стадія|ст\.?|stage)\s*([IVXІіЇїХх1-4]{1,4}[A-CА-Сa-cа-с]?)\b', text, re.IGNORECASE)
+    stage = ''
+    if stage_match:
+        stage = stage_match.group(1).upper().replace('І', 'I').replace('Ї', 'I').replace('Х', 'X').replace('А', 'A').replace('В', 'B').replace('С', 'C')
+        
+    # 4. Клінічна група
+    cl_match = re.search(r'(?:кл\.?\s*гр\.?|клінічна\s+група|клгр)\s*([IVXІіЇїХх1-4]{1,4}|\d+)', text, re.IGNORECASE)
+    cl_group = ''
+    if cl_match:
+        val = cl_match.group(1).upper().replace('І', 'I').replace('Ї', 'I').replace('Х', 'X')
+        norm = {'1': 'I', '2': 'II', '3': 'III', '4': 'IV'}
+        cl_group = norm.get(val, val)
+        
+    # 5. Гістологія
+    hist_num_match = re.search(r'(?:ПГЗ|гістологія|гіст\.?|гістологічне\s+дослідження)\s*(?:№|номер)?\s*([0-9\-\/\\іІa-zA-Zа-яА-Я]+)', text, re.IGNORECASE)
+    hist_num = hist_num_match.group(1) if hist_num_match else ''
+    
+    hist_date_match = re.search(r'(?:ПГЗ|гістологія|гіст\.?)[^.\n]*?від\s*(\d{1,2})\.(\d{1,2})\.(\d{2,4})', text, re.IGNORECASE)
+    hist_date = ''
+    if hist_date_match:
+        d, m, y = hist_date_match.group(1).zfill(2), hist_date_match.group(2).zfill(2), hist_date_match.group(3)
+        if len(y) == 2:
+            y = '20' + y
+        hist_date = f"{d}.{m}.{y}"
+    else:
+        date_match = re.search(r'\b(\d{1,2})\.(\d{1,2})\.(\d{2,4})\b', text)
+        if date_match:
+            d, m, y = date_match.group(1).zfill(2), date_match.group(2).zfill(2), date_match.group(3)
+            if len(y) == 2:
+                y = '20' + y
+            hist_date = f"{d}.{m}.{y}"
+        
+    hist_desc_match = re.search(r'(?:ПГЗ|гістологія|гіст\.?)\s*(?:№\s*[^\s]+)?\s*(?:від\s*\d{1,2}\.\d{1,2}\.\d{2,4})?\s+[-\—\–:]\s+([^.\n]+)', text, re.IGNORECASE)
+    hist_desc = hist_desc_match.group(1).strip() if hist_desc_match else ''
+    
+    # Побудова стандартизованого рядка
+    parts = []
+    if icd10_code:
+        parts.append(icd10_code)
+    # Основний опис
+    main_desc = text.split('.')[0].strip()
+    if icd10_code and main_desc.upper().startswith(icd10_code):
+        main_desc = main_desc[len(icd10_code):].strip()
+    parts.append(main_desc)
+    
+    if tnm_staging:
+        parts.append(tnm_staging)
+    if stage:
+        parts.append(f"стадія {stage}")
+    if cl_group:
+        parts.append(f"клінічна група {cl_group}")
+    if hist_date:
+        parts.append(f"морфологічно підтверджено {hist_date}" + (f" (ПГЗ № {hist_num})" if hist_num else ""))
+        
+    std_diag = ", ".join(p for p in parts if p)
+    if not std_diag.endswith('.'):
+        std_diag += '.'
+        
+    return {
+        "standardized_diagnosis": std_diag,
+        "icd10_code": icd10_code,
+        "icd_o_code": "",
+        "morphology_title": "",
+        "anatomical_site": "",
+        "tnm_staging": tnm_staging,
+        "disease_stage": stage,
+        "clinical_group": cl_group,
+        "grade": "",
+        "biomarkers": "",
+        "verification_method": f"морфологічно підтверджено {hist_date}" if hist_date else "",
+        "histology_number": hist_num,
+        "histology_date": hist_date,
+        "histology_description": hist_desc,
+        "surgical_treatment": ""
+    }
+

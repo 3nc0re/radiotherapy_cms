@@ -14,9 +14,14 @@
         <div class="form-group" style="margin-bottom: 15px;">
             <textarea id="raw-diagnosis-input" class="form-control" rows="4" placeholder="Наприклад: C50.9 Рак лівої молочної залози T2N1M0, стадія IIB, кл. гр. 2. ПГЗ № 4567/23 від 10.05.2023 - інфільтруюча карцинома." style="min-height: 80px; width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 5px; background-color: var(--input-bg); color: var(--text-color); font-size: 0.95rem;"></textarea>
         </div>
-        <button type="button" id="btn-parse-diagnosis" class="btn btn-primary" style="background-color: var(--primary-color); border: none; cursor: pointer; padding: 10px 20px; border-radius: 5px; color: white; font-weight: 500; font-size: 0.95rem; display: inline-flex; align-items: center; gap: 6px;">
-            Розпарсити та заповнити поля
-        </button>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <button type="button" id="btn-standardize-diagnosis" class="btn btn-primary" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; cursor: pointer; padding: 10px 20px; border-radius: 5px; color: white; font-weight: 600; font-size: 0.95rem; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 12px rgba(118,75,162,0.3);">
+                <i class="fas fa-wand-magic-sparkles"></i> 🪄 Стандартизувати (Кодувальник МОЗ 473 / ICD-O-4)
+            </button>
+            <button type="button" id="btn-parse-diagnosis" class="btn btn-secondary" style="border: 1px solid var(--border-color); cursor: pointer; padding: 10px 20px; border-radius: 5px; font-weight: 500; font-size: 0.95rem; display: inline-flex; align-items: center; gap: 6px;">
+                <i class="fas fa-bolt"></i> ⚡ Звичайний розпарсинг
+            </button>
+        </div>
     </div>
 
     <form method="post">
@@ -277,9 +282,90 @@ document.addEventListener('DOMContentLoaded', function() {
         toggleHospitalizationFields(); // Run on startup
     }
 
+    const rawInput = document.getElementById('raw-diagnosis-input');
+    const stdBtn = document.getElementById('btn-standardize-diagnosis');
+
+    // Штучний Інтелект: Кодувальник онкологічного діагнозу за Наказом МОЗ 473 та ICD-O-4
+    if (stdBtn && rawInput) {
+        stdBtn.addEventListener('click', function() {
+            const text = rawInput.value.trim();
+            if (!text) {
+                alert('Будь ласка, вставте текст діагнозу для стандартизації!');
+                return;
+            }
+
+            const origText = stdBtn.innerHTML;
+            stdBtn.disabled = true;
+            stdBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Кодування за МОЗ 473...`;
+
+            const rawDiagField = document.getElementById('id_raw_diagnosis');
+            if (rawDiagField) rawDiagField.value = text;
+
+            fetch('/api/patients/standardize-diagnosis/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify({ raw_text: text })
+            })
+            .then(res => res.json())
+            .then(data => {
+                stdBtn.disabled = false;
+                stdBtn.innerHTML = origText;
+
+                if (data.success) {
+                    if (data.standardized_diagnosis && document.getElementById('id_diagnosis')) {
+                        document.getElementById('id_diagnosis').value = data.standardized_diagnosis;
+                    }
+                    if (data.tnm_staging && document.getElementById('id_tnm_staging')) {
+                        document.getElementById('id_tnm_staging').value = data.tnm_staging;
+                    }
+                    if (data.disease_stage && document.getElementById('id_disease_stage')) {
+                        document.getElementById('id_disease_stage').value = data.disease_stage;
+                    }
+                    if (data.clinical_group && document.getElementById('id_clinical_group')) {
+                        document.getElementById('id_clinical_group').value = data.clinical_group;
+                    }
+                    if (data.histology_number && document.getElementById('id_histology_number')) {
+                        document.getElementById('id_histology_number').value = data.histology_number;
+                    }
+                    if (data.histology_date && document.getElementById('id_histology_date')) {
+                        document.getElementById('id_histology_date').value = data.histology_date;
+                    }
+                    if (data.histology_description && document.getElementById('id_histology_description')) {
+                        document.getElementById('id_histology_description').value = data.histology_description;
+                    }
+                    if (data.surgical_treatment && document.getElementById('id_prior_radiation') && !document.getElementById('id_prior_radiation').value) {
+                        document.getElementById('id_prior_radiation').value = data.surgical_treatment;
+                    }
+
+                    const animatedFields = ['id_diagnosis', 'id_tnm_staging', 'id_disease_stage', 'id_clinical_group', 'id_histology_number', 'id_histology_date', 'id_histology_description', 'id_prior_radiation'];
+                    animatedFields.forEach(id => {
+                        const el = document.getElementById(id);
+                        if (el && el.value) {
+                            el.style.transition = 'background-color 0.5s ease';
+                            el.style.backgroundColor = 'rgba(40, 167, 69, 0.2)';
+                            setTimeout(() => {
+                                el.style.backgroundColor = 'var(--input-bg)';
+                            }, 1500);
+                        }
+                    });
+                } else {
+                    alert('Помилка: ' + (data.error || 'Не вдалося стандартизувати діагноз'));
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                stdBtn.disabled = false;
+                stdBtn.innerHTML = origText;
+                alert('Помилка з\'єднання з сервером кодування.');
+            });
+        });
+    }
+
     // Розумне розпаршування діагнозу за допомогою регулярних виразів
     const parseBtn = document.getElementById('btn-parse-diagnosis');
-    const rawInput = document.getElementById('raw-diagnosis-input');
 
     if (parseBtn && rawInput) {
         parseBtn.addEventListener('click', function() {
