@@ -101,14 +101,89 @@
                 <button type="button" id="confirmBulkSubmitBtn" class="btn btn-success" onclick="executeBulkConfirm()" style="padding: 10px 24px; font-weight: bold; background-color: #27ae60;"><i class="fas fa-check-double"></i> Підтвердити всі фракції</button>
             </div>
         </div>
+</div>
+
+<!-- МОДАЛЬНЕ ВІКНО: Швидке підтвердження фракцій за сьогодні (Preview) -->
+<div id="todayBatchConfirmModal" class="modal" style="display: none; position: fixed; z-index: 1050; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); overflow-y: auto;">
+    <div class="modal-content" style="background: var(--card-bg-color); color: var(--text-color); margin: 6% auto; padding: 25px; border-radius: 12px; max-width: 650px; border: 1px solid var(--border-color); box-shadow: var(--shadow);">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 15px; margin-bottom: 20px;">
+            <h2 style="margin: 0; font-size: 1.35rem; color: #27ae60; display: flex; align-items: center; gap: 8px;">
+                <i class="fas fa-check-double"></i> Підтвердження фракцій за сьогодні
+            </h2>
+            <span onclick="closeTodayBatchConfirmModal()" style="font-size: 1.8rem; cursor: pointer; color: var(--text-light-color); line-height: 1;">&times;</span>
+        </div>
+
+        <p style="font-size: 0.95rem; color: var(--text-color); margin-bottom: 15px;">
+            Перевірте перелік пацієнтів, які сьогодні пройшли сеанс променевої терапії. Ви можете зняти позначку з пацієнтів, які не з'явилися:
+        </p>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; background: var(--hover-bg); padding: 8px 12px; border-radius: 6px;">
+            <label style="display: flex; align-items: center; gap: 8px; font-weight: 600; cursor: pointer; margin: 0; font-size: 0.9rem;">
+                <input type="checkbox" id="selectAllTodayFractions" checked onchange="toggleSelectAllToday(this)" style="width: 17px; height: 17px; accent-color: #27ae60;">
+                <span>Вибрати всіх</span>
+            </label>
+            <span id="todayBatchCountSummary" style="font-size: 0.9rem; font-weight: 600; color: #27ae60;">
+                Вибрано: {{ today_fractions|length }} з {{ today_fractions|length }}
+            </span>
+        </div>
+
+        <div style="max-height: 380px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 20px;">
+            <table class="fractions-table" style="margin: 0; width: 100%;">
+                <thead style="position: sticky; top: 0; background: var(--table-header-bg); z-index: 2;">
+                    <tr>
+                        <th style="width: 40px; text-align: center;">✓</th>
+                        <th>Пацієнт</th>
+                        <th>Доза</th>
+                        <th>Фракція</th>
+                        <th>Поточний стан</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for fraction in today_fractions %}
+                    <tr id="batch-row-{{ fraction.id }}">
+                        <td style="text-align: center;">
+                            <input type="checkbox" class="today-batch-checkbox" value="{{ fraction.id }}" 
+                                   {% if fraction.status != 'delivered' %}checked{% endif %}
+                                   onchange="updateTodayBatchCount()" 
+                                   style="width: 17px; height: 17px; accent-color: #27ae60; cursor: pointer;">
+                        </td>
+                        <td style="font-weight: 600;">{{ fraction.patient.full_name }}</td>
+                        <td>{{ fraction.dose }} Гр</td>
+                        <td>{{ fraction.patient_completed_count|default:fraction.patient.current_fraction }}/{{ fraction.patient.total_fractions }}</td>
+                        <td>
+                            {% if fraction.status == 'delivered' %}
+                                <span class="badge" style="background: #27ae60; color: white;">Отримана</span>
+                            {% elif fraction.status == 'unverified' %}
+                                <span class="badge" style="background: #f59e0b; color: white;">Не верифіковано</span>
+                            {% elif fraction.status == 'missed' %}
+                                <span class="badge" style="background: #e74c3c; color: white;">Пропущена</span>
+                            {% else %}
+                                <span class="badge" style="background: #3498db; color: white;">Запланована</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 10px;">
+            <button type="button" class="btn btn-secondary" onclick="closeTodayBatchConfirmModal()">Скасувати</button>
+            <button type="button" id="btnExecuteTodayBatch" class="btn btn-success" onclick="executeTodayBatchConfirm()" style="padding: 9px 22px; font-weight: 700; background: #27ae60;">
+                <i class="fas fa-check"></i> Затвердити обрані
+            </button>
+        </div>
     </div>
 </div>
 
 <!-- СЕКЦІЯ: Фракції на сьогодні -->
 {% if today_fractions %}
 <div class="card today-fractions-card">
-    <div class="card-header">
-        <h2><i class="fas fa-radiation"></i> Фракції на сьогодні ({{ today_fractions|length }})</h2>
+    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+        <h2 style="margin: 0;"><i class="fas fa-radiation"></i> Фракції на сьогодні ({{ today_fractions|length }})</h2>
+        <button type="button" class="btn btn-success" onclick="openTodayBatchConfirmModal()" style="padding: 8px 18px; font-weight: 700; box-shadow: 0 4px 10px rgba(39, 174, 96, 0.3);">
+            <i class="fas fa-check-double"></i> ⚡ Підтвердити фракції за сьогодні
+        </button>
     </div>
     
     <table class="fractions-table today-table">
@@ -130,7 +205,7 @@
                 </td>
                 <td>{{ fraction.dose }}</td>
                 <td id="patient-completed-today-{{ fraction.patient.id }}">
-                    {{ fraction.patient.current_fraction }}/{{ fraction.patient.total_fractions }}
+                    {{ fraction.patient_completed_count|default:fraction.patient.current_fraction }}/{{ fraction.patient.total_fractions }}
                 </td>
                 <td>
                     <div class="status-btn-group" data-fraction-id="{{ fraction.id }}" data-patient-id="{{ fraction.patient.id }}">
@@ -143,6 +218,11 @@
                                 class="status-btn btn-delivered {% if fraction.status == 'delivered' %}active{% endif %}" 
                                 onclick="updateFractionStatus({{ fraction.id }}, 'delivered')">
                             Отримана
+                        </button>
+                        <button type="button" 
+                                class="status-btn btn-unverified {% if fraction.status == 'unverified' %}active{% endif %}" 
+                                onclick="updateFractionStatus({{ fraction.id }}, 'unverified')">
+                            Не верифіковано
                         </button>
                         <button type="button" 
                                 class="status-btn btn-missed {% if fraction.status == 'missed' %}active{% endif %}" 
@@ -178,6 +258,9 @@
                 <div class="fraction-stats">
                     <span class="stat completed" id="patient-completed-{{ patient_data.patient.id }}">{{ patient_data.completed_fractions }}/{{ patient_data.total_fractions }}</span>
                     <span class="stat pending" id="patient-pending-{{ patient_data.patient.id }}">{{ patient_data.pending_fractions }} очікують</span>
+                    {% if patient_data.unverified_fractions %}
+                    <span class="stat unverified" id="patient-unverified-{{ patient_data.patient.id }}" style="background: #fef3c7; color: #92400e; font-weight: 600;">{{ patient_data.unverified_fractions }} не вериф.</span>
+                    {% endif %}
                     <span class="stat missed" id="patient-missed-{{ patient_data.patient.id }}" style="background: #f8d7da; color: #721c24;">{{ patient_data.missed_fractions }} пропущено</span>
                     <button type="button" class="btn-outline approve-all-btn" style="padding: 2px 8px; font-size: 0.8rem; margin-left: 10px; cursor: pointer;" 
                             onclick="event.stopPropagation(); approveAllFractions({{ patient_data.patient.id }})" 
@@ -217,17 +300,22 @@
                                 <button type="button" 
                                         class="status-btn btn-scheduled {% if fraction.status == 'scheduled' %}active{% endif %}" 
                                         onclick="updateFractionStatus({{ fraction.id }}, 'scheduled')">
-                                    Запланована
+                            Запланована
                                 </button>
                                 <button type="button" 
                                         class="status-btn btn-delivered {% if fraction.status == 'delivered' %}active{% endif %}" 
                                         onclick="updateFractionStatus({{ fraction.id }}, 'delivered')">
-                                    Отримана
+                            Отримана
+                                </button>
+                                <button type="button" 
+                                        class="status-btn btn-unverified {% if fraction.status == 'unverified' %}active{% endif %}" 
+                                        onclick="updateFractionStatus({{ fraction.id }}, 'unverified')">
+                            Не верифіковано
                                 </button>
                                 <button type="button" 
                                         class="status-btn btn-missed {% if fraction.status == 'missed' %}active{% endif %}" 
                                         onclick="updateFractionStatus({{ fraction.id }}, 'missed')">
-                                    Пропущена
+                            Пропущена
                                 </button>
                             </div>
                         </td>
@@ -520,6 +608,11 @@
     color: #ffffff;
     box-shadow: 0 2px 4px rgba(40, 167, 69, 0.4);
 }
+.status-btn.btn-unverified.active {
+    background-color: #f59e0b;
+    color: #ffffff;
+    box-shadow: 0 2px 4px rgba(245, 158, 11, 0.4);
+}
 .status-btn.btn-missed.active {
     background-color: #dc3545;
     color: #ffffff;
@@ -532,6 +625,9 @@
 /* Row class styles depending on status */
 .status-row-delivered {
     background-color: rgba(40, 167, 69, 0.04);
+}
+.status-row-unverified {
+    background-color: rgba(245, 158, 11, 0.06);
 }
 .status-row-missed {
     background-color: rgba(220, 53, 69, 0.04);
@@ -1007,6 +1103,95 @@ function submitMachinePause() {
         btn.disabled = false;
         btn.innerHTML = `⚙️ Застосувати для всіх пацієнтів`;
         alert('Помилка з\'єднання.');
+    });
+}
+
+function openTodayBatchConfirmModal() {
+    const modal = document.getElementById('todayBatchConfirmModal');
+    if (modal) {
+        modal.style.display = 'block';
+        updateTodayBatchCount();
+    }
+}
+
+function closeTodayBatchConfirmModal() {
+    const modal = document.getElementById('todayBatchConfirmModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+function toggleSelectAllToday(masterCheckbox) {
+    const checkboxes = document.querySelectorAll('.today-batch-checkbox');
+    checkboxes.forEach(cb => {
+        cb.checked = masterCheckbox.checked;
+    });
+    updateTodayBatchCount();
+}
+
+function updateTodayBatchCount() {
+    const checkboxes = document.querySelectorAll('.today-batch-checkbox');
+    const checked = document.querySelectorAll('.today-batch-checkbox:checked');
+    const summary = document.getElementById('todayBatchCountSummary');
+    const master = document.getElementById('selectAllTodayFractions');
+    const btn = document.getElementById('btnExecuteTodayBatch');
+
+    if (summary) {
+        summary.textContent = `Вибрано: ${checked.length} з ${checkboxes.length}`;
+    }
+    if (master) {
+        master.checked = (checkboxes.length > 0 && checked.length === checkboxes.length);
+        master.indeterminate = (checked.length > 0 && checked.length < checkboxes.length);
+    }
+    if (btn) {
+        btn.disabled = (checked.length === 0);
+    }
+}
+
+function executeTodayBatchConfirm() {
+    const checked = document.querySelectorAll('.today-batch-checkbox:checked');
+    const fractionIds = Array.from(checked).map(cb => parseInt(cb.value)).filter(id => !isNaN(id));
+
+    if (fractionIds.length === 0) {
+        alert('Не вибрано жодної фракції для підтвердження.');
+        return;
+    }
+
+    const btn = document.getElementById('btnExecuteTodayBatch');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Затвердження...';
+    }
+
+    fetch('/api/fractions/confirm-today-batch/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({ fraction_ids: fractionIds })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            closeTodayBatchConfirmModal();
+            alert(`✅ ${data.message || 'Фракції успішно підтверджено!'}`);
+            location.reload();
+        } else {
+            alert('Помилка: ' + (data.error || 'Не вдалося підтвердити фракції'));
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-check"></i> Затвердити обрані';
+            }
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        alert('Помилка з\'єднання при підтвердженні фракцій.');
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-check"></i> Затвердити обрані';
+        }
     });
 }
 </script>

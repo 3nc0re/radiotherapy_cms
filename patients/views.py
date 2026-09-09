@@ -439,7 +439,7 @@ def update_fraction_status_api(request):
         fraction_id = data.get('fraction_id')
         status = data.get('status')
         
-        if status not in ['scheduled', 'delivered', 'missed']:
+        if status not in ['scheduled', 'delivered', 'unverified', 'missed']:
             return JsonResponse({'success': False, 'error': 'Некоректний статус'}, status=400)
             
         fraction = get_object_or_404(FractionHistory, pk=fraction_id)
@@ -500,36 +500,24 @@ def fraction_list(request):
     today = timezone.localdate()
     active_patients_q = Q(is_active=True) & (Q(discharge_date__isnull=True) | Q(discharge_date__gte=today))
     
-    # АВТОМАТИКА: Пропущені фракції за минулі дні
-    overdue_fractions = FractionHistory.objects.filter(
+    # АВТОМАТИКА: Прострочені непідтверджені фракції за минулі дні
+    # переводимо в статус "Не верифіковано" (unverified) одним швидким SQL-запитом
+    # замість руйнування та зсуву розкладу
+    FractionHistory.objects.filter(
         date__lt=today,
         status='scheduled',
         patient__in=Patient.objects.filter(active_patients_q)
-    ).order_by('date')
-    
-    if overdue_fractions.exists():
-        patient_earliest_dates = {}
-        for f in overdue_fractions:
-            if f.patient_id not in patient_earliest_dates:
-                patient_earliest_dates[f.patient_id] = f.date
-        
-        for patient_id in patient_earliest_dates.keys():
-            patient = Patient.objects.get(pk=patient_id)
-            delivered_count = patient.fractions.filter(status='delivered').count()
-            total = patient.total_fractions or 0
-            if total > 0 and delivered_count >= total:
-                patient.fractions.filter(date__lt=today, status='scheduled').delete()
-            else:
-                patient.fractions.filter(date__lt=today, status='scheduled').update(status='missed')
-            from .services import shift_patient_schedule
-            shift_patient_schedule(patient)
-            patient.recalculate_received_dose()
+    ).update(status='unverified')
             
-    # Фракції на сьогодні (для всіх активних пацієнтів)
-    today_fractions = FractionHistory.objects.filter(
+    # Фракції на сьогодні (для всіх активних пацієнтів) з оптимізованим префетчем
+    today_fractions = list(FractionHistory.objects.filter(
         date=today,
         patient__in=Patient.objects.filter(active_patients_q)
-    ).select_related('patient').order_by('patient__last_name', 'patient__first_name')
+    ).select_related('patient').prefetch_related('patient__fractions').order_by('patient__last_name', 'patient__first_name'))
+    
+    # Розраховуємо кількість проведених сеансів у пам'яті (усуває N+1 SQL-запити)
+    for f in today_fractions:
+        f.patient_completed_count = sum(1 for pf in f.patient.fractions.all() if pf.status == 'delivered')
     
     # Отримуємо активних пацієнтів, які мають фракції
     patients_with_fractions = Patient.objects.filter(
@@ -539,12 +527,13 @@ def fraction_list(request):
         'fractions'
     ).order_by('last_name', 'first_name')
     
-    # ОПТИМІЗАЦІЯ N+1: підраховуємо фракції у пам'яті Python (замість 200+ повторних SQL-запитів)
+    # ОПТИМІЗАЦІЯ N+1: підраховуємо фракції у пам'яті Python
     patients_data = []
     for patient in patients_with_fractions:
         all_fractions = sorted(list(patient.fractions.all()), key=lambda f: f.date)
         completed_count = sum(1 for f in all_fractions if f.status == 'delivered')
         pending_count = sum(1 for f in all_fractions if f.status == 'scheduled')
+        unverified_count = sum(1 for f in all_fractions if f.status == 'unverified')
         missed_count = sum(1 for f in all_fractions if f.status == 'missed')
         
         patients_data.append({
@@ -553,6 +542,7 @@ def fraction_list(request):
             'total_fractions': len(all_fractions),
             'completed_fractions': completed_count,
             'pending_fractions': pending_count,
+            'unverified_fractions': unverified_count,
             'missed_fractions': missed_count,
         })
         
@@ -1610,6 +1600,45 @@ def bulk_confirm_patient_up_to_date_api(request, patient_id):
         'received_dose': patient.received_dose,
         'discharge_date': patient.discharge_date.strftime('%d.%m.%Y') if patient.discharge_date else None
     })
+
+
+@login_required
+@require_POST
+def confirm_today_fractions_batch_api(request):
+    """
+    Пакетне підтвердження обраних фракцій за сьогодні (1-клік з попереднім переглядом).
+    Отримує список fraction_ids, переводить їх у 'delivered',
+    перераховує отримані дози для пацієнтів та повертає результат.
+    """
+    try:
+        data = json.loads(request.body)
+        fraction_ids = data.get('fraction_ids', None)
+        
+        today = timezone.localdate()
+        if fraction_ids is None:
+            query = FractionHistory.objects.filter(
+                date=today,
+                status__in=['scheduled', 'unverified']
+            )
+        elif len(fraction_ids) == 0:
+            return JsonResponse({'success': False, 'error': 'Не вибрано жодної фракції для підтвердження.'}, status=400)
+        else:
+            query = FractionHistory.objects.filter(id__in=fraction_ids)
+            
+        affected_patient_ids = list(query.values_list('patient_id', flat=True).distinct())
+        confirmed_count = query.update(status='delivered')
+        
+        affected_patients = Patient.objects.filter(id__in=affected_patient_ids)
+        for p in affected_patients:
+            p.recalculate_received_dose()
+            
+        return JsonResponse({
+            'success': True,
+            'confirmed_count': confirmed_count,
+            'message': f'Успішно підтверджено {confirmed_count} фракцій за сьогодні.'
+        })
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
 @login_required

@@ -180,9 +180,9 @@ def shift_patient_schedule(patient, from_date=None):
     # Отримуємо заплановані фракції на/після from_date
     scheduled_to_update = list(patient.fractions.filter(status='scheduled', date__gte=from_date).order_by('date'))
     
-    # Визначаємо список "зайнятих" дат (де вже є delivered, missed, або scheduled ДО from_date)
+    # Визначаємо список "зайнятих" дат (де вже є delivered, missed, unverified, або scheduled ДО from_date)
     occupied_dates = set(patient.fractions.filter(
-        Q(status__in=['delivered', 'missed']) | Q(status='scheduled', date__lt=from_date)
+        Q(status__in=['delivered', 'missed', 'unverified']) | Q(status='scheduled', date__lt=from_date)
     ).values_list('date', flat=True))
     
     if remaining <= 0:
@@ -199,8 +199,8 @@ def shift_patient_schedule(patient, from_date=None):
             recalculate_discharge_date(patient)
         return
 
-    # Скільки фракцій заплановано ДО from_date?
-    scheduled_before_from_date = patient.fractions.filter(status='scheduled', date__lt=from_date).count()
+    # Скільки фракцій заплановано/не верифіковано ДО from_date?
+    scheduled_before_from_date = patient.fractions.filter(status__in=['scheduled', 'unverified'], date__lt=from_date).count()
     
     # Отже, на/після from_date нам потрібно запланувати:
     needed_on_or_after = remaining - scheduled_before_from_date

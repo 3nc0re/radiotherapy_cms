@@ -771,6 +771,11 @@
                                     Отримана
                                 </button>
                                 <button type="button" 
+                                        class="status-btn btn-unverified {% if fraction.status == 'unverified' %}active{% endif %}" 
+                                        onclick="updateFractionStatus({{ fraction.pk }}, 'unverified')">
+                                    Не верифіковано
+                                </button>
+                                <button type="button" 
                                         class="status-btn btn-missed {% if fraction.status == 'missed' %}active{% endif %}" 
                                         onclick="updateFractionStatus({{ fraction.pk }}, 'missed')">
                                     Пропущена
@@ -1786,6 +1791,11 @@ progress::-webkit-progress-value {
     color: #ffffff;
     box-shadow: 0 2px 4px rgba(40, 167, 69, 0.4);
 }
+.status-btn.btn-unverified.active {
+    background-color: #f59e0b;
+    color: #ffffff;
+    box-shadow: 0 2px 4px rgba(245, 158, 11, 0.4);
+}
 .status-btn.btn-missed.active {
     background-color: #dc3545;
     color: #ffffff;
@@ -1798,6 +1808,9 @@ progress::-webkit-progress-value {
 /* Row class styles depending on status */
 .status-row-delivered {
     background-color: rgba(40, 167, 69, 0.04);
+}
+.status-row-unverified {
+    background-color: rgba(245, 158, 11, 0.06);
 }
 .status-row-missed {
     background-color: rgba(220, 53, 69, 0.04);

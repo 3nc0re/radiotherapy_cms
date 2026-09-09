@@ -54,6 +54,7 @@ urlpatterns = [
     path('fractions/auto-confirm/', views.auto_confirm_fractions, name='auto_confirm_fractions'),
     path('api/fractions/bulk-confirm-preview/', views.bulk_confirm_preview_api, name='bulk_confirm_preview_api'),
     path('api/fractions/bulk-confirm-period/', views.bulk_confirm_period_api, name='bulk_confirm_period_api'),
+    path('api/fractions/confirm-today-batch/', views.confirm_today_fractions_batch_api, name='confirm_today_fractions_batch_api'),
     path('api/patients/<int:patient_id>/bulk-confirm-up-to-date/', views.bulk_confirm_patient_up_to_date_api, name='bulk_confirm_patient_up_to_date_api'),
 
     # Medical Incapacity

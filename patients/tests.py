@@ -2813,6 +2813,155 @@ class CalendarTests(TestCase):
         self.assertEqual(res2.status_code, 400)
 
 
+class FractionsBatchAndUnverifiedTests(TestCase):
+    def setUp(self):
+        from django.utils import timezone
+        self.user = User.objects.create_user(
+            username='doctor_batch',
+            password='password123',
+            role='doctor',
+            approved=True
+        )
+        self.client.login(username='doctor_batch', password='password123')
+        self.today = timezone.localdate()
+
+    def test_unverified_status_choice_and_model(self):
+        patient = Patient.objects.create(
+            last_name='Тест',
+            first_name='Іван',
+            is_active=True
+        )
+        fraction = FractionHistory.objects.create(
+            patient=patient,
+            date=self.today,
+            dose=2.0,
+            status='unverified'
+        )
+        self.assertEqual(fraction.status, 'unverified')
+        self.assertEqual(fraction.get_status_display(), 'Не верифіковано')
+
+    def test_update_fraction_status_api_unverified(self):
+        import json
+        patient = Patient.objects.create(
+            last_name='Тест',
+            first_name='Олег',
+            is_active=True,
+            total_fractions=5,
+            dose_per_fraction=2.0
+        )
+        fraction = FractionHistory.objects.create(
+            patient=patient,
+            date=self.today,
+            dose=2.0,
+            status='scheduled'
+        )
+
+        url = reverse('update_fraction_status_api')
+        res = self.client.post(url, data=json.dumps({
+            'fraction_id': fraction.id,
+            'status': 'unverified'
+        }), content_type='application/json')
+
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertTrue(data['success'])
+        fraction.refresh_from_db()
+        self.assertEqual(fraction.status, 'unverified')
+
+    def test_fraction_list_marks_past_scheduled_as_unverified_without_shifting(self):
+        past_date = self.today - timedelta(days=2)
+        patient = Patient.objects.create(
+            last_name='Шевченко',
+            first_name='Тарас',
+            total_fractions=3,
+            dose_per_fraction=2.0,
+            is_active=True
+        )
+        f1 = FractionHistory.objects.create(
+            patient=patient, date=past_date, dose=2.0, status='scheduled'
+        )
+        f2 = FractionHistory.objects.create(
+            patient=patient, date=self.today, dose=2.0, status='scheduled'
+        )
+        future_date = self.today + timedelta(days=1)
+        f3 = FractionHistory.objects.create(
+            patient=patient, date=future_date, dose=2.0, status='scheduled'
+        )
+        patient.treatment_start_date = past_date
+        patient.save()
+
+        res = self.client.get(reverse('fraction_list'))
+        self.assertEqual(res.status_code, 200)
+
+        f1.refresh_from_db()
+        f2.refresh_from_db()
+        f3.refresh_from_db()
+
+        # Overdue scheduled fraction must become 'unverified', NOT 'missed'
+        self.assertEqual(f1.status, 'unverified')
+        # Today fraction remains 'scheduled'
+        self.assertEqual(f2.status, 'scheduled')
+        # Future fraction date must not have shifted
+        self.assertEqual(f3.date, future_date)
+
+    def test_confirm_today_fractions_batch_api_success(self):
+        import json
+        p1 = Patient.objects.create(
+            last_name='Козак',
+            first_name='Богдан',
+            total_fractions=5,
+            dose_per_fraction=2.0,
+            is_active=True
+        )
+        p2 = Patient.objects.create(
+            last_name='Гончар',
+            first_name='Олесь',
+            total_fractions=5,
+            dose_per_fraction=2.0,
+            is_active=True
+        )
+        f1 = FractionHistory.objects.create(
+            patient=p1, date=self.today, dose=2.0, status='scheduled'
+        )
+        f2 = FractionHistory.objects.create(
+            patient=p2, date=self.today, dose=2.0, status='scheduled'
+        )
+
+        url = reverse('confirm_today_fractions_batch_api')
+        # Only confirm f1
+        res = self.client.post(url, data=json.dumps({
+            'fraction_ids': [f1.id]
+        }), content_type='application/json')
+
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertTrue(data['success'])
+        self.assertEqual(data['confirmed_count'], 1)
+
+        f1.refresh_from_db()
+        p1.refresh_from_db()
+        self.assertEqual(f1.status, 'delivered')
+        self.assertEqual(p1.current_fraction, 1)
+        self.assertEqual(p1.received_dose, 2.0)
+
+        f2.refresh_from_db()
+        p2.refresh_from_db()
+        self.assertEqual(f2.status, 'scheduled')
+        self.assertEqual(p2.current_fraction, 0)
+
+    def test_confirm_today_fractions_batch_api_empty_list(self):
+        import json
+        url = reverse('confirm_today_fractions_batch_api')
+        res = self.client.post(url, data=json.dumps({
+            'fraction_ids': []
+        }), content_type='application/json')
+
+        self.assertEqual(res.status_code, 400)
+        data = res.json()
+        self.assertFalse(data['success'])
+
+
+
 
 
 

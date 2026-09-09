@@ -548,6 +548,7 @@ class FractionHistory(models.Model):
     STATUS_CHOICES = [
         ('scheduled', 'Запланована'),
         ('delivered', 'Отримана'),
+        ('unverified', 'Не верифіковано'),
         ('missed', 'Пропущена'),
     ]
     status = models.CharField(
