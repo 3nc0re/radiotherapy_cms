@@ -1,4 +1,5 @@
 from django.shortcuts import render, get_object_or_404, redirect
+from django.urls import reverse
 from .models import Patient, FractionHistory, MedicalIncapacity, User, TreatmentProtocol
 from .forms import PatientForm, FractionHistoryForm, MedicalIncapacityForm, UserRegistrationForm, UserLoginForm, FractionEditForm
 from django.http import JsonResponse
@@ -2398,6 +2399,277 @@ def add_boost_phase_api(request, pk):
         'discharge_date': patient.discharge_date.strftime('%d.%m.%Y') if patient.discharge_date else '—',
         'next_boost_start': start_date.strftime('%d.%m.%Y'),
     })
+
+
+@login_required
+def patient_calendar(request):
+    """Головна сторінка інтерактивного календаря руху пацієнтів"""
+    today = timezone.localdate()
+    return render(request, 'patients/calendar.html', {
+        'today': today.isoformat(),
+    })
+
+
+@login_required
+def calendar_events_api(request):
+    """
+    Повертає події для FullCalendar у форматі JSON.
+    Події включають:
+    1. КТ-симуляція (ct_simulation) - синій (#2563eb)
+    2. Початок лікування (treatment_start) - зелений (#16a34a)
+    3. Виписка (discharge) - фіолетовий (#9333ea)
+    4. Планова госпіталізація (admission) - бурштиновий (#d97706)
+    5. Аналіз крові (blood_test) - карміново-червоний (#e11d48)
+    """
+    from django.utils.dateparse import parse_datetime, parse_date
+    start_str = request.GET.get('start', '')
+    end_str = request.GET.get('end', '')
+
+    today = timezone.localdate()
+    
+    start_date = None
+    end_date = None
+
+    if start_str:
+        if 'T' in start_str:
+            dt = parse_datetime(start_str)
+            if dt:
+                start_date = dt.date()
+        else:
+            start_date = parse_date(start_str[:10])
+            
+    if end_str:
+        if 'T' in end_str:
+            dt = parse_datetime(end_str)
+            if dt:
+                end_date = dt.date()
+        else:
+            end_date = parse_date(end_str[:10])
+
+    if not start_date:
+        start_date = today.replace(day=1)
+    if not end_date:
+        end_date = start_date + timedelta(days=42)
+
+    patients = Patient.objects.filter(
+        Q(is_active=True) | Q(discharge_date__gte=start_date)
+    ).prefetch_related('fractions')
+
+    events = []
+
+    for p in patients:
+        # 1. КТ-симуляція
+        if p.ct_simulation_date and start_date <= p.ct_simulation_date <= end_date:
+            events.append({
+                'id': f'ct_{p.id}',
+                'title': f'🔵 КТ: {p.last_name} {p.first_name[:1]}.' if p.first_name else f'🔵 КТ: {p.last_name}',
+                'start': p.ct_simulation_date.isoformat(),
+                'allDay': True,
+                'backgroundColor': '#2563eb',
+                'borderColor': '#1d4ed8',
+                'textColor': '#ffffff',
+                'editable': True,
+                'extendedProps': {
+                    'patient_id': p.id,
+                    'patient_name': p.full_name,
+                    'event_type': 'ct_simulation',
+                    'event_label': 'КТ-симуляція (Підготовка)',
+                    'date_display': p.ct_simulation_date.strftime('%d.%m.%Y'),
+                    'diagnosis': p.diagnosis or 'Не вказано',
+                    'stage': p.display_stage,
+                    'dose_info': f"{p.dose_per_fraction or '—'} Гр × {p.total_fractions or '—'} фр.",
+                    'hospitalization': f"{p.get_hospitalization_status_display()}{f', палата {p.ward_number}' if p.ward_number else ''}",
+                    'detail_url': reverse('patient_detail', kwargs={'pk': p.id}),
+                }
+            })
+
+        # 2. Початок лікування (Старт)
+        if p.treatment_start_date and start_date <= p.treatment_start_date <= end_date:
+            events.append({
+                'id': f'start_{p.id}',
+                'title': f'🟢 Старт: {p.last_name} {p.first_name[:1]}.' if p.first_name else f'🟢 Старт: {p.last_name}',
+                'start': p.treatment_start_date.isoformat(),
+                'allDay': True,
+                'backgroundColor': '#16a34a',
+                'borderColor': '#15803d',
+                'textColor': '#ffffff',
+                'editable': True,
+                'extendedProps': {
+                    'patient_id': p.id,
+                    'patient_name': p.full_name,
+                    'event_type': 'treatment_start',
+                    'event_label': 'Початок лікування (1-ша фракція)',
+                    'date_display': p.treatment_start_date.strftime('%d.%m.%Y'),
+                    'diagnosis': p.diagnosis or 'Не вказано',
+                    'stage': p.display_stage,
+                    'dose_info': f"{p.dose_per_fraction or '—'} Гр × {p.total_fractions or '—'} фр.",
+                    'hospitalization': f"{p.get_hospitalization_status_display()}{f', палата {p.ward_number}' if p.ward_number else ''}",
+                    'detail_url': reverse('patient_detail', kwargs={'pk': p.id}),
+                }
+            })
+
+        # 3. Виписка / Закінчення лікування
+        actual_discharge = p.get_actual_discharge_date or p.discharge_date
+        if actual_discharge and start_date <= actual_discharge <= end_date:
+            events.append({
+                'id': f'discharge_{p.id}',
+                'title': f'🟣 Виписка: {p.last_name} {p.first_name[:1]}.' if p.first_name else f'🟣 Виписка: {p.last_name}',
+                'start': actual_discharge.isoformat(),
+                'allDay': True,
+                'backgroundColor': '#9333ea',
+                'borderColor': '#7e22ce',
+                'textColor': '#ffffff',
+                'editable': False,
+                'extendedProps': {
+                    'patient_id': p.id,
+                    'patient_name': p.full_name,
+                    'event_type': 'discharge',
+                    'event_label': 'Розрахункова виписка',
+                    'date_display': actual_discharge.strftime('%d.%m.%Y'),
+                    'diagnosis': p.diagnosis or 'Не вказано',
+                    'stage': p.display_stage,
+                    'dose_info': f"{p.dose_per_fraction or '—'} Гр × {p.total_fractions or '—'} фр. (проведено {p.current_fraction})",
+                    'hospitalization': f"{p.get_hospitalization_status_display()}{f', палата {p.ward_number}' if p.ward_number else ''}",
+                    'detail_url': reverse('patient_detail', kwargs={'pk': p.id}),
+                }
+            })
+
+        # 4. Планова госпіталізація
+        if p.planned_admission_date and start_date <= p.planned_admission_date <= end_date:
+            events.append({
+                'id': f'admission_{p.id}',
+                'title': f'🟠 Госпіталізація: {p.last_name} {p.first_name[:1]}.' if p.first_name else f'🟠 Госпіталізація: {p.last_name}',
+                'start': p.planned_admission_date.isoformat(),
+                'allDay': True,
+                'backgroundColor': '#d97706',
+                'borderColor': '#b45309',
+                'textColor': '#ffffff',
+                'editable': True,
+                'extendedProps': {
+                    'patient_id': p.id,
+                    'patient_name': p.full_name,
+                    'event_type': 'admission',
+                    'event_label': 'Планова госпіталізація',
+                    'date_display': p.planned_admission_date.strftime('%d.%m.%Y'),
+                    'diagnosis': p.diagnosis or 'Не вказано',
+                    'stage': p.display_stage,
+                    'dose_info': f"{p.dose_per_fraction or '—'} Гр × {p.total_fractions or '—'} фр.",
+                    'hospitalization': f"Стаціонар{f', палата {p.ward_number}' if p.ward_number else ''}{f' (ліжко: {p.bed_owner})' if p.bed_owner else ''}",
+                    'detail_url': reverse('patient_detail', kwargs={'pk': p.id}),
+                }
+            })
+
+        # 5. Аналіз крові
+        due_blood_date = p.next_blood_test_due_date
+        if due_blood_date and start_date <= due_blood_date <= end_date:
+            events.append({
+                'id': f'blood_{p.id}',
+                'title': f'🔴 Аналіз: {p.last_name} {p.first_name[:1]}.' if p.first_name else f'🔴 Аналіз: {p.last_name}',
+                'start': due_blood_date.isoformat(),
+                'allDay': True,
+                'backgroundColor': '#e11d48',
+                'borderColor': '#be123c',
+                'textColor': '#ffffff',
+                'editable': False,
+                'extendedProps': {
+                    'patient_id': p.id,
+                    'patient_name': p.full_name,
+                    'event_type': 'blood_test',
+                    'event_label': 'Контрольний аналіз крові',
+                    'date_display': due_blood_date.strftime('%d.%m.%Y'),
+                    'diagnosis': p.diagnosis or 'Не вказано',
+                    'stage': p.display_stage,
+                    'dose_info': f"{p.dose_per_fraction or '—'} Гр × {p.total_fractions or '—'} фр.",
+                    'hospitalization': p.get_hospitalization_status_display(),
+                    'detail_url': reverse('patient_detail', kwargs={'pk': p.id}),
+                }
+            })
+
+    return JsonResponse(events, safe=False)
+
+
+@login_required
+@require_POST
+def calendar_reschedule_event_api(request):
+    """
+    API для Drag & Drop перенесення події пацієнта на нову дату.
+    Підтримує:
+    - ct_simulation: переносить дату КТ-симуляції
+    - treatment_start: переносить дату початку лікування, зміщує розклад сеансів та оновлює виписку
+    - admission: переносить планову дату госпіталізації
+    """
+    try:
+        data = json.loads(request.body)
+        patient_id = data.get('patient_id')
+        event_type = data.get('event_type')
+        new_date_str = data.get('new_date')
+
+        if not patient_id or not event_type or not new_date_str:
+            return JsonResponse({'success': False, 'error': 'Необхідно вказати patient_id, event_type та new_date.'}, status=400)
+
+        from django.utils.dateparse import parse_date
+        new_date = parse_date(new_date_str)
+        if not new_date:
+            return JsonResponse({'success': False, 'error': 'Некоректний формат дати (очікується YYYY-MM-DD).'}, status=400)
+
+        patient = get_object_or_404(Patient, pk=patient_id)
+        formatted_date = new_date.strftime('%d.%m.%Y')
+
+        if event_type == 'ct_simulation':
+            patient.ct_simulation_date = new_date
+            patient.save()
+            return JsonResponse({
+                'success': True,
+                'message': f'КТ-симуляцію для {patient.full_name} успішно перенесено на {formatted_date}.',
+                'patient_id': patient.id,
+                'event_type': event_type,
+                'new_date': formatted_date,
+            })
+
+        elif event_type == 'treatment_start':
+            patient.treatment_start_date = new_date
+            # Якщо стара дата виписки стала раніше за новий початок лікування, тимчасово оновлюємо її
+            # для проходження валідації clean() перед регенерацією розкладу
+            if patient.discharge_date and patient.discharge_date < new_date:
+                patient.discharge_date = new_date
+            patient.save()
+
+            delivered_count = patient.fractions.filter(status='delivered').count()
+            if delivered_count == 0 and patient.total_fractions and patient.dose_per_fraction:
+                from .services import generate_fractions_for_patient
+                generate_fractions_for_patient(patient, start_date=new_date)
+            else:
+                from .services import shift_patient_schedule, recalculate_discharge_date
+                shift_patient_schedule(patient, from_date=new_date)
+                recalculate_discharge_date(patient)
+
+            patient.refresh_from_db()
+            discharge_str = patient.discharge_date.strftime('%d.%m.%Y') if patient.discharge_date else '—'
+            return JsonResponse({
+                'success': True,
+                'message': f'Початок лікування для {patient.full_name} перенесено на {formatted_date}. Графік сеансів зміщено, нова дата виписки: {discharge_str}.',
+                'patient_id': patient.id,
+                'event_type': event_type,
+                'new_date': formatted_date,
+                'discharge_date': discharge_str,
+            })
+
+        elif event_type == 'admission':
+            patient.planned_admission_date = new_date
+            patient.save()
+            return JsonResponse({
+                'success': True,
+                'message': f'Планову госпіталізацію для {patient.full_name} перенесено на {formatted_date}.',
+                'patient_id': patient.id,
+                'event_type': event_type,
+                'new_date': formatted_date,
+            })
+
+        else:
+            return JsonResponse({'success': False, 'error': f'Перенесення для типу події "{event_type}" не підтримується вручну.'}, status=400)
+
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
 

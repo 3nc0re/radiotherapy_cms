@@ -2685,6 +2685,135 @@ class ClinicalWorkflowAuditTests(TestCase):
         self.assertEqual(data['histology_date'], '10.05.2025')
 
 
+class CalendarTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='doctor_cal',
+            password='password123',
+            role='doctor',
+            approved=True
+        )
+        self.client.login(username='doctor_cal', password='password123')
+        self.today = timezone.localdate()
+
+    def test_calendar_page_access(self):
+        response = self.client.get(reverse('patient_calendar'))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'patients/calendar.html')
+        self.assertIn('today', response.context)
+
+    def test_calendar_events_api(self):
+        p1 = Patient.objects.create(
+            last_name='Петренко',
+            first_name='Петро',
+            ct_simulation_date=self.today,
+            treatment_start_date=self.today + timedelta(days=2),
+            discharge_date=self.today + timedelta(days=15),
+            is_active=True
+        )
+        p2 = Patient.objects.create(
+            last_name='Сидоренко',
+            first_name='Оксана',
+            planned_admission_date=self.today + timedelta(days=1),
+            hospitalization_status='inpatient',
+            ward_number=5,
+            is_active=True
+        )
+
+        url = f"{reverse('calendar_events_api')}?start={(self.today - timedelta(days=5)).isoformat()}&end={(self.today + timedelta(days=30)).isoformat()}"
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        events = response.json()
+        
+        event_types = [e['extendedProps']['event_type'] for e in events]
+        self.assertIn('ct_simulation', event_types)
+        self.assertIn('treatment_start', event_types)
+        self.assertIn('discharge', event_types)
+        self.assertIn('admission', event_types)
+
+        for e in events:
+            if e['extendedProps']['event_type'] == 'ct_simulation':
+                self.assertEqual(e['backgroundColor'], '#2563eb')
+            elif e['extendedProps']['event_type'] == 'treatment_start':
+                self.assertEqual(e['backgroundColor'], '#16a34a')
+            elif e['extendedProps']['event_type'] == 'discharge':
+                self.assertEqual(e['backgroundColor'], '#9333ea')
+            elif e['extendedProps']['event_type'] == 'admission':
+                self.assertEqual(e['backgroundColor'], '#d97706')
+
+    def test_calendar_reschedule_ct_simulation(self):
+        p = Patient.objects.create(
+            last_name='Коваленко',
+            first_name='Іван',
+            ct_simulation_date=self.today,
+            is_active=True
+        )
+        new_date = self.today + timedelta(days=3)
+        url = reverse('calendar_reschedule_event_api')
+        res = self.client.post(url, data=json.dumps({
+            'patient_id': p.id,
+            'event_type': 'ct_simulation',
+            'new_date': new_date.isoformat()
+        }), content_type='application/json')
+
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.json()['success'])
+        p.refresh_from_db()
+        self.assertEqual(p.ct_simulation_date, new_date)
+
+    def test_calendar_reschedule_treatment_start_and_schedule_update(self):
+        p = Patient.objects.create(
+            last_name='Мельник',
+            first_name='Марія',
+            treatment_start_date=self.today,
+            total_fractions=5,
+            dose_per_fraction=2.0,
+            is_active=True
+        )
+        from patients.services import generate_fractions_for_patient
+        generate_fractions_for_patient(p)
+        p.refresh_from_db()
+
+        new_start = self.today + timedelta(days=7)
+        url = reverse('calendar_reschedule_event_api')
+        res = self.client.post(url, data=json.dumps({
+            'patient_id': p.id,
+            'event_type': 'treatment_start',
+            'new_date': new_start.isoformat()
+        }), content_type='application/json')
+
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.json()['success'])
+        p.refresh_from_db()
+        self.assertEqual(p.treatment_start_date, new_start)
+        self.assertGreaterEqual(p.discharge_date, new_start)
+        first_fraction = p.fractions.order_by('date').first()
+        self.assertEqual(first_fraction.date, new_start)
+
+    def test_calendar_reschedule_validation_and_unsupported_types(self):
+        p = Patient.objects.create(
+            last_name='Тестовий',
+            first_name='Тест',
+            is_active=True
+        )
+        url = reverse('calendar_reschedule_event_api')
+        
+        # Missing fields
+        res1 = self.client.post(url, data=json.dumps({
+            'patient_id': p.id
+        }), content_type='application/json')
+        self.assertEqual(res1.status_code, 400)
+
+        # Unsupported type (discharge)
+        res2 = self.client.post(url, data=json.dumps({
+            'patient_id': p.id,
+            'event_type': 'discharge',
+            'new_date': self.today.isoformat()
+        }), content_type='application/json')
+        self.assertEqual(res2.status_code, 400)
+
+
+
 
 
 
