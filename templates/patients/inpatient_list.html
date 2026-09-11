@@ -6,15 +6,33 @@
 </div>
 
 <!-- Живий пошук пацієнта -->
-<div class="inpatient-search-container" style="margin-bottom: 25px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 15px;">
-    <div style="position: relative; width: 100%; max-width: 480px;">
-        <i class="fas fa-search" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-light-color); font-size: 1rem; pointer-events: none;"></i>
-        <input type="text" id="inpatientSearchInput" placeholder="Пошук пацієнта за прізвищем або ім'ям..." 
-               class="form-control" style="padding-left: 40px; padding-right: 36px; height: 44px; border-radius: 8px; font-size: 0.95rem; width: 100%; border: 1px solid var(--border-color); background: var(--input-bg); color: var(--text-color);">
-        <span id="clearSearchBtn" onclick="clearInpatientSearch()" 
-              style="display: none; position: absolute; right: 12px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-light-color); font-size: 1.2rem; line-height: 1; padding: 4px;" title="Очистити пошук">&times;</span>
+<div class="inpatient-search-container" style="margin-bottom: 25px; position: relative;">
+    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 15px;">
+        <div style="position: relative; width: 100%; max-width: 520px;">
+            <i class="fas fa-search" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-light-color); font-size: 1rem; pointer-events: none;"></i>
+            <input type="text" id="inpatientSearchInput" placeholder="Пошук пацієнта за прізвищем або ім'ям (пошук по всій базі)..." 
+                   autocomplete="off"
+                   class="form-control" style="padding-left: 40px; padding-right: 36px; height: 44px; border-radius: 8px; font-size: 0.95rem; width: 100%; border: 1px solid var(--border-color); background: var(--input-bg); color: var(--text-color);">
+            <span id="clearSearchBtn" onclick="clearInpatientSearch()" 
+                  style="display: none; position: absolute; right: 12px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-light-color); font-size: 1.2rem; line-height: 1; padding: 4px;" title="Очистити пошук">&times;</span>
+        </div>
+        <div id="searchResultsCount" style="font-size: 0.92rem; font-weight: 600; color: #3498db;"></div>
     </div>
-    <div id="searchResultsCount" style="font-size: 0.92rem; font-weight: 600; color: #3498db;"></div>
+
+    <!-- Випадаючий блок результатів пошуку з загального списку (Draggable) -->
+    <div id="globalSearchResultsDropdown" style="display: none; position: absolute; top: 50px; left: 0; width: 100%; max-width: 580px; z-index: 1050; background: var(--card-bg-color); border: 1px solid var(--border-color); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.25); max-height: 360px; overflow-y: auto; padding: 12px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid var(--border-color);">
+            <span style="font-size: 0.85rem; font-weight: 700; color: var(--text-color); display: flex; align-items: center; gap: 6px;">
+                <i class="fas fa-users" style="color: #3498db;"></i> Знайдено в загальній базі:
+            </span>
+            <span style="font-size: 0.78rem; color: #27ae60; font-weight: 600;">
+                <i class="fas fa-arrows-alt"></i> Затисніть та перетягніть на ліжко!
+            </span>
+        </div>
+        <div id="globalSearchResultsList" style="display: flex; flex-direction: column; gap: 8px;">
+            <!-- Динамічні картки пацієнтів для перетягування -->
+        </div>
+    </div>
 </div>
 
 <!-- Панель Drag & Drop для переведення на амбулаторне (виписка зі стаціонару) -->
@@ -965,6 +983,34 @@
     0% { box-shadow: 0 0 0 3px #3498db, 0 4px 12px rgba(52, 152, 219, 0.2); }
     100% { box-shadow: 0 0 0 5px #2980b9, 0 8px 20px rgba(52, 152, 219, 0.45); }
 }
+
+/* Global Search Dropdown & Draggable Cards */
+.general-patient-card {
+    background: var(--card-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 10px 12px;
+    cursor: grab;
+    transition: all 0.2s ease;
+    user-select: none;
+}
+.general-patient-card:hover {
+    border-color: #3498db;
+    background: var(--hover-bg);
+    box-shadow: 0 4px 12px rgba(52, 152, 219, 0.15);
+}
+.general-patient-card:active {
+    cursor: grabbing;
+}
+.badge-secondary {
+    background-color: var(--border-color);
+    color: var(--text-color);
+}
+.badge-outline {
+    border: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--text-light-color);
+}
 </style>
 
 <!-- JavaScript -->
@@ -1044,12 +1090,16 @@ function handleDrop(event, targetType, targetGender) {
         openDragBorrowedModal(currentDraggedPatient, targetGender);
     } else if (targetType === 'queue') {
         if (currentDraggedPatient.location === 'queue') return;
-        if (confirm(`Повернути пацієнта ${currentDraggedPatient.name} у лист очікування (чергу)?`)) {
+        const msg = (currentDraggedPatient.location === 'inpatient' || currentDraggedPatient.location === 'own_bed' || currentDraggedPatient.location === 'borrowed_bed')
+            ? `Повернути пацієнта ${currentDraggedPatient.name} у лист очікування (чергу)?`
+            : `Додати пацієнта ${currentDraggedPatient.name} у лист очікування (чергу)?`;
+        if (confirm(msg)) {
             executeInpatientMove(currentDraggedPatient.id, {
                 target: 'queue'
             });
         }
     } else if (targetType === 'outpatient') {
+        if (currentDraggedPatient.location === 'outpatient') return;
         if (confirm(`Перевести пацієнта ${currentDraggedPatient.name} на амбулаторне лікування та звільнити ліжко?`)) {
             executeInpatientMove(currentDraggedPatient.id, {
                 target: 'outpatient'
@@ -1115,6 +1165,99 @@ function executeInpatientMove(patientId, payload) {
     });
 }
 
+let globalSearchTimeout = null;
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/[&<>'"]/g, tag => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        "'": '&#39;',
+        '"': '&quot;'
+    }[tag] || tag));
+}
+
+function fetchGlobalInpatientSearch(query) {
+    const dropdown = document.getElementById('globalSearchResultsDropdown');
+    const list = document.getElementById('globalSearchResultsList');
+    if (!dropdown || !list) return;
+
+    if (!query || query.length < 2) {
+        dropdown.style.display = 'none';
+        list.innerHTML = '';
+        return;
+    }
+
+    if (globalSearchTimeout) clearTimeout(globalSearchTimeout);
+
+    globalSearchTimeout = setTimeout(() => {
+        list.innerHTML = '<div style="padding: 10px; text-align: center; color: var(--text-light-color); font-size: 0.85rem;"><i class="fas fa-spinner fa-spin"></i> Пошук у загальній базі...</div>';
+        dropdown.style.display = 'block';
+
+        fetch(`/api/patients/search-for-inpatient/?q=${encodeURIComponent(query)}`)
+            .then(res => res.json())
+            .then(data => {
+                const currentVal = document.getElementById('inpatientSearchInput').value.trim();
+                if (currentVal.toLowerCase() !== query.toLowerCase()) return; // Stale request
+
+                if (!data.patients || data.patients.length === 0) {
+                    list.innerHTML = `<div style="padding: 12px; text-align: center; color: var(--text-light-color); font-size: 0.85rem;"><i class="fas fa-info-circle"></i> За запитом "${escapeHtml(query)}" нічого не знайдено в базі</div>`;
+                    return;
+                }
+
+                list.innerHTML = '';
+                data.patients.forEach(p => {
+                    const card = document.createElement('div');
+                    card.className = 'general-patient-card draggable-patient-item';
+                    card.setAttribute('draggable', 'true');
+                    card.setAttribute('data-patient-id', p.id);
+                    card.setAttribute('data-patient-name', p.full_name);
+                    card.setAttribute('data-patient-gender', p.gender);
+                    card.setAttribute('data-current-location', p.hospitalization_status);
+
+                    let badgeClass = 'badge-secondary';
+                    if (p.hospitalization_status === 'inpatient') badgeClass = 'badge-info';
+                    else if (p.hospitalization_status === 'queue') badgeClass = 'badge-warning';
+
+                    card.innerHTML = `
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;">
+                            <div>
+                                <div style="font-weight: 700; font-size: 0.95rem; color: var(--text-color);">
+                                    <a href="${p.detail_url}" class="patient-name-link" onclick="event.stopPropagation();">${escapeHtml(p.full_name)}</a>
+                                    <span class="gender-tag ${p.gender === 'M' ? 'male' : 'female'}" style="font-size: 0.72rem; padding: 2px 6px; margin-left: 4px;">
+                                        <i class="fas fa-${p.gender === 'M' ? 'mars' : 'venus'}"></i> ${escapeHtml(p.gender_display)}
+                                    </span>
+                                </div>
+                                <div style="font-size: 0.8rem; color: var(--text-light-color); margin-top: 3px; max-width: 360px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">
+                                    ${escapeHtml(p.diagnosis)}
+                                </div>
+                            </div>
+                            <div style="text-align: right; flex-shrink: 0;">
+                                <span class="badge ${badgeClass}" style="font-size: 0.75rem;">
+                                    ${escapeHtml(p.status_display)}
+                                </span>
+                                <div style="font-size: 0.75rem; color: #3498db; margin-top: 4px; display: flex; align-items: center; justify-content: flex-end; gap: 3px;">
+                                    <i class="fas fa-grip-vertical"></i> тягніть
+                                </div>
+                            </div>
+                        </div>
+                    `;
+
+                    // Drag event listeners for dynamically created cards
+                    card.addEventListener('dragstart', handleDragStart);
+                    card.addEventListener('dragend', handleDragEnd);
+
+                    list.appendChild(card);
+                });
+            })
+            .catch(err => {
+                console.error(err);
+                list.innerHTML = '<div style="padding: 10px; text-align: center; color: #e74c3c; font-size: 0.85rem;"><i class="fas fa-exclamation-triangle"></i> Помилка пошуку</div>';
+            });
+    }, 200);
+}
+
 function initInpatientSearch() {
     const input = document.getElementById('inpatientSearchInput');
     const clearBtn = document.getElementById('clearSearchBtn');
@@ -1167,16 +1310,45 @@ function initInpatientSearch() {
 
         if (countEl) {
             if (query) {
-                countEl.textContent = `Знайдено: ${matchCount}`;
+                countEl.textContent = `Знайдено на сторінці: ${matchCount}`;
             } else {
                 countEl.textContent = '';
             }
+        }
+
+        // 4. Пошук по всій активній базі (асинхронно)
+        fetchGlobalInpatientSearch(this.value.trim());
+    });
+
+    input.addEventListener('focus', function() {
+        const query = this.value.trim();
+        if (query.length >= 2) {
+            const dropdown = document.getElementById('globalSearchResultsDropdown');
+            const list = document.getElementById('globalSearchResultsList');
+            if (dropdown && list && list.children.length > 0) {
+                dropdown.style.display = 'block';
+            } else {
+                fetchGlobalInpatientSearch(query);
+            }
+        }
+    });
+
+    // Закриття випадаючого списку при кліку поза контейнером пошуку
+    document.addEventListener('click', function(e) {
+        const searchContainer = document.querySelector('.inpatient-search-container');
+        const dropdown = document.getElementById('globalSearchResultsDropdown');
+        if (dropdown && searchContainer && !searchContainer.contains(e.target)) {
+            dropdown.style.display = 'none';
         }
     });
 }
 
 function clearInpatientSearch() {
     const input = document.getElementById('inpatientSearchInput');
+    const dropdown = document.getElementById('globalSearchResultsDropdown');
+    const list = document.getElementById('globalSearchResultsList');
+    if (dropdown) dropdown.style.display = 'none';
+    if (list) list.innerHTML = '';
     if (input) {
         input.value = '';
         input.dispatchEvent(new Event('input'));

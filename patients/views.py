@@ -1001,6 +1001,58 @@ def inpatient_move_api(request, pk):
 
 
 @login_required
+def search_patients_for_inpatient_api(request):
+    """
+    Пошук пацієнтів із загальної бази (активних пацієнтів) для вкладки стаціонару.
+    Дозволяє знайти будь-якого пацієнта відділення (амбулаторного, у черзі тощо)
+    та перетягнути його на ліжко або в чергу.
+    """
+    q = request.GET.get('q', '').strip()
+    if not q or len(q) < 2:
+        return JsonResponse({'patients': []})
+
+    # Шукаємо серед активних пацієнтів
+    patients = Patient.objects.filter(
+        is_active=True
+    ).filter(
+        Q(last_name__icontains=q) |
+        Q(first_name__icontains=q) |
+        Q(middle_name__icontains=q)
+    ).order_by('last_name', 'first_name')[:15]
+
+    results = []
+    for p in patients:
+        status_display = p.get_hospitalization_status_display()
+        if p.hospitalization_status == 'inpatient':
+            if p.bed_owner == 'Олег':
+                status_display = 'Власне ліжко'
+            elif p.bed_owner:
+                status_display = f'Позичено у {p.bed_owner}'
+        elif p.hospitalization_status == 'queue':
+            status_display = 'У черзі'
+        elif p.hospitalization_status == 'outpatient':
+            status_display = 'Амбулаторно'
+
+        results.append({
+            'id': p.id,
+            'full_name': p.full_name,
+            'last_name': p.last_name or '',
+            'first_name': p.first_name or '',
+            'gender': p.gender or '',
+            'gender_display': 'Чол' if p.gender == 'M' else ('Жін' if p.gender == 'F' else '—'),
+            'diagnosis': p.diagnosis or 'Діагноз не вказано',
+            'hospitalization_status': p.hospitalization_status,
+            'status_display': status_display,
+            'ward_number': p.ward_number or '',
+            'bed_owner': p.bed_owner or '',
+            'is_inpatient': p.hospitalization_status == 'inpatient',
+            'detail_url': reverse('patient_detail', kwargs={'pk': p.id})
+        })
+
+    return JsonResponse({'patients': results})
+
+
+@login_required
 def patient_archive(request):
     """Список пацієнтів в архіві з підтримкою сортування"""
     today = timezone.localdate()

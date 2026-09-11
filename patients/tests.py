@@ -3099,6 +3099,46 @@ class InpatientDragAndDropTests(TestCase):
         data = res.json()
         self.assertFalse(data['success'])
 
+    def test_search_patients_for_inpatient_api(self):
+        patient_out = Patient.objects.create(
+            last_name='Григоренко',
+            first_name='Олексій',
+            gender='M',
+            hospitalization_status='outpatient',
+            diagnosis='C50 Рак молочної залози',
+            is_active=True
+        )
+        # Create an inactive (archived) patient
+        patient_inactive = Patient.objects.create(
+            last_name='Григорчук',
+            first_name='Василь',
+            gender='M',
+            hospitalization_status='outpatient',
+            mis_discharged=True
+        )
+
+        url = reverse('search_patients_for_inpatient_api')
+        
+        # Test query too short
+        res_short = self.client.get(url, {'q': 'Г'})
+        self.assertEqual(res_short.status_code, 200)
+        self.assertEqual(res_short.json()['patients'], [])
+
+        # Test valid search query
+        res = self.client.get(url, {'q': 'Григор'})
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertIn('patients', data)
+        p_ids = [p['id'] for p in data['patients']]
+        self.assertIn(patient_out.id, p_ids)
+        self.assertNotIn(patient_inactive.id, p_ids)
+
+        found = next(p for p in data['patients'] if p['id'] == patient_out.id)
+        self.assertEqual(found['full_name'], patient_out.full_name)
+        self.assertEqual(found['gender'], 'M')
+        self.assertEqual(found['status_display'], 'Амбулаторно')
+        self.assertEqual(found['hospitalization_status'], 'outpatient')
+
 
 
 

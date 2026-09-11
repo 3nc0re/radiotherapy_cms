@@ -38,6 +38,7 @@ urlpatterns = [
     path('patients/<int:pk>/archive/', views.archive_patient, name='archive_patient'),
     path('patients/<int:pk>/admit/', views.admit_patient, name='admit_patient'),
     path('api/patients/<int:pk>/inpatient-move/', views.inpatient_move_api, name='inpatient_move_api'),
+    path('api/patients/search-for-inpatient/', views.search_patients_for_inpatient_api, name='search_patients_for_inpatient_api'),
     path('patients/<int:pk>/update_notes/', views.update_patient_notes, name='update_patient_notes'),
     path('patients/<int:pk>/delete/', views.patient_delete, name='patient_delete'),
     
