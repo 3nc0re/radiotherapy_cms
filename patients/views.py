@@ -912,6 +912,94 @@ def admit_patient(request, pk):
     messages.success(request, f'Пацієнта {patient.full_name} успішно госпіталізовано.')
     return redirect('inpatient_list')
 
+
+@login_required
+@require_POST
+def inpatient_move_api(request, pk):
+    """
+    API для Drag & Drop переміщення пацієнта в стаціонарі:
+    - target = 'own_bed': госпіталізація/переведення на власне ліжко (bed_owner = 'Олег')
+    - target = 'borrowed_bed': госпіталізація/переведення на позичене ліжко (bed_owner = doctor_name)
+    - target = 'queue': повернення/переведення в лист очікування (чергу)
+    - target = 'outpatient': переведення на амбулаторне лікування (виписка зі стаціонару)
+    """
+    try:
+        patient = get_object_or_404(Patient, pk=pk)
+        data = json.loads(request.body)
+        target = data.get('target')
+        target_gender = data.get('target_gender')
+        bed_owner = data.get('bed_owner', '').strip()
+        ward_number = data.get('ward_number')
+
+        if not target or target not in ['own_bed', 'borrowed_bed', 'queue', 'outpatient']:
+            return JsonResponse({'success': False, 'error': 'Некоректний тип переміщення.'}, status=400)
+
+        # Перевірка гендерної відповідності секції ліжок
+        if target in ['own_bed', 'borrowed_bed'] and target_gender:
+            if patient.gender and patient.gender != target_gender:
+                gender_name = 'чоловічих' if target_gender == 'M' else 'жіночих'
+                patient_gender_name = 'чоловічої' if patient.gender == 'M' else 'жіночої'
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Неможливо розмістити пацієнта {patient_gender_name} статі у секції {gender_name} ліжок.'
+                }, status=400)
+
+        today = timezone.localdate()
+
+        if target == 'own_bed':
+            patient.hospitalization_status = 'inpatient'
+            patient.bed_owner = 'Олег'
+            if ward_number is not None:
+                patient.ward_number = ward_number
+            if not patient.treatment_start_date:
+                patient.treatment_start_date = today
+            patient.save()
+
+            if patient.total_fractions and patient.dose_per_fraction and not patient.fractions.exists():
+                generate_fractions_for_patient(patient)
+
+            msg = f'Пацієнта {patient.full_name} розміщено на власному ліжку.'
+
+        elif target == 'borrowed_bed':
+            if not bed_owner or bed_owner == 'Олег':
+                bed_owner = data.get('bed_owner_name', 'Інший лікар').strip()
+            patient.hospitalization_status = 'inpatient'
+            patient.bed_owner = bed_owner or 'Інший лікар'
+            if ward_number is not None:
+                patient.ward_number = ward_number
+            if not patient.treatment_start_date:
+                patient.treatment_start_date = today
+            patient.save()
+
+            if patient.total_fractions and patient.dose_per_fraction and not patient.fractions.exists():
+                generate_fractions_for_patient(patient)
+
+            msg = f'Пацієнта {patient.full_name} розміщено на ліжку, позиченому у: {patient.bed_owner}.'
+
+        elif target == 'queue':
+            patient.hospitalization_status = 'queue'
+            patient.bed_owner = 'Олег'
+            if not patient.planned_admission_date:
+                patient.planned_admission_date = today
+            patient.save()
+            msg = f'Пацієнта {patient.full_name} переведено в лист очікування (чергу).'
+
+        elif target == 'outpatient':
+            patient.hospitalization_status = 'outpatient'
+            patient.save()
+            msg = f'Пацієнта {patient.full_name} переведено на амбулаторне лікування (ліжко звільнено).'
+
+        return JsonResponse({
+            'success': True,
+            'message': msg,
+            'patient_id': patient.id,
+            'hospitalization_status': patient.hospitalization_status,
+            'bed_owner': patient.bed_owner
+        })
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
 @login_required
 def patient_archive(request):
     """Список пацієнтів в архіві з підтримкою сортування"""

@@ -2961,6 +2961,146 @@ class FractionsBatchAndUnverifiedTests(TestCase):
         self.assertFalse(data['success'])
 
 
+class InpatientDragAndDropTests(TestCase):
+    def setUp(self):
+        from django.utils import timezone
+        self.user = User.objects.create_user(
+            username='doctor_inpatient',
+            password='password123',
+            role='doctor',
+            approved=True
+        )
+        self.client.login(username='doctor_inpatient', password='password123')
+        self.today = timezone.localdate()
+
+    def test_inpatient_move_to_own_bed(self):
+        import json
+        patient = Patient.objects.create(
+            last_name='Петренко',
+            first_name='Петро',
+            gender='M',
+            hospitalization_status='queue',
+            is_active=True
+        )
+        url = reverse('inpatient_move_api', kwargs={'pk': patient.pk})
+        res = self.client.post(url, data=json.dumps({
+            'target': 'own_bed',
+            'target_gender': 'M'
+        }), content_type='application/json')
+
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertTrue(data['success'])
+        patient.refresh_from_db()
+        self.assertEqual(patient.hospitalization_status, 'inpatient')
+        self.assertEqual(patient.bed_owner, 'Олег')
+        self.assertEqual(patient.treatment_start_date, self.today)
+
+    def test_inpatient_move_to_borrowed_bed(self):
+        import json
+        patient = Patient.objects.create(
+            last_name='Ковальчук',
+            first_name='Олена',
+            gender='F',
+            hospitalization_status='queue',
+            is_active=True
+        )
+        url = reverse('inpatient_move_api', kwargs={'pk': patient.pk})
+        res = self.client.post(url, data=json.dumps({
+            'target': 'borrowed_bed',
+            'target_gender': 'F',
+            'bed_owner': 'Тарас'
+        }), content_type='application/json')
+
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertTrue(data['success'])
+        patient.refresh_from_db()
+        self.assertEqual(patient.hospitalization_status, 'inpatient')
+        self.assertEqual(patient.bed_owner, 'Тарас')
+
+    def test_inpatient_move_to_queue(self):
+        import json
+        patient = Patient.objects.create(
+            last_name='Сидоренко',
+            first_name='Андрій',
+            gender='M',
+            hospitalization_status='inpatient',
+            bed_owner='Олег',
+            is_active=True
+        )
+        url = reverse('inpatient_move_api', kwargs={'pk': patient.pk})
+        res = self.client.post(url, data=json.dumps({
+            'target': 'queue'
+        }), content_type='application/json')
+
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertTrue(data['success'])
+        patient.refresh_from_db()
+        self.assertEqual(patient.hospitalization_status, 'queue')
+        self.assertIsNotNone(patient.planned_admission_date)
+
+    def test_inpatient_move_to_outpatient(self):
+        import json
+        patient = Patient.objects.create(
+            last_name='Бондар',
+            first_name='Іван',
+            gender='M',
+            hospitalization_status='inpatient',
+            bed_owner='Олег',
+            is_active=True
+        )
+        url = reverse('inpatient_move_api', kwargs={'pk': patient.pk})
+        res = self.client.post(url, data=json.dumps({
+            'target': 'outpatient'
+        }), content_type='application/json')
+
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertTrue(data['success'])
+        patient.refresh_from_db()
+        self.assertEqual(patient.hospitalization_status, 'outpatient')
+
+    def test_inpatient_move_gender_mismatch_fails(self):
+        import json
+        patient = Patient.objects.create(
+            last_name='Мельник',
+            first_name='Сергій',
+            gender='M',
+            hospitalization_status='queue',
+            is_active=True
+        )
+        url = reverse('inpatient_move_api', kwargs={'pk': patient.pk})
+        # Attempt to place male on female bed
+        res = self.client.post(url, data=json.dumps({
+            'target': 'own_bed',
+            'target_gender': 'F'
+        }), content_type='application/json')
+
+        self.assertEqual(res.status_code, 400)
+        data = res.json()
+        self.assertFalse(data['success'])
+        self.assertIn('Неможливо розмістити', data['error'])
+
+    def test_inpatient_move_invalid_target(self):
+        import json
+        patient = Patient.objects.create(
+            last_name='Тест',
+            first_name='Тест',
+            is_active=True
+        )
+        url = reverse('inpatient_move_api', kwargs={'pk': patient.pk})
+        res = self.client.post(url, data=json.dumps({
+            'target': 'invalid_target'
+        }), content_type='application/json')
+
+        self.assertEqual(res.status_code, 400)
+        data = res.json()
+        self.assertFalse(data['success'])
+
+
+
 
 
 

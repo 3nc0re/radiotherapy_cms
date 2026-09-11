@@ -5,17 +5,48 @@
     <a href="{% url 'dashboard' %}" class="back-link"><i class="fas fa-arrow-left"></i> Назад до дашборду</a>
 </div>
 
+<!-- Живий пошук пацієнта -->
+<div class="inpatient-search-container" style="margin-bottom: 25px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 15px;">
+    <div style="position: relative; width: 100%; max-width: 480px;">
+        <i class="fas fa-search" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-light-color); font-size: 1rem; pointer-events: none;"></i>
+        <input type="text" id="inpatientSearchInput" placeholder="Пошук пацієнта за прізвищем або ім'ям..." 
+               class="form-control" style="padding-left: 40px; padding-right: 36px; height: 44px; border-radius: 8px; font-size: 0.95rem; width: 100%; border: 1px solid var(--border-color); background: var(--input-bg); color: var(--text-color);">
+        <span id="clearSearchBtn" onclick="clearInpatientSearch()" 
+              style="display: none; position: absolute; right: 12px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-light-color); font-size: 1.2rem; line-height: 1; padding: 4px;" title="Очистити пошук">&times;</span>
+    </div>
+    <div id="searchResultsCount" style="font-size: 0.92rem; font-weight: 600; color: #3498db;"></div>
+</div>
+
+<!-- Панель Drag & Drop для переведення на амбулаторне (виписка зі стаціонару) -->
+<div class="outpatient-drop-bar drop-target-outpatient" 
+     ondragover="handleDragOver(event, 'outpatient')" 
+     ondragleave="handleDragLeave(event)" 
+     ondrop="handleDrop(event, 'outpatient')">
+    <i class="fas fa-walking"></i>
+    <span><strong>Перевести на амбулаторне лікування</strong> — перетягніть сюди пацієнта для виписки зі стаціонару та звільнення ліжка</span>
+</div>
+
 <!-- Матриця ліжок (Bed Matrix) -->
 <div class="bed-matrix-container">
     <!-- Чоловіча секція -->
     <div class="gender-section">
-        <h2 class="gender-title male-title">
-            <i class="fas fa-mars"></i> Чоловічі ліжка
-        </h2>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h2 class="gender-title male-title" style="margin: 0;">
+                <i class="fas fa-mars"></i> Чоловічі ліжка
+            </h2>
+            <span style="font-size: 0.8rem; color: var(--text-light-color);"><i class="fas fa-arrows-alt"></i> Drag & Drop</span>
+        </div>
         <div class="beds-grid">
             {% for bed in own_male_beds %}
                 {% if bed.occupied %}
-                    <div class="bed-card occupied">
+                    <div class="bed-card occupied draggable-patient-item"
+                         draggable="true"
+                         data-patient-id="{{ bed.patient.pk }}"
+                         data-patient-name="{{ bed.patient.full_name }}"
+                         data-patient-gender="M"
+                         data-current-location="own_bed"
+                         ondragstart="handleDragStart(event)"
+                         ondragend="handleDragEnd(event)">
                         <span class="bed-badge">Власне ліжко (Зайнято)</span>
                         <div class="bed-patient-name">
                             <a href="{% url 'patient_detail' bed.patient.pk %}" class="bed-patient-link">
@@ -28,47 +59,74 @@
                         </div>
                     </div>
                 {% else %}
-                    <div class="bed-card free">
+                    <div class="bed-card free drop-target-own-bed"
+                         data-target-gender="M"
+                         ondragover="handleDragOver(event, 'own_bed', 'M')"
+                         ondragleave="handleDragLeave(event)"
+                         ondrop="handleDrop(event, 'own_bed', 'M')">
                         <span class="bed-badge">Власне ліжко</span>
                         <div style="font-size: 1.5rem; margin: 10px 0;"><i class="fas fa-bed"></i></div>
                         <div>Вільне ліжко</div>
+                        <div style="font-size: 0.75rem; color: var(--text-light-color); margin-top: 4px;">Перетягніть сюди пацієнта</div>
                     </div>
                 {% endif %}
             {% endfor %}
         </div>
 
-        {% if borrowed_male_patients %}
-            <h3 class="borrowed-section-title">Додаткові ліжка (Позичені)</h3>
-            <div class="borrowed-cards">
-                {% for patient in borrowed_male_patients %}
-                    <div class="borrowed-card">
-                        <div class="borrowed-info">
-                            <span class="borrowed-badge"><i class="fas fa-handshake"></i> Позичено у: {{ patient.bed_owner }}</span>
-                            <a href="{% url 'patient_detail' patient.pk %}" class="bed-patient-link borrowed-patient-name">
-                                {{ patient.full_name }}
-                            </a>
-                            <span style="font-size: 0.8rem; color: var(--text-light-color);">
-                                Палата: {{ patient.ward_number|default:"—" }} | Виписка: {{ patient.actual_discharge_date|date:"d.m.Y"|default:"не визначено" }}
-                            </span>
-                        </div>
-                        <a href="{% url 'patient_detail' patient.pk %}" class="btn-icon" title="Переглянути картку">
-                            <i class="fas fa-chevron-right"></i>
+        <h3 class="borrowed-section-title" style="margin-top: 25px;">Додаткові ліжка (Позичені)</h3>
+        <div class="borrowed-cards">
+            {% for patient in borrowed_male_patients %}
+                <div class="borrowed-card draggable-patient-item"
+                     draggable="true"
+                     data-patient-id="{{ patient.pk }}"
+                     data-patient-name="{{ patient.full_name }}"
+                     data-patient-gender="M"
+                     data-current-location="borrowed_bed"
+                     ondragstart="handleDragStart(event)"
+                     ondragend="handleDragEnd(event)">
+                    <div class="borrowed-info">
+                        <span class="borrowed-badge"><i class="fas fa-handshake"></i> Позичено у: {{ patient.bed_owner }}</span>
+                        <a href="{% url 'patient_detail' patient.pk %}" class="bed-patient-link borrowed-patient-name">
+                            {{ patient.full_name }}
                         </a>
+                        <span style="font-size: 0.8rem; color: var(--text-light-color);">
+                            Палата: {{ patient.ward_number|default:"—" }} | Виписка: {{ patient.actual_discharge_date|date:"d.m.Y"|default:"не визначено" }}
+                        </span>
                     </div>
-                {% endfor %}
-            </div>
-        {% endif %}
+                    <a href="{% url 'patient_detail' patient.pk %}" class="btn-icon" title="Переглянути картку">
+                        <i class="fas fa-chevron-right"></i>
+                    </a>
+                </div>
+            {% endfor %}
+        </div>
+        <div class="borrowed-drop-zone drop-target-borrowed"
+             data-target-gender="M"
+             ondragover="handleDragOver(event, 'borrowed_bed', 'M')"
+             ondragleave="handleDragLeave(event)"
+             ondrop="handleDrop(event, 'borrowed_bed', 'M')">
+            <i class="fas fa-handshake"></i> Перетягніть сюди для позиченого чоловічого ліжка
+        </div>
     </div>
 
     <!-- Жіноча секція -->
     <div class="gender-section">
-        <h2 class="gender-title female-title">
-            <i class="fas fa-venus"></i> Жіночі ліжка
-        </h2>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h2 class="gender-title female-title" style="margin: 0;">
+                <i class="fas fa-venus"></i> Жіночі ліжка
+            </h2>
+            <span style="font-size: 0.8rem; color: var(--text-light-color);"><i class="fas fa-arrows-alt"></i> Drag & Drop</span>
+        </div>
         <div class="beds-grid">
             {% for bed in own_female_beds %}
                 {% if bed.occupied %}
-                    <div class="bed-card occupied female-occupied">
+                    <div class="bed-card occupied female-occupied draggable-patient-item"
+                         draggable="true"
+                         data-patient-id="{{ bed.patient.pk }}"
+                         data-patient-name="{{ bed.patient.full_name }}"
+                         data-patient-gender="F"
+                         data-current-location="own_bed"
+                         ondragstart="handleDragStart(event)"
+                         ondragend="handleDragEnd(event)">
                         <span class="bed-badge female-badge">Власне ліжко (Зайнято)</span>
                         <div class="bed-patient-name">
                             <a href="{% url 'patient_detail' bed.patient.pk %}" class="bed-patient-link">
@@ -81,36 +139,53 @@
                         </div>
                     </div>
                 {% else %}
-                    <div class="bed-card free female-free">
+                    <div class="bed-card free female-free drop-target-own-bed"
+                         data-target-gender="F"
+                         ondragover="handleDragOver(event, 'own_bed', 'F')"
+                         ondragleave="handleDragLeave(event)"
+                         ondrop="handleDrop(event, 'own_bed', 'F')">
                         <span class="bed-badge female-badge">Власне ліжко</span>
                         <div style="font-size: 1.5rem; margin: 10px 0;"><i class="fas fa-bed"></i></div>
                         <div>Вільне ліжко</div>
+                        <div style="font-size: 0.75rem; color: var(--text-light-color); margin-top: 4px;">Перетягніть сюди пацієнтку</div>
                     </div>
                 {% endif %}
             {% endfor %}
         </div>
 
-        {% if borrowed_female_patients %}
-            <h3 class="borrowed-section-title">Додаткові ліжка (Позичені)</h3>
-            <div class="borrowed-cards">
-                {% for patient in borrowed_female_patients %}
-                    <div class="borrowed-card female-borrowed">
-                        <div class="borrowed-info">
-                            <span class="borrowed-badge female-borrowed-badge"><i class="fas fa-handshake"></i> Позичено у: {{ patient.bed_owner }}</span>
-                            <a href="{% url 'patient_detail' patient.pk %}" class="bed-patient-link borrowed-patient-name">
-                                {{ patient.full_name }}
-                            </a>
-                            <span style="font-size: 0.8rem; color: var(--text-light-color);">
-                                Палата: {{ patient.ward_number|default:"—" }} | Виписка: {{ patient.actual_discharge_date|date:"d.m.Y"|default:"не визначено" }}
-                            </span>
-                        </div>
-                        <a href="{% url 'patient_detail' patient.pk %}" class="btn-icon" title="Переглянути картку">
-                            <i class="fas fa-chevron-right"></i>
+        <h3 class="borrowed-section-title" style="margin-top: 25px;">Додаткові ліжка (Позичені)</h3>
+        <div class="borrowed-cards">
+            {% for patient in borrowed_female_patients %}
+                <div class="borrowed-card female-borrowed draggable-patient-item"
+                     draggable="true"
+                     data-patient-id="{{ patient.pk }}"
+                     data-patient-name="{{ patient.full_name }}"
+                     data-patient-gender="F"
+                     data-current-location="borrowed_bed"
+                     ondragstart="handleDragStart(event)"
+                     ondragend="handleDragEnd(event)">
+                    <div class="borrowed-info">
+                        <span class="borrowed-badge female-borrowed-badge"><i class="fas fa-handshake"></i> Позичено у: {{ patient.bed_owner }}</span>
+                        <a href="{% url 'patient_detail' patient.pk %}" class="bed-patient-link borrowed-patient-name">
+                            {{ patient.full_name }}
                         </a>
+                        <span style="font-size: 0.8rem; color: var(--text-light-color);">
+                            Палата: {{ patient.ward_number|default:"—" }} | Виписка: {{ patient.actual_discharge_date|date:"d.m.Y"|default:"не визначено" }}
+                        </span>
                     </div>
-                {% endfor %}
-            </div>
-        {% endif %}
+                    <a href="{% url 'patient_detail' patient.pk %}" class="btn-icon" title="Переглянути картку">
+                        <i class="fas fa-chevron-right"></i>
+                    </a>
+                </div>
+            {% endfor %}
+        </div>
+        <div class="borrowed-drop-zone drop-target-borrowed"
+             data-target-gender="F"
+             ondragover="handleDragOver(event, 'borrowed_bed', 'F')"
+             ondragleave="handleDragLeave(event)"
+             ondrop="handleDrop(event, 'borrowed_bed', 'F')">
+            <i class="fas fa-handshake"></i> Перетягніть сюди для позиченого жіночого ліжка
+        </div>
     </div>
 </div>
 
@@ -136,7 +211,14 @@
                 </thead>
                 <tbody>
                     {% for patient in patients %}
-                    <tr>
+                    <tr class="inpatient-row draggable-patient-item"
+                        draggable="true"
+                        data-patient-id="{{ patient.pk }}"
+                        data-patient-name="{{ patient.full_name }}"
+                        data-patient-gender="{{ patient.gender }}"
+                        data-current-location="inpatient"
+                        ondragstart="handleDragStart(event)"
+                        ondragend="handleDragEnd(event)">
                         <td>
                             <a href="{% url 'patient_detail' patient.pk %}" class="patient-name-link">{{ patient.full_name }}</a>
                         </td>
@@ -180,10 +262,17 @@
     </div>
 
     <!-- Черга на госпіталізацію -->
-    <div class="section-card" style="margin-top: 30px;">
+    <div class="section-card drop-target-queue"
+         ondragover="handleDragOver(event, 'queue')"
+         ondragleave="handleDragLeave(event)"
+         ondrop="handleDrop(event, 'queue')"
+         style="margin-top: 30px;">
         <div class="section-card-header">
-            <h2><i class="fas fa-clock"></i> Лист очікування (Черга)</h2>
-            <span class="badge badge-warning">{{ queue_patients.count }} у черзі</span>
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <h2 style="margin: 0;"><i class="fas fa-clock"></i> Лист очікування (Черга)</h2>
+                <span class="badge badge-warning">{{ queue_patients.count }} у черзі</span>
+                <span style="font-size: 0.82rem; color: var(--text-light-color);"><i class="fas fa-arrows-alt"></i> Можна перетягнути на ліжко або повернути сюди</span>
+            </div>
         </div>
         <div class="table-responsive">
             <table class="patients-table">
@@ -198,7 +287,14 @@
                 </thead>
                 <tbody>
                     {% for patient in queue_patients %}
-                    <tr>
+                    <tr class="queue-patient-row draggable-patient-item"
+                        draggable="true"
+                        data-patient-id="{{ patient.pk }}"
+                        data-patient-name="{{ patient.full_name }}"
+                        data-patient-gender="{{ patient.gender }}"
+                        data-current-location="queue"
+                        ondragstart="handleDragStart(event)"
+                        ondragend="handleDragEnd(event)">
                         <td>
                             <a href="{% url 'patient_detail' patient.pk %}" class="patient-name-link">{{ patient.full_name }}</a>
                         </td>
@@ -233,6 +329,35 @@
                     {% endfor %}
                 </tbody>
             </table>
+        </div>
+    </div>
+</div>
+
+<!-- Модальне вікно призначення на позичене ліжко (Drag & Drop) -->
+<div id="dragBorrowedModal" class="modal" style="display: none; position: fixed; z-index: 1060; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); overflow-y: auto;">
+    <div class="modal-content" style="background: var(--card-bg-color); color: var(--text-color); margin: 10% auto; padding: 25px; border-radius: 12px; max-width: 480px; border: 1px solid var(--border-color); box-shadow: var(--shadow);">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 18px;">
+            <h3 style="margin: 0; font-size: 1.2rem; color: var(--primary-color);">
+                <i class="fas fa-handshake"></i> Позичене ліжко
+            </h3>
+            <span onclick="closeDragBorrowedModal()" style="font-size: 1.6rem; cursor: pointer; color: var(--text-light-color); line-height: 1;">&times;</span>
+        </div>
+        <p style="margin-bottom: 15px; font-size: 0.95rem;">
+            Розміщення пацієнта <strong id="dragBorrowedPatientName" style="color: var(--text-color);"></strong> на позиченому ліжку:
+        </p>
+        <div class="form-group" style="margin-bottom: 15px;">
+            <label style="display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 6px;">Швидкий вибір лікаря:</label>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="setBorrowedDoctorPreset('Тарас')">Тарас</button>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="setBorrowedDoctorPreset('Дмитро')">Дмитро</button>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="setBorrowedDoctorPreset('Петренко')">Петренко</button>
+            </div>
+            <label for="dragBorrowedDoctorInput" style="display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 6px;">Власник ліжка:</label>
+            <input type="text" id="dragBorrowedDoctorInput" class="form-control" placeholder="Введіть прізвище лікаря" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--input-bg); color: var(--text-color);">
+        </div>
+        <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+            <button type="button" class="btn btn-secondary" onclick="closeDragBorrowedModal()">Скасувати</button>
+            <button type="button" class="btn btn-primary" onclick="confirmDragBorrowed()"><i class="fas fa-check"></i> Затвердити</button>
         </div>
     </div>
 </div>
@@ -766,10 +891,303 @@
 [data-theme="dark"] .btn-secondary:hover {
     background-color: rgba(255, 255, 255, 0.1);
 }
+
+/* Drag & Drop styles */
+.draggable-patient-item {
+    cursor: grab;
+    user-select: none;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+}
+.draggable-patient-item:active {
+    cursor: grabbing;
+}
+.draggable-patient-item.is-dragging {
+    opacity: 0.45 !important;
+    transform: scale(0.98);
+}
+.drop-target-own-bed, .drop-target-borrowed, .drop-target-queue, .drop-target-outpatient {
+    transition: all 0.2s ease;
+}
+.drag-over-valid {
+    border: 2px dashed #27ae60 !important;
+    background-color: rgba(39, 174, 96, 0.12) !important;
+    transform: scale(1.02);
+}
+.drag-over-invalid {
+    border: 2px dashed #e74c3c !important;
+    background-color: rgba(231, 76, 60, 0.12) !important;
+    cursor: not-allowed !important;
+}
+.borrowed-drop-zone {
+    border: 2px dashed var(--border-color);
+    border-radius: 10px;
+    padding: 12px;
+    text-align: center;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-light-color);
+    margin-top: 12px;
+    cursor: pointer;
+    background: var(--hover-bg);
+    transition: all 0.2s ease;
+}
+.borrowed-drop-zone:hover {
+    border-color: var(--primary-color);
+    color: var(--text-color);
+}
+.outpatient-drop-bar {
+    border: 2px dashed #3498db;
+    border-radius: 12px;
+    padding: 14px 20px;
+    text-align: center;
+    background-color: rgba(52, 152, 219, 0.05);
+    color: var(--text-color);
+    margin-bottom: 25px;
+    font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    transition: all 0.2s ease;
+}
+.outpatient-drop-bar i {
+    font-size: 1.3rem;
+    color: #3498db;
+}
+
+/* Search Highlight styles */
+.search-matched {
+    box-shadow: 0 0 0 3px #3498db, 0 6px 16px rgba(52, 152, 219, 0.35) !important;
+    transform: scale(1.03);
+    animation: pulseSearch 1.5s infinite alternate;
+}
+@keyframes pulseSearch {
+    0% { box-shadow: 0 0 0 3px #3498db, 0 4px 12px rgba(52, 152, 219, 0.2); }
+    100% { box-shadow: 0 0 0 5px #2980b9, 0 8px 20px rgba(52, 152, 219, 0.45); }
+}
 </style>
 
 <!-- JavaScript -->
 <script>
+let currentDraggedPatient = null;
+let pendingBorrowedPatient = null;
+
+function handleDragStart(event) {
+    const target = event.currentTarget;
+    const patientId = target.getAttribute('data-patient-id');
+    const patientName = target.getAttribute('data-patient-name');
+    const patientGender = target.getAttribute('data-patient-gender');
+    const currentLocation = target.getAttribute('data-current-location');
+
+    currentDraggedPatient = {
+        id: patientId,
+        name: patientName,
+        gender: patientGender,
+        location: currentLocation
+    };
+
+    try {
+        event.dataTransfer.setData('text/plain', JSON.stringify(currentDraggedPatient));
+    } catch(e) {}
+    event.dataTransfer.effectAllowed = 'move';
+    target.classList.add('is-dragging');
+}
+
+function handleDragEnd(event) {
+    const target = event.currentTarget;
+    target.classList.remove('is-dragging');
+    document.querySelectorAll('.drag-over-valid, .drag-over-invalid').forEach(el => {
+        el.classList.remove('drag-over-valid', 'drag-over-invalid');
+    });
+}
+
+function handleDragOver(event, targetType, targetGender) {
+    event.preventDefault();
+    if (!currentDraggedPatient) return;
+
+    // Check gender mismatch
+    if (targetGender && currentDraggedPatient.gender && currentDraggedPatient.gender !== targetGender) {
+        event.dataTransfer.dropEffect = 'none';
+        event.currentTarget.classList.add('drag-over-invalid');
+        event.currentTarget.classList.remove('drag-over-valid');
+    } else {
+        event.dataTransfer.dropEffect = 'move';
+        event.currentTarget.classList.add('drag-over-valid');
+        event.currentTarget.classList.remove('drag-over-invalid');
+    }
+}
+
+function handleDragLeave(event) {
+    event.currentTarget.classList.remove('drag-over-valid', 'drag-over-invalid');
+}
+
+function handleDrop(event, targetType, targetGender) {
+    event.preventDefault();
+    event.currentTarget.classList.remove('drag-over-valid', 'drag-over-invalid');
+
+    if (!currentDraggedPatient) return;
+
+    // Gender mismatch check
+    if (targetGender && currentDraggedPatient.gender && currentDraggedPatient.gender !== targetGender) {
+        const genText = targetGender === 'M' ? 'чоловічих' : 'жіночих';
+        const patGenText = currentDraggedPatient.gender === 'M' ? 'чоловічої' : 'жіночої';
+        alert(`Помилка: неможливо розмістити пацієнта ${patGenText} статі у секції ${genText} ліжок.`);
+        return;
+    }
+
+    if (targetType === 'own_bed') {
+        executeInpatientMove(currentDraggedPatient.id, {
+            target: 'own_bed',
+            target_gender: targetGender
+        });
+    } else if (targetType === 'borrowed_bed') {
+        openDragBorrowedModal(currentDraggedPatient, targetGender);
+    } else if (targetType === 'queue') {
+        if (currentDraggedPatient.location === 'queue') return;
+        if (confirm(`Повернути пацієнта ${currentDraggedPatient.name} у лист очікування (чергу)?`)) {
+            executeInpatientMove(currentDraggedPatient.id, {
+                target: 'queue'
+            });
+        }
+    } else if (targetType === 'outpatient') {
+        if (confirm(`Перевести пацієнта ${currentDraggedPatient.name} на амбулаторне лікування та звільнити ліжко?`)) {
+            executeInpatientMove(currentDraggedPatient.id, {
+                target: 'outpatient'
+            });
+        }
+    }
+}
+
+function openDragBorrowedModal(patient, targetGender) {
+    pendingBorrowedPatient = { ...patient, targetGender };
+    document.getElementById('dragBorrowedPatientName').textContent = patient.name;
+    document.getElementById('dragBorrowedDoctorInput').value = 'Тарас';
+    document.getElementById('dragBorrowedModal').style.display = 'block';
+}
+
+function closeDragBorrowedModal() {
+    document.getElementById('dragBorrowedModal').style.display = 'none';
+    pendingBorrowedPatient = null;
+}
+
+function setBorrowedDoctorPreset(docName) {
+    document.getElementById('dragBorrowedDoctorInput').value = docName;
+}
+
+function confirmDragBorrowed() {
+    if (!pendingBorrowedPatient) return;
+    const doctor = document.getElementById('dragBorrowedDoctorInput').value.trim();
+    if (!doctor) {
+        alert('Будь ласка, введіть прізвище лікаря, у якого позичаєте ліжко.');
+        return;
+    }
+    const patientId = pendingBorrowedPatient.id;
+    const targetGender = pendingBorrowedPatient.targetGender;
+    closeDragBorrowedModal();
+
+    executeInpatientMove(patientId, {
+        target: 'borrowed_bed',
+        target_gender: targetGender,
+        bed_owner: doctor
+    });
+}
+
+function executeInpatientMove(patientId, payload) {
+    fetch(`/api/patients/${patientId}/inpatient-move/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify(payload)
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Помилка: ' + (data.error || 'Не вдалося перемістити пацієнта.'));
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        alert('Помилка з\'єднання при переміщенні пацієнта.');
+    });
+}
+
+function initInpatientSearch() {
+    const input = document.getElementById('inpatientSearchInput');
+    const clearBtn = document.getElementById('clearSearchBtn');
+    const countEl = document.getElementById('searchResultsCount');
+
+    if (!input) return;
+
+    input.addEventListener('input', function() {
+        const query = this.value.trim().toLowerCase();
+        if (clearBtn) clearBtn.style.display = query ? 'block' : 'none';
+
+        let matchCount = 0;
+
+        // 1. Bed cards in matrix
+        const bedCards = document.querySelectorAll('.bed-card.occupied, .borrowed-card');
+        bedCards.forEach(card => {
+            const nameEl = card.querySelector('.bed-patient-name, .borrowed-patient-name');
+            const name = nameEl ? nameEl.textContent.toLowerCase() : '';
+            if (query && name.includes(query)) {
+                card.classList.add('search-matched');
+                matchCount++;
+            } else {
+                card.classList.remove('search-matched');
+            }
+        });
+
+        // 2. Table rows in "У відділенні"
+        const inpatientRows = document.querySelectorAll('tbody tr.inpatient-row');
+        inpatientRows.forEach(row => {
+            const name = row.getAttribute('data-patient-name') ? row.getAttribute('data-patient-name').toLowerCase() : '';
+            if (!query || name.includes(query)) {
+                row.style.display = '';
+                if (query) matchCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+
+        // 3. Table rows in "Лист очікування"
+        const queueRows = document.querySelectorAll('tbody tr.queue-patient-row');
+        queueRows.forEach(row => {
+            const name = row.getAttribute('data-patient-name') ? row.getAttribute('data-patient-name').toLowerCase() : '';
+            if (!query || name.includes(query)) {
+                row.style.display = '';
+                if (query) matchCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+
+        if (countEl) {
+            if (query) {
+                countEl.textContent = `Знайдено: ${matchCount}`;
+            } else {
+                countEl.textContent = '';
+            }
+        }
+    });
+}
+
+function clearInpatientSearch() {
+    const input = document.getElementById('inpatientSearchInput');
+    if (input) {
+        input.value = '';
+        input.dispatchEvent(new Event('input'));
+        input.focus();
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    initInpatientSearch();
+});
+
 function openAdmissionModal(patientId, patientName) {
     const modal = document.getElementById('admissionModal');
     const form = document.getElementById('admissionForm');
@@ -808,6 +1226,10 @@ window.onclick = function(event) {
     const modal = document.getElementById('admissionModal');
     if (event.target == modal) {
         closeModal();
+    }
+    const dragModal = document.getElementById('dragBorrowedModal');
+    if (event.target == dragModal) {
+        closeDragBorrowedModal();
     }
 }
 
