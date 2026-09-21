@@ -1,5 +1,6 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from django.urls import reverse
+from django.core.exceptions import ValidationError
 from .models import Patient, FractionHistory, MedicalIncapacity, User, TreatmentProtocol
 from .forms import PatientForm, FractionHistoryForm, MedicalIncapacityForm, UserRegistrationForm, UserLoginForm, FractionEditForm
 from django.http import JsonResponse
@@ -1988,173 +1989,179 @@ def quick_update_patient_api(request, pk):
     except Exception:
         data = request.POST
         
-    from django.utils.dateparse import parse_date
-    
-    def parse_ukrainian_date(val_str):
-        if not val_str or not str(val_str).strip():
-            return None
-        val_str = str(val_str).strip()
-        parsed = parse_date(val_str)
-        if not parsed:
+    try:
+        from django.utils.dateparse import parse_date
+        
+        def parse_ukrainian_date(val_str):
+            if not val_str or not str(val_str).strip():
+                return None
+            val_str = str(val_str).strip()
+            parsed = parse_date(val_str)
+            if not parsed:
+                try:
+                    parts = val_str.split('.')
+                    if len(parts) == 3:
+                        parsed = date(int(parts[2]), int(parts[1]), int(parts[0]))
+                except (ValueError, IndexError):
+                    parsed = None
+            return parsed
+
+        # 1. Особисті дані
+        if 'last_name' in data and data.get('last_name'):
+            patient.last_name = data.get('last_name').strip()
+        if 'first_name' in data and data.get('first_name'):
+            patient.first_name = data.get('first_name').strip()
+        if 'middle_name' in data:
+            patient.middle_name = data.get('middle_name', '').strip() or None
+        if 'birth_date' in data:
+            patient.birth_date = parse_ukrainian_date(data.get('birth_date'))
+        if 'gender' in data and data.get('gender') in ['M', 'F']:
+            patient.gender = data.get('gender')
+        if 'ambulatory_card_id' in data:
+            patient.ambulatory_card_id = data.get('ambulatory_card_id', '').strip() or None
+        if 'has_radiomodification' in data:
+            patient.has_radiomodification = bool(data.get('has_radiomodification'))
+
+        # 2. Діагноз та стадіювання
+        if 'diagnosis' in data and data.get('diagnosis'):
+            patient.diagnosis = data.get('diagnosis').strip()
+        if 'tnm_staging' in data:
+            patient.tnm_staging = data.get('tnm_staging', '').strip() or None
+        if 'disease_stage' in data:
+            patient.disease_stage = data.get('disease_stage', '').strip() or None
+        if 'clinical_group' in data:
+            patient.clinical_group = data.get('clinical_group', '').strip() or None
+        if 'prior_radiation' in data:
+            patient.prior_radiation = data.get('prior_radiation', '').strip() or None
+        if 'raw_diagnosis' in data:
+            patient.raw_diagnosis = data.get('raw_diagnosis', '').strip() or None
+
+        # 3. Дати
+        if 'ct_simulation_date' in data:
+            patient.ct_simulation_date = parse_ukrainian_date(data.get('ct_simulation_date'))
+            
+        start_date_changed = False
+        if 'treatment_start_date' in data:
+            old_start = patient.treatment_start_date
+            new_start = parse_ukrainian_date(data.get('treatment_start_date'))
+            if old_start != new_start:
+                patient.treatment_start_date = new_start
+                start_date_changed = True
+                
+        # 4. Фракції та дози
+        fractions_changed = False
+        if 'total_fractions' in data:
+            tf_raw = data.get('total_fractions')
             try:
-                parts = val_str.split('.')
-                if len(parts) == 3:
-                    parsed = date(int(parts[2]), int(parts[1]), int(parts[0]))
-            except (ValueError, IndexError):
-                parsed = None
-        return parsed
-
-    # 1. Особисті дані
-    if 'last_name' in data and data.get('last_name'):
-        patient.last_name = data.get('last_name').strip()
-    if 'first_name' in data and data.get('first_name'):
-        patient.first_name = data.get('first_name').strip()
-    if 'middle_name' in data:
-        patient.middle_name = data.get('middle_name', '').strip() or None
-    if 'birth_date' in data:
-        patient.birth_date = parse_ukrainian_date(data.get('birth_date'))
-    if 'gender' in data and data.get('gender') in ['M', 'F']:
-        patient.gender = data.get('gender')
-    if 'ambulatory_card_id' in data:
-        patient.ambulatory_card_id = data.get('ambulatory_card_id', '').strip() or None
-    if 'has_radiomodification' in data:
-        patient.has_radiomodification = bool(data.get('has_radiomodification'))
-
-    # 2. Діагноз та стадіювання
-    if 'diagnosis' in data and data.get('diagnosis'):
-        patient.diagnosis = data.get('diagnosis').strip()
-    if 'tnm_staging' in data:
-        patient.tnm_staging = data.get('tnm_staging', '').strip() or None
-    if 'disease_stage' in data:
-        patient.disease_stage = data.get('disease_stage', '').strip() or None
-    if 'clinical_group' in data:
-        patient.clinical_group = data.get('clinical_group', '').strip() or None
-    if 'prior_radiation' in data:
-        patient.prior_radiation = data.get('prior_radiation', '').strip() or None
-    if 'raw_diagnosis' in data:
-        patient.raw_diagnosis = data.get('raw_diagnosis', '').strip() or None
-
-    # 3. Дати
-    if 'ct_simulation_date' in data:
-        patient.ct_simulation_date = parse_ukrainian_date(data.get('ct_simulation_date'))
-        
-    start_date_changed = False
-    if 'treatment_start_date' in data:
-        old_start = patient.treatment_start_date
-        new_start = parse_ukrainian_date(data.get('treatment_start_date'))
-        if old_start != new_start:
-            patient.treatment_start_date = new_start
-            start_date_changed = True
+                new_tf = int(tf_raw) if tf_raw is not None and str(tf_raw).strip() != '' else None
+                if patient.total_fractions != new_tf:
+                    patient.total_fractions = new_tf
+                    fractions_changed = True
+            except (ValueError, TypeError):
+                pass
+                
+        if 'dose_per_fraction' in data:
+            raw_dose = data.get('dose_per_fraction')
+            patient.parse_and_set_doses(raw_dose)
             
-    # 4. Фракції та дози
-    fractions_changed = False
-    if 'total_fractions' in data:
-        tf_raw = data.get('total_fractions')
-        try:
-            new_tf = int(tf_raw) if tf_raw is not None and str(tf_raw).strip() != '' else None
-            if patient.total_fractions != new_tf:
-                patient.total_fractions = new_tf
-                fractions_changed = True
-        except (ValueError, TypeError):
-            pass
-            
-    if 'dose_per_fraction' in data:
-        raw_dose = data.get('dose_per_fraction')
-        patient.parse_and_set_doses(raw_dose)
-        
-    if 'treatment_type' in data:
-        patient.treatment_type = data.get('treatment_type', '').strip() or None
+        if 'treatment_type' in data:
+            patient.treatment_type = data.get('treatment_type', '').strip() or None
 
-    # 5. Госпіталізація та ліжковий фонд
-    if 'hospitalization_status' in data:
-        hs = data.get('hospitalization_status')
-        if hs in ['outpatient', 'inpatient', 'queue']:
-            patient.hospitalization_status = hs
+        # 5. Госпіталізація та ліжковий фонд
+        if 'hospitalization_status' in data:
+            hs = data.get('hospitalization_status')
+            if hs in ['outpatient', 'inpatient', 'queue']:
+                patient.hospitalization_status = hs
+                
+        if 'bed_owner' in data:
+            patient.bed_owner = data.get('bed_owner') or None
             
-    if 'bed_owner' in data:
-        patient.bed_owner = data.get('bed_owner') or None
-        
-    if 'ward_number' in data:
-        patient.ward_number = data.get('ward_number') or None
-        
-    if 'planned_admission_date' in data:
-        patient.planned_admission_date = parse_ukrainian_date(data.get('planned_admission_date'))
-        
-    if 'irradiation_zone' in data:
-        patient.irradiation_zone = data.get('irradiation_zone') or None
-
-    # 6. Гістологія
-    if 'histology_number' in data:
-        patient.histology_number = data.get('histology_number', '').strip() or None
-    if 'histology_date' in data:
-        patient.histology_date = parse_ukrainian_date(data.get('histology_date'))
-    if 'histology_description' in data:
-        patient.histology_description = data.get('histology_description', '').strip() or None
-        
-    # 7. Нотатки
-    if 'notes' in data:
-        patient.notes = data.get('notes') or None
-
-    # Авто-генерація або зсув фракцій
-    if patient.treatment_start_date and patient.total_fractions and patient.dose_per_fraction:
-        if not patient.fractions.exists():
-            from .services import generate_fractions_for_patient
-            generate_fractions_for_patient(patient)
-        elif start_date_changed or fractions_changed:
-            from .services import shift_patient_schedule
-            shift_patient_schedule(patient)
+        if 'ward_number' in data:
+            patient.ward_number = data.get('ward_number') or None
             
-    from .services import recalculate_discharge_date
-    patient.recalculate_received_dose()
-    recalculate_discharge_date(patient)
-    patient.save()
-    patient.refresh_from_db()
-    
-    actual_discharge = patient.get_actual_discharge_date
-    actual_discharge_str = actual_discharge.strftime('%d.%m.%Y') if actual_discharge else '—'
-    
-    info = get_patient_treatment_info(patient)
-    
-    return JsonResponse({
-        'success': True,
-        'message': 'Дані пацієнта успішно збережено!',
-        'full_name': patient.full_name,
-        'last_name': patient.last_name,
-        'first_name': patient.first_name,
-        'middle_name': patient.middle_name or '',
-        'birth_date': patient.birth_date.strftime('%d.%m.%Y') if patient.birth_date else '—',
-        'gender_display': patient.get_gender_display(),
-        'ambulatory_card_id': patient.ambulatory_card_id or '—',
-        'has_radiomodification': patient.has_radiomodification,
-        'diagnosis': patient.diagnosis,
-        'tnm_staging': patient.tnm_staging or '—',
-        'disease_stage': patient.disease_stage or '—',
-        'clinical_group': patient.clinical_group or '—',
-        'treatment_type': patient.treatment_type or '—',
-        'display_stage': patient.display_stage,
-        'discharge_date': actual_discharge_str,
-        'ct_simulation_date': patient.ct_simulation_date.strftime('%d.%m.%Y') if patient.ct_simulation_date else '—',
-        'treatment_start_date': patient.treatment_start_date.strftime('%d.%m.%Y') if patient.treatment_start_date else '—',
-        'total_fractions': patient.total_fractions or 0,
-        'dose_per_fraction_display': patient.dose_per_fraction_display,
-        'received_dose_display': patient.received_dose_display,
-        'planned_total_dose_display': patient.planned_total_dose_display,
-        'current_fraction': patient.current_fraction,
-        'hospitalization_status': patient.hospitalization_status,
-        'hospitalization_status_display': patient.get_hospitalization_status_display(),
-        'bed_owner': patient.bed_owner or '—',
-        'ward_number': patient.ward_number or '—',
-        'planned_admission_date': patient.planned_admission_date.strftime('%d.%m.%Y') if patient.planned_admission_date else '—',
-        'irradiation_zone': patient.irradiation_zone or '—',
-        'prior_radiation': patient.prior_radiation or '—',
-        'histology_number': patient.histology_number or '—',
-        'histology_date': patient.histology_date.strftime('%d.%m.%Y') if patient.histology_date else '—',
-        'histology_description': patient.histology_description or '—',
-        'raw_diagnosis': patient.raw_diagnosis or '',
-        'notes': patient.notes or '',
-        'completed_fractions': info['completed_fractions'],
-        'has_fractions': patient.fractions.exists(),
-    })
+        if 'planned_admission_date' in data:
+            patient.planned_admission_date = parse_ukrainian_date(data.get('planned_admission_date'))
+            
+        if 'irradiation_zone' in data:
+            patient.irradiation_zone = data.get('irradiation_zone') or None
+
+        # 6. Гістологія
+        if 'histology_number' in data:
+            patient.histology_number = data.get('histology_number', '').strip() or None
+        if 'histology_date' in data:
+            patient.histology_date = parse_ukrainian_date(data.get('histology_date'))
+        if 'histology_description' in data:
+            patient.histology_description = data.get('histology_description', '').strip() or None
+            
+        # 7. Нотатки
+        if 'notes' in data:
+            patient.notes = data.get('notes') or None
+
+        # Авто-генерація або зсув фракцій
+        if patient.treatment_start_date and patient.total_fractions and patient.dose_per_fraction:
+            if not patient.fractions.exists():
+                from .services import generate_fractions_for_patient
+                generate_fractions_for_patient(patient)
+            elif start_date_changed or fractions_changed:
+                from .services import shift_patient_schedule
+                shift_patient_schedule(patient)
+                
+        from .services import recalculate_discharge_date
+        patient.recalculate_received_dose()
+        recalculate_discharge_date(patient)
+        patient.save()
+        patient.refresh_from_db()
+        
+        actual_discharge = patient.get_actual_discharge_date
+        actual_discharge_str = actual_discharge.strftime('%d.%m.%Y') if actual_discharge else '—'
+        
+        info = get_patient_treatment_info(patient)
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Дані пацієнта успішно збережено!',
+            'full_name': patient.full_name,
+            'last_name': patient.last_name,
+            'first_name': patient.first_name,
+            'middle_name': patient.middle_name or '',
+            'birth_date': patient.birth_date.strftime('%d.%m.%Y') if patient.birth_date else '—',
+            'gender_display': patient.get_gender_display(),
+            'ambulatory_card_id': patient.ambulatory_card_id or '—',
+            'has_radiomodification': patient.has_radiomodification,
+            'diagnosis': patient.diagnosis,
+            'tnm_staging': patient.tnm_staging or '—',
+            'disease_stage': patient.disease_stage or '—',
+            'clinical_group': patient.clinical_group or '—',
+            'treatment_type': patient.treatment_type or '—',
+            'display_stage': patient.display_stage,
+            'discharge_date': actual_discharge_str,
+            'ct_simulation_date': patient.ct_simulation_date.strftime('%d.%m.%Y') if patient.ct_simulation_date else '—',
+            'treatment_start_date': patient.treatment_start_date.strftime('%d.%m.%Y') if patient.treatment_start_date else '—',
+            'total_fractions': patient.total_fractions or 0,
+            'dose_per_fraction_display': patient.dose_per_fraction_display,
+            'received_dose_display': patient.received_dose_display,
+            'planned_total_dose_display': patient.planned_total_dose_display,
+            'current_fraction': patient.current_fraction,
+            'hospitalization_status': patient.hospitalization_status,
+            'hospitalization_status_display': patient.get_hospitalization_status_display(),
+            'bed_owner': patient.bed_owner or '—',
+            'ward_number': patient.ward_number or '—',
+            'planned_admission_date': patient.planned_admission_date.strftime('%d.%m.%Y') if patient.planned_admission_date else '—',
+            'irradiation_zone': patient.irradiation_zone or '—',
+            'prior_radiation': patient.prior_radiation or '—',
+            'histology_number': patient.histology_number or '—',
+            'histology_date': patient.histology_date.strftime('%d.%m.%Y') if patient.histology_date else '—',
+            'histology_description': patient.histology_description or '—',
+            'raw_diagnosis': patient.raw_diagnosis or '',
+            'notes': patient.notes or '',
+            'completed_fractions': info['completed_fractions'],
+            'has_fractions': patient.fractions.exists(),
+        })
+    except ValidationError as e:
+        error_msg = '; '.join([f"{k}: {', '.join(v)}" for k, v in e.message_dict.items()]) if hasattr(e, 'message_dict') else str(e)
+        return JsonResponse({'success': False, 'error': f"Помилка валідації: {error_msg}"}, status=400)
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
 @login_required

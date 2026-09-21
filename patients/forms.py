@@ -160,7 +160,7 @@ class PatientForm(forms.ModelForm):
                 ('M', 'Чоловіча'),
                 ('F', 'Жіноча')
             ]),
-            'diagnosis': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Введіть діагноз'}),
+            'diagnosis': forms.Textarea(attrs={'class': 'form-control', 'rows': 2, 'placeholder': 'Введіть діагноз'}),
             'tnm_staging': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Наприклад: T2N0M0'}),
             'disease_stage': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Введіть стадію (напр. IIIB)'}),
             'clinical_group': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Введіть клінічну групу'}),
@@ -196,7 +196,7 @@ class PatientForm(forms.ModelForm):
             'planned_admission_date': forms.DateInput(attrs={'type': 'text', 'class': 'form-control datepicker-input', 'placeholder': 'дд.мм.рррр'}),
             'bed_owner': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Введіть прізвище лікаря'}),
             'ward_number': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': 'Номер палати'}),
-            'prior_radiation': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Попереднє опромінення'}),
+            'prior_radiation': forms.Textarea(attrs={'class': 'form-control', 'rows': 2, 'placeholder': 'Попереднє опромінення'}),
             'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 4, 'placeholder': 'Додаткові примітки'}),
         }
 

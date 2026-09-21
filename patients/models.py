@@ -114,7 +114,7 @@ class Patient(models.Model):
     gender = models.CharField(max_length=10, blank=True, null=True, choices=[('M', 'Чоловіча'), ('F', 'Жіноча')], help_text="Стать")
     
     # Діагноз та стадіювання
-    diagnosis = models.CharField(max_length=255, blank=True, null=True, help_text="Діагноз")
+    diagnosis = models.TextField(blank=True, null=True, help_text="Діагноз")
     tnm_staging = models.CharField(max_length=255, blank=True, null=True, help_text="Стадіювання за TNM")
     disease_stage = models.CharField(max_length=255, blank=True, null=True, help_text="Стадія захворювання (текст)")
     clinical_group = models.CharField(max_length=255, blank=True, null=True, help_text="Клінічна група (текст)")
@@ -148,7 +148,7 @@ class Patient(models.Model):
     planned_admission_date = models.DateField(null=True, blank=True, help_text="Планова дата госпіталізації")
     bed_owner = models.CharField(max_length=100, default='Олег', blank=True, help_text="Прізвище лікаря, чиє ліжко зайнято. Якщо 'Олег' — це власне ліжко.")
     ward_number = models.IntegerField(blank=True, null=True, help_text="Номер палати")
-    prior_radiation = models.CharField(max_length=255, blank=True, null=True, help_text="Попереднє опромінення")
+    prior_radiation = models.TextField(blank=True, null=True, help_text="Попереднє опромінення")
     notes = models.TextField(blank=True, null=True, help_text="Примітки")
     raw_diagnosis = models.TextField(blank=True, null=True, help_text="Оригінальний вставлений діагноз")
     has_radiomodification = models.BooleanField(default=False, help_text="Потребує радіомодифікації (щотижневий аналіз крові)")

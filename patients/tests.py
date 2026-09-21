@@ -2309,6 +2309,26 @@ class QuickUpdateAPITests(TestCase):
         self.assertEqual(self.patient.bed_owner, 'Олег')
         self.assertEqual(str(self.patient.ward_number), '405')
 
+    def test_quick_update_long_diagnosis(self):
+        long_diag = (
+            "C50.4 Рак верхньо-зовнішнього квадранта лівої грудної залози pT2N1M0, G2, "
+            "стан після радикальної мастектомії за Мадденом від 12.08.2026, ер+, пр+, "
+            "her2/neu 0, ki67 22%. МКХ-О-4 топографія: C50.4, морфологія: 8500/3 Інфільтруючий протоковий рак, "
+            "розширений діагноз клініки."
+        )
+        self.assertGreater(len(long_diag), 255)
+        url = reverse('quick_update_patient_api', kwargs={'pk': self.patient.pk})
+        payload = {
+            'diagnosis': long_diag,
+            'prior_radiation': 'Курс післяопераційної дистанційної променевої терапії на лінійному прискорювачі.'
+        }
+        response = self.client.post(url, data=payload, content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data['success'])
+        self.patient.refresh_from_db()
+        self.assertEqual(self.patient.diagnosis, long_diag)
+
 
 class MVTNStagingTests(TestCase):
     """Тести контрольного відстійника МВТН (Checklist Staging Area)"""
