@@ -231,7 +231,7 @@
             
             // Джерело подій
             events: function(fetchInfo, successCallback, failureCallback) {
-                const url = `{% url 'calendar_events_api' %}?start=${fetchInfo.startStr}&end=${fetchInfo.endStr}`;
+                const url = `{% url 'calendar_events_api' %}?start=${encodeURIComponent(fetchInfo.startStr)}&end=${encodeURIComponent(fetchInfo.endStr)}`;
                 fetch(url)
                     .then(response => response.json())
                     .then(data => {

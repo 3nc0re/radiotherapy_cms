@@ -2761,6 +2761,24 @@ class CalendarTests(TestCase):
             elif e['extendedProps']['event_type'] == 'admission':
                 self.assertEqual(e['backgroundColor'], '#d97706')
 
+    def test_calendar_events_api_future_month_with_timezone(self):
+        import datetime
+        p_oct = Patient.objects.create(
+            last_name='Жовтневий',
+            first_name='Олег',
+            treatment_start_date=datetime.date(2026, 10, 19),
+            is_active=True
+        )
+        # FullCalendar passes timezone in query string, e.g. start=2026-09-28T00:00:00+03:00
+        # which Django decodes '+' as space: 'start=2026-09-28T00:00:00 03:00'
+        url = f"{reverse('calendar_events_api')}?start=2026-09-28T00:00:00+03:00&end=2026-11-09T00:00:00+03:00"
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        events = response.json()
+        matching = [e for e in events if e['extendedProps']['patient_id'] == p_oct.id and e['extendedProps']['event_type'] == 'treatment_start']
+        self.assertEqual(len(matching), 1)
+        self.assertEqual(matching[0]['start'], '2026-10-19')
+
     def test_calendar_reschedule_ct_simulation(self):
         p = Patient.objects.create(
             last_name='Коваленко',

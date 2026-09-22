@@ -2607,20 +2607,22 @@ def calendar_events_api(request):
     end_date = None
 
     if start_str:
-        if 'T' in start_str:
-            dt = parse_datetime(start_str)
+        clean_start = start_str.strip().replace(' ', '+')
+        if 'T' in clean_start:
+            dt = parse_datetime(clean_start)
             if dt:
                 start_date = dt.date()
-        else:
-            start_date = parse_date(start_str[:10])
+        if not start_date and len(clean_start) >= 10:
+            start_date = parse_date(clean_start[:10])
             
     if end_str:
-        if 'T' in end_str:
-            dt = parse_datetime(end_str)
+        clean_end = end_str.strip().replace(' ', '+')
+        if 'T' in clean_end:
+            dt = parse_datetime(clean_end)
             if dt:
                 end_date = dt.date()
-        else:
-            end_date = parse_date(end_str[:10])
+        if not end_date and len(clean_end) >= 10:
+            end_date = parse_date(clean_end[:10])
 
     if not start_date:
         start_date = today.replace(day=1)
@@ -2628,8 +2630,12 @@ def calendar_events_api(request):
         end_date = start_date + timedelta(days=42)
 
     patients = Patient.objects.filter(
-        Q(is_active=True) | Q(discharge_date__gte=start_date)
-    ).prefetch_related('fractions')
+        Q(is_active=True) |
+        Q(treatment_start_date__range=(start_date, end_date)) |
+        Q(ct_simulation_date__range=(start_date, end_date)) |
+        Q(planned_admission_date__range=(start_date, end_date)) |
+        Q(discharge_date__gte=start_date)
+    ).distinct().prefetch_related('fractions')
 
     events = []
 
