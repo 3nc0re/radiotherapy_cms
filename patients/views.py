@@ -893,24 +893,30 @@ def inpatient_list(request):
     })
 
 @login_required
-@require_POST
 def admit_patient(request, pk):
     """Госпіталізація пацієнта з черги у стаціонар"""
     patient = get_object_or_404(Patient, pk=pk)
-    bed_owner = request.POST.get('bed_owner', 'Олег').strip()
+    if request.method == 'POST':
+        bed_owner = request.POST.get('bed_owner', 'Олег').strip()
+    else:
+        bed_owner = request.GET.get('bed_owner', 'Олег').strip()
     if not bed_owner:
         bed_owner = 'Олег'
         
     patient.hospitalization_status = 'inpatient'
-    patient.treatment_start_date = timezone.localdate()
+    if not patient.treatment_start_date:
+        patient.treatment_start_date = timezone.localdate()
     patient.bed_owner = bed_owner
     patient.save()
     
     # Автоматично генеруємо фракції, якщо вказано загальну кількість та РОД
-    if patient.total_fractions and patient.dose_per_fraction:
+    if patient.total_fractions and patient.dose_per_fraction and not patient.fractions.exists():
         generate_fractions_for_patient(patient)
         
     messages.success(request, f'Пацієнта {patient.full_name} успішно госпіталізовано.')
+    referer = request.META.get('HTTP_REFERER')
+    if referer and f'/patients/{patient.pk}/' in referer:
+        return redirect('patient_detail', pk=patient.pk)
     return redirect('inpatient_list')
 
 

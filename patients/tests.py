@@ -1352,6 +1352,22 @@ class InpatientModuleTests(TestCase):
         first_fraction = patient.fractions.order_by('date').first()
         self.assertEqual(first_fraction.status, 'scheduled')
 
+    def test_admit_patient_via_get_request(self):
+        patient = Patient.objects.create(
+            last_name='Чергова2',
+            first_name='Пацієнтка2',
+            gender='F',
+            hospitalization_status='queue',
+            planned_admission_date=date.today(),
+            is_active=True
+        )
+        self.client.login(username='doctor_inpatient', password='testpass123')
+        response = self.client.get(reverse('admit_patient', kwargs={'pk': patient.pk}))
+        self.assertEqual(response.status_code, 302)
+        patient.refresh_from_db()
+        self.assertEqual(patient.hospitalization_status, 'inpatient')
+        self.assertEqual(patient.bed_owner, 'Олег')
+
     def test_auto_deactivate_past_discharge_date(self):
         """
         Тест автоматичного звільнення ліжка / деактивації пацієнта,
