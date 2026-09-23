@@ -410,6 +410,14 @@
     </div>
 </div>
 
+<!-- Індикатори автопрокрутки при перетягуванні -->
+<div id="dragScrollIndicatorTop" style="display: none; position: fixed; top: 0; left: 0; right: 0; height: 38px; background: linear-gradient(to bottom, rgba(52, 152, 219, 0.4), transparent); pointer-events: none; z-index: 9999; text-align: center; color: #2980b9; font-size: 0.85rem; font-weight: 700; padding-top: 6px; box-sizing: border-box;">
+    <i class="fas fa-chevron-up"></i> Автоматична прокрутка вгору...
+</div>
+<div id="dragScrollIndicatorBottom" style="display: none; position: fixed; bottom: 0; left: 0; right: 0; height: 38px; background: linear-gradient(to top, rgba(52, 152, 219, 0.4), transparent); pointer-events: none; z-index: 9999; text-align: center; color: #2980b9; font-size: 0.85rem; font-weight: 700; padding-top: 12px; box-sizing: border-box;">
+    <i class="fas fa-chevron-down"></i> Автоматична прокрутка вниз...
+</div>
+
 <!-- Стилі -->
 <style>
 .page-header {
@@ -1011,12 +1019,119 @@
     background: transparent;
     color: var(--text-light-color);
 }
+[data-theme="dark"] #dragScrollIndicatorTop {
+    background: linear-gradient(to bottom, rgba(59, 130, 246, 0.4), transparent);
+    color: #60a5fa;
+}
+[data-theme="dark"] #dragScrollIndicatorBottom {
+    background: linear-gradient(to top, rgba(59, 130, 246, 0.4), transparent);
+    color: #60a5fa;
+}
 </style>
 
 <!-- JavaScript -->
 <script>
 let currentDraggedPatient = null;
 let pendingBorrowedPatient = null;
+
+// --- Автоматична плавна прокрутка при перетягуванні (Auto-scroll on Drag) ---
+let autoScrollRafId = null;
+let isAutoScrollingActive = false;
+let currentDragClientY = null;
+
+function startAutoScroll() {
+    isAutoScrollingActive = true;
+    currentDragClientY = null;
+    if (autoScrollRafId) cancelAnimationFrame(autoScrollRafId);
+    autoScrollRafId = requestAnimationFrame(autoScrollLoop);
+}
+
+function stopAutoScroll() {
+    isAutoScrollingActive = false;
+    currentDragClientY = null;
+    if (autoScrollRafId) {
+        cancelAnimationFrame(autoScrollRafId);
+        autoScrollRafId = null;
+    }
+    const topInd = document.getElementById('dragScrollIndicatorTop');
+    const bottomInd = document.getElementById('dragScrollIndicatorBottom');
+    if (topInd) topInd.style.display = 'none';
+    if (bottomInd) bottomInd.style.display = 'none';
+}
+
+function autoScrollLoop() {
+    if (!isAutoScrollingActive) return;
+
+    if (currentDragClientY !== null) {
+        const vh = window.innerHeight;
+        const EDGE_ZONE = 140; // Зона чутливості від краю вікна (пікселів)
+        const MAX_SPEED = 28;  // Максимальна швидкість скролу за кадр
+        const MIN_SPEED = 4;   // Початкова швидкість
+
+        const topInd = document.getElementById('dragScrollIndicatorTop');
+        const bottomInd = document.getElementById('dragScrollIndicatorBottom');
+
+        if (currentDragClientY > vh - EDGE_ZONE) {
+            // Наближення до нижнього краю екрану -> скрол вниз
+            const maxScrollY = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight) - vh;
+            if (window.scrollY < maxScrollY - 2) {
+                const overflow = currentDragClientY - (vh - EDGE_ZONE);
+                const ratio = Math.min(1, Math.max(0, overflow / EDGE_ZONE));
+                const speed = Math.round(MIN_SPEED + (MAX_SPEED - MIN_SPEED) * (ratio * ratio));
+                window.scrollBy(0, speed);
+                if (bottomInd) bottomInd.style.display = 'block';
+                if (topInd) topInd.style.display = 'none';
+            } else {
+                if (bottomInd) bottomInd.style.display = 'none';
+            }
+        } else if (currentDragClientY < EDGE_ZONE) {
+            // Наближення до верхнього краю екрану -> скрол вгору
+            if (window.scrollY > 2) {
+                const overflow = EDGE_ZONE - currentDragClientY;
+                const ratio = Math.min(1, Math.max(0, overflow / EDGE_ZONE));
+                const speed = Math.round(MIN_SPEED + (MAX_SPEED - MIN_SPEED) * (ratio * ratio));
+                window.scrollBy(0, -speed);
+                if (topInd) topInd.style.display = 'block';
+                if (bottomInd) bottomInd.style.display = 'none';
+            } else {
+                if (topInd) topInd.style.display = 'none';
+            }
+        } else {
+            if (topInd) topInd.style.display = 'none';
+            if (bottomInd) bottomInd.style.display = 'none';
+        }
+    }
+
+    autoScrollRafId = requestAnimationFrame(autoScrollLoop);
+}
+
+// Глобальне відстеження переміщення курсора при Drag & Drop
+document.addEventListener('dragover', function(e) {
+    if (isAutoScrollingActive || currentDraggedPatient) {
+        currentDragClientY = e.clientY;
+    }
+}, { passive: true });
+
+document.addEventListener('drag', function(e) {
+    if ((isAutoScrollingActive || currentDraggedPatient) && e.clientY > 0) {
+        currentDragClientY = e.clientY;
+    }
+}, { passive: true });
+
+document.addEventListener('dragleave', function(e) {
+    if (!e.relatedTarget && (e.clientY <= 0 || e.clientY >= window.innerHeight || e.clientX <= 0 || e.clientX >= window.innerWidth)) {
+        currentDragClientY = null;
+        const topInd = document.getElementById('dragScrollIndicatorTop');
+        const bottomInd = document.getElementById('dragScrollIndicatorBottom');
+        if (topInd) topInd.style.display = 'none';
+        if (bottomInd) bottomInd.style.display = 'none';
+    }
+});
+
+window.addEventListener('dragend', stopAutoScroll);
+window.addEventListener('drop', stopAutoScroll);
+window.addEventListener('mouseup', stopAutoScroll);
+window.addEventListener('blur', stopAutoScroll);
 
 function handleDragStart(event) {
     const target = event.currentTarget;
@@ -1037,6 +1152,7 @@ function handleDragStart(event) {
     } catch(e) {}
     event.dataTransfer.effectAllowed = 'move';
     target.classList.add('is-dragging');
+    startAutoScroll();
 }
 
 function handleDragEnd(event) {
@@ -1045,6 +1161,7 @@ function handleDragEnd(event) {
     document.querySelectorAll('.drag-over-valid, .drag-over-invalid').forEach(el => {
         el.classList.remove('drag-over-valid', 'drag-over-invalid');
     });
+    stopAutoScroll();
 }
 
 function handleDragOver(event, targetType, targetGender) {
@@ -1069,6 +1186,7 @@ function handleDragLeave(event) {
 
 function handleDrop(event, targetType, targetGender) {
     event.preventDefault();
+    stopAutoScroll();
     event.currentTarget.classList.remove('drag-over-valid', 'drag-over-invalid');
 
     if (!currentDraggedPatient) return;
